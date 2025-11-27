@@ -1,0 +1,19 @@
+name: dbt_state_example
+config-version: 2
+
+profile: default
+
+models:
+  dbt_state_example:
+    staging:
+      +schema: staging
+      +materialized: view
+    intermediate:
+      +schema: intermediate
+      +materialized: view
+    marts:
+      +schema: marts
+      +materialized: table
+  +persist_docs:
+    relation: true
+    columns: true
