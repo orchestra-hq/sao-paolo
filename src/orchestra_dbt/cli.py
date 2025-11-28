@@ -42,7 +42,7 @@ def dbt(dbt_command):
         sys.exit(1)
 
     if not STATE_AWARE_ENABLED:
-        run_dbt_command(dbt_command, passthrough=True)
+        run_dbt_command(dbt_command)
         sys.exit(0)
 
     validate_environment()
@@ -59,7 +59,7 @@ def dbt(dbt_command):
     log_info(f"Models to run: {', '.join(model_paths_to_update)}")
 
     patch_sql_files(model_paths_to_update)
-    run_dbt_command(modify_dbt_command(list[str](dbt_command)), passthrough=True)
+    run_dbt_command(modify_dbt_command(list[str](dbt_command)))
 
     for node_id, node in parsed_dag.nodes.items():
         state.state[node_id] = StateItem(

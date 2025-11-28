@@ -10,7 +10,10 @@ from .utils import BASE_API_URL, HEADERS, log_warn, log_error
 def load_state(state_id: str = os.getenv("ORCHESTRA_DBT_CACHE_KEY")) -> StateApiModel:
     try:
         response = httpx.get(
-            headers=HEADERS,
+            headers={
+                **HEADERS,
+                "Accept": "application/json",
+            },
             url=f"{BASE_API_URL}/state/{state_id}",
         )
         response.raise_for_status()
@@ -32,7 +35,10 @@ def save_state(
     print(state_json)
     try:
         response = httpx.patch(
-            headers=HEADERS,
+            headers={
+                **HEADERS,
+                "Content-Type": "application/json",
+            },
             json=state_json,
             url=f"{BASE_API_URL}/state/{state_id}",
         )
