@@ -19,7 +19,7 @@ def load_state(state_id: str = os.getenv("ORCHESTRA_DBT_CACHE_KEY")) -> StateApi
         return StateApiModel(state={})
 
     try:
-        return StateApiModel.model_validate_json(response.json())
+        return StateApiModel.model_validate(response.json())
     except (ValidationError, ValueError) as e:
         log_error(f"Failed to validate state: {e}")
         return StateApiModel(state={})

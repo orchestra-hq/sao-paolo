@@ -1,8 +1,9 @@
+from datetime import datetime
 import sys
 import click
 
 from .cache import load_state, save_state
-from .models import NodeType
+from .models import NodeType, StateApiModel
 from .dbt_runner import run_dbt_command
 from .state import (
     Freshness,
@@ -45,8 +46,9 @@ def dbt(dbt_command):
         sys.exit(0)
 
     validate_environment()
+    source_freshness = get_source_freshness()
     state = load_state()
-    parsed_dag = construct_dag(get_source_freshness(), state)
+    parsed_dag = construct_dag(source_freshness, state)
     calculate_models_to_run(parsed_dag, state)
 
     model_paths_to_update = [
@@ -58,4 +60,13 @@ def dbt(dbt_command):
 
     patch_sql_files(model_paths_to_update)
     run_dbt_command(modify_dbt_command(list[str](dbt_command)), passthrough=True)
+
+    for node_id, node in parsed_dag.nodes.items():
+        state.state[node_id] = StateApiModel(
+            checksum=node.checksum,
+            last_updated=source_freshness.sources[node_id]
+            if node_id in source_freshness.sources
+            else datetime.now(),
+        )
+
     save_state(state=state)
