@@ -1,0 +1,10 @@
+[project]
+name = "example-dbt-code"
+version = "0.1.0"
+requires-python = ">=3.12"
+
+dependencies = [
+    "dbt-databricks",
+    "dbt-duckdb",
+    "orchestra-dbt @ git+https://${GIT_TOKEN}@github.com/orchestra-hq/sao-paolo.git",
+]
