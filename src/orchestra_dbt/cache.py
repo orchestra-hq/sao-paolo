@@ -31,7 +31,7 @@ def save_state(
     try:
         response = httpx.patch(
             headers=HEADERS,
-            json=state.model_dump(exclude_none=True),
+            json=state.model_dump_json(exclude_none=True),
             url=f"{BASE_API_URL}/state/{state_id}",
         )
         response.raise_for_status()
