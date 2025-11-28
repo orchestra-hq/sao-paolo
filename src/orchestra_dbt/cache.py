@@ -1,3 +1,4 @@
+import json
 import os
 import httpx
 
@@ -31,15 +32,13 @@ def load_state(state_id: str = os.getenv("ORCHESTRA_DBT_CACHE_KEY")) -> StateApi
 def save_state(
     state: StateApiModel, state_id: str = os.getenv("ORCHESTRA_DBT_CACHE_KEY")
 ) -> None:
-    state_json = state.model_dump_json(exclude_none=True)
-    print(state_json)
     try:
         response = httpx.patch(
             headers={
                 **HEADERS,
                 "Content-Type": "application/json",
             },
-            json=state_json,
+            json=json.loads(state.model_dump_json(exclude_none=True)),
             url=f"{BASE_API_URL}/state/{state_id}",
         )
         response.raise_for_status()
