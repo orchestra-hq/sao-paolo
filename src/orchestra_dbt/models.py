@@ -15,7 +15,7 @@ class NodeType(Enum):
 
 class StateItem(BaseModel):
     last_updated: datetime
-    checksum: str | None
+    checksum: str | None = None
 
 
 class StateApiModel(BaseModel):
