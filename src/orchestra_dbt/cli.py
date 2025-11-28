@@ -1,8 +1,8 @@
 import sys
 import click
 
-from src.orchestra_dbt.cache import load_state, save_state
-from src.orchestra_dbt.models import NodeType
+from .cache import load_state, save_state
+from .models import NodeType
 from .dbt_runner import run_dbt_command
 from .state import (
     Freshness,

@@ -1,6 +1,6 @@
 from dbt.cli.main import dbtRunner
 from dbt.contracts.graph.nodes import SourceDefinition
-from orchestra_dbt.utils import log_info, log_warn
+from .utils import log_info, log_warn
 
 
 def source_freshness_invoke():

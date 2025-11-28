@@ -3,7 +3,7 @@ import httpx
 
 from pydantic import ValidationError
 
-from src.orchestra_dbt.models import StateApiModel
+from .models import StateApiModel
 from .utils import BASE_API_URL, HEADERS, log_warn, log_error
 
 

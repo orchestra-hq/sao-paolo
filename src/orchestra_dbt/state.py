@@ -1,8 +1,8 @@
 from collections import defaultdict, deque
 from datetime import timedelta, datetime
 
-from src.orchestra_dbt.call_source_freshness import source_freshness_invoke
-from src.orchestra_dbt.models import (
+from .call_source_freshness import source_freshness_invoke
+from .models import (
     Edge,
     Freshness,
     Node,
@@ -117,10 +117,7 @@ def _valid_sla(child: str, config: dict | None, state: StateApiModel) -> bool:
         return True
 
     sla_duration_mins = build_sla_duration(build_after)
-    return (
-        model_last_updated + timedelta(minutes=sla_duration_mins)
-        < datetime.now()
-    )
+    return model_last_updated + timedelta(minutes=sla_duration_mins) < datetime.now()
 
 
 def calculate_models_to_run(dag: ParsedDag, state: StateApiModel) -> ParsedDag:
