@@ -1,14 +1,14 @@
 import json
 import os
-import httpx
 
+import httpx
 from pydantic import ValidationError
 
 from .models import StateApiModel
-from .utils import BASE_API_URL, HEADERS, log_warn, log_error
+from .utils import BASE_API_URL, HEADERS, log_error, log_warn
 
 
-def load_state(state_id: str = os.getenv("ORCHESTRA_DBT_CACHE_KEY")) -> StateApiModel:
+def load_state(state_id: str = os.environ["ORCHESTRA_DBT_CACHE_KEY"]) -> StateApiModel:
     try:
         response = httpx.get(
             headers={
@@ -30,7 +30,7 @@ def load_state(state_id: str = os.getenv("ORCHESTRA_DBT_CACHE_KEY")) -> StateApi
 
 
 def save_state(
-    state: StateApiModel, state_id: str = os.getenv("ORCHESTRA_DBT_CACHE_KEY")
+    state: StateApiModel, state_id: str = os.environ["ORCHESTRA_DBT_CACHE_KEY"]
 ) -> None:
     try:
         response = httpx.patch(
@@ -43,5 +43,4 @@ def save_state(
         )
         response.raise_for_status()
     except httpx.HTTPStatusError as e:
-        print(response.json())
         log_error(f"Failed to save state: {e}")

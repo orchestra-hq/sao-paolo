@@ -210,3 +210,4 @@ __marimo__/
 .user.yml
 data.duckdb
 profiles.yml
+logs/

@@ -1,5 +1,5 @@
 from collections import defaultdict, deque
-from datetime import timedelta, datetime
+from datetime import datetime, timedelta
 
 from .call_source_freshness import source_freshness_invoke
 from .models import (
@@ -11,7 +11,6 @@ from .models import (
     SourceFreshness,
     StateApiModel,
 )
-
 from .utils import load_file
 
 
@@ -111,7 +110,7 @@ def _valid_sla(child: str, config: dict | None, state: StateApiModel) -> bool:
         return True
 
     model_last_updated: datetime | None = (
-        state.state.get(child).last_updated if child in state.state else None
+        state.state[child].last_updated if child in state.state else None
     )
     if not model_last_updated:
         return True

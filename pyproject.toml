@@ -5,10 +5,32 @@ description = "To be announced!"
 authors = [{ name = "Oliver Crawford" }]
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["click>=8.0", "httpx>=0.28.1", "pydantic>=2.12.5"]
+dependencies = [
+    "click>=8.0",
+    "dbt-core>=1.10.15",
+    "httpx>=0.28.1",
+    "pydantic>=2.12.5",
+]
+
+[project.optional-dependencies]
+dev = [
+    "basedpyright>=1.1.407",
+    "pytest>=8.0.0",
+    "ruff>=0.14.6",
+]
 
 [project.scripts]
 orchestra-dbt = "orchestra_dbt.cli:main"
 
+[tool.basedpyright]
+typeCheckingMode = "basic"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.uv]
+package = true

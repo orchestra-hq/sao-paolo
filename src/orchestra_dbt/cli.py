@@ -1,17 +1,18 @@
-from datetime import datetime
 import sys
+from datetime import datetime
+
 import click
 
 from .cache import load_state, save_state
-from .models import NodeType, StateItem
 from .dbt_runner import run_dbt_command
+from .models import NodeType, StateItem
+from .patcher import patch_sql_files
 from .state import (
     Freshness,
     calculate_models_to_run,
     construct_dag,
     get_source_freshness,
 )
-from .patcher import patch_sql_files
 from .utils import log_info, modify_dbt_command, validate_environment
 
 STATE_AWARE_ENABLED = True
