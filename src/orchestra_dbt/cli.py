@@ -3,7 +3,7 @@ import sys
 import click
 
 from .cache import load_state, save_state
-from .models import NodeType, StateApiModel
+from .models import NodeType, StateItem
 from .dbt_runner import run_dbt_command
 from .state import (
     Freshness,
@@ -62,7 +62,7 @@ def dbt(dbt_command):
     run_dbt_command(modify_dbt_command(list[str](dbt_command)), passthrough=True)
 
     for node_id, node in parsed_dag.nodes.items():
-        state.state[node_id] = StateApiModel(
+        state.state[node_id] = StateItem(
             checksum=node.checksum,
             last_updated=source_freshness.sources[node_id]
             if node_id in source_freshness.sources
