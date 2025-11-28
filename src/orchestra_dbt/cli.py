@@ -57,5 +57,5 @@ def dbt(dbt_command):
     log_info(f"Models to run: {', '.join(model_paths_to_update)}")
 
     patch_sql_files(model_paths_to_update)
-    run_dbt_command(modify_dbt_command(dbt_command), passthrough=True)
+    run_dbt_command(modify_dbt_command(list[str](dbt_command)), passthrough=True)
     save_state(state)
