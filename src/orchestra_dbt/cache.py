@@ -28,12 +28,15 @@ def load_state(state_id: str = os.getenv("ORCHESTRA_DBT_CACHE_KEY")) -> StateApi
 def save_state(
     state: StateApiModel, state_id: str = os.getenv("ORCHESTRA_DBT_CACHE_KEY")
 ) -> None:
+    state_json = state.model_dump_json(exclude_none=True)
+    print(state_json)
     try:
         response = httpx.patch(
             headers=HEADERS,
-            json=state.model_dump_json(exclude_none=True),
+            json=state_json,
             url=f"{BASE_API_URL}/state/{state_id}",
         )
         response.raise_for_status()
     except httpx.HTTPStatusError as e:
+        print(response.json())
         log_error(f"Failed to save state: {e}")
