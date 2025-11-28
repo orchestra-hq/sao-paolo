@@ -117,7 +117,9 @@ def _valid_sla(child: str, config: dict | None, state: StateApiModel) -> bool:
         return True
 
     sla_duration_mins = build_sla_duration(build_after)
-    return model_last_updated + timedelta(minutes=sla_duration_mins) < datetime.now()
+    return model_last_updated + timedelta(minutes=sla_duration_mins) < datetime.now(
+        model_last_updated.tzinfo
+    )
 
 
 def calculate_models_to_run(dag: ParsedDag, state: StateApiModel) -> ParsedDag:
