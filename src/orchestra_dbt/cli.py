@@ -58,4 +58,4 @@ def dbt(dbt_command):
 
     patch_sql_files(model_paths_to_update)
     run_dbt_command(modify_dbt_command(list[str](dbt_command)), passthrough=True)
-    save_state(state)
+    save_state(state=state)

@@ -25,7 +25,9 @@ def load_state(state_id: str = os.getenv("ORCHESTRA_DBT_CACHE_KEY")) -> StateApi
         return StateApiModel(state={})
 
 
-def save_state(state_id: str, state: StateApiModel) -> None:
+def save_state(
+    state: StateApiModel, state_id: str = os.getenv("ORCHESTRA_DBT_CACHE_KEY")
+) -> None:
     try:
         response = httpx.patch(
             headers=HEADERS,
