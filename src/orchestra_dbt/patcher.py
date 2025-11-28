@@ -4,29 +4,7 @@ from pathlib import Path
 from .utils import log_warn
 
 
-def patch_sql_files(model_files_to_run: list[str]):
-    cwd = Path(os.getcwd())
-    sql_files = list[Path](cwd.rglob("*.sql"))
-
-    if not sql_files:
-        log_warn("No SQL files found in project directory.")
-        return
-
-    for sql_file in sql_files:
-        relative_path = str(sql_file.relative_to(cwd))
-        if relative_path.startswith("models"):
-            desired_tag = (
-                "run"
-                if relative_path in model_files_to_run
-                else "reuse"
-            )
-            try:
-                patch_file(sql_file, desired_tag)
-            except Exception as e:
-                log_warn(f"Failed to patch {sql_file}: {e}")
-
-
-def patch_file(file_path: Path, tag: str):
+def _patch_file(file_path: Path, tag: str):
     content = file_path.read_text(encoding="utf-8")
 
     config_pattern = r"\{\{\s*config\s*\(\s*tags\s*=\s*\[.*?\]\s*\)\s*\}\}\s*\n?"
@@ -41,4 +19,21 @@ def patch_file(file_path: Path, tag: str):
         )
 
     file_path.write_text(new_content, encoding="utf-8")
-    return
+
+
+def patch_sql_files(model_files_to_run: list[str]):
+    cwd = Path(os.getcwd())
+    sql_files = list[Path](cwd.rglob("*.sql"))
+
+    if not sql_files:
+        log_warn("No SQL files found in project directory.")
+        return
+
+    for sql_file in sql_files:
+        relative_path = str(sql_file.relative_to(cwd))
+        if relative_path.startswith("models"):
+            desired_tag = "run" if relative_path in model_files_to_run else "reuse"
+            try:
+                _patch_file(sql_file, desired_tag)
+            except Exception as e:
+                log_warn(f"Failed to patch {sql_file}: {e}")
