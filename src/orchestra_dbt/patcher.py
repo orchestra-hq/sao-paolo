@@ -2,9 +2,9 @@ import os
 import re
 from pathlib import Path
 
-from .utils import log_warn
+from orchestra_dbt.models import ORCHESTRA_REUSED_NODE
 
-ORCHESTRA_REUSED_NODE = "ORCHESTRA_REUSED_NODE"
+from .utils import log_warn
 
 
 def _patch_file(file_path: Path):

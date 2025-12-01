@@ -16,14 +16,12 @@ from orchestra_dbt.models import (
 )
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def mock_env_vars(monkeypatch):
-    """Fixture to set common environment variables for testing."""
     monkeypatch.setenv("ORCHESTRA_API_KEY", "test-api-key")
     monkeypatch.setenv("ORCHESTRA_DBT_CACHE_KEY", "test-cache-key")
-    monkeypatch.setenv("ORCHESTRA_ENV", "app")
+    monkeypatch.setenv("ORCHESTRA_ENV", "dev")
     yield
-    # Cleanup is automatic with monkeypatch
 
 
 @pytest.fixture

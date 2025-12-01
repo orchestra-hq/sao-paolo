@@ -3,6 +3,8 @@ from enum import Enum
 
 from pydantic import BaseModel
 
+ORCHESTRA_REUSED_NODE = "ORCHESTRA_REUSED_NODE"
+
 
 class Freshness(Enum):
     CLEAN = "CLEAN"

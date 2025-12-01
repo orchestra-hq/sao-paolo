@@ -5,17 +5,17 @@ import httpx
 from pydantic import ValidationError
 
 from .models import StateApiModel
-from .utils import BASE_API_URL, HEADERS, log_error, log_warn
+from .utils import get_base_api_url, get_headers, log_error, log_warn
 
 
-def load_state(state_id: str = os.environ["ORCHESTRA_DBT_CACHE_KEY"]) -> StateApiModel:
+def load_state() -> StateApiModel:
     try:
         response = httpx.get(
             headers={
-                **HEADERS,
+                **get_headers(),
                 "Accept": "application/json",
             },
-            url=f"{BASE_API_URL}/state/{state_id}",
+            url=f"{get_base_api_url()}/state/{os.environ['ORCHESTRA_DBT_CACHE_KEY']}",
         )
         response.raise_for_status()
     except httpx.HTTPStatusError as e:
@@ -29,17 +29,15 @@ def load_state(state_id: str = os.environ["ORCHESTRA_DBT_CACHE_KEY"]) -> StateAp
         return StateApiModel(state={})
 
 
-def save_state(
-    state: StateApiModel, state_id: str = os.environ["ORCHESTRA_DBT_CACHE_KEY"]
-) -> None:
+def save_state(state: StateApiModel) -> None:
     try:
         response = httpx.patch(
             headers={
-                **HEADERS,
+                **get_headers(),
                 "Content-Type": "application/json",
             },
             json=json.loads(state.model_dump_json(exclude_none=True)),
-            url=f"{BASE_API_URL}/state/{state_id}",
+            url=f"{get_base_api_url()}/state/{os.environ['ORCHESTRA_DBT_CACHE_KEY']}",
         )
         response.raise_for_status()
     except httpx.HTTPStatusError as e:

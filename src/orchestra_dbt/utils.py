@@ -4,12 +4,8 @@ import sys
 
 import click
 
-from orchestra_dbt.patcher import ORCHESTRA_REUSED_NODE
+from orchestra_dbt.models import ORCHESTRA_REUSED_NODE
 
-BASE_API_URL = f"https://{os.getenv('ORCHESTRA_ENV', 'app').lower()}.getorchestra.io/api/engine/public"
-HEADERS = {
-    "Authorization": f"Bearer {os.getenv('ORCHESTRA_API_KEY')}",
-}
 SERVICE_NAME = "orchestra-dbt"
 
 
@@ -59,3 +55,13 @@ def validate_environment():
             f"Invalid ORCHESTRA_ENV environment variable. Must be one of: {', '.join(valid_orchestra_envs)}"
         )
         sys.exit(2)
+
+
+def get_base_api_url() -> str:
+    return f"https://{os.getenv('ORCHESTRA_ENV', 'app').lower()}.getorchestra.io/api/engine/public"
+
+
+def get_headers() -> dict:
+    return {
+        "Authorization": f"Bearer {os.getenv('ORCHESTRA_API_KEY')}",
+    }

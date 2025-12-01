@@ -10,4 +10,9 @@
     "ruff.enable": true,
     "ruff.organizeImports": true,
     "ruff.fixAll": true,
+    "python.testing.pytestArgs": [
+        "tests"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true,
 }
