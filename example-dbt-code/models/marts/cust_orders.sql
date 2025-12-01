@@ -9,6 +9,7 @@ select
     c.customer_name,
     o.order_id,
     o.order_month,
+    -- o.total_customer_spend
     o.total_customer_spend
 from orders o
 join customers c on o.customer_id = c.customer_id
