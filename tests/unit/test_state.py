@@ -20,35 +20,26 @@ from src.orchestra_dbt.state import (
 
 
 class TestGetSourceFreshness:
-    """Tests for get_source_freshness function."""
+    @patch("src.orchestra_dbt.state.source_freshness_invoke")
+    @patch("src.orchestra_dbt.state.load_file")
+    def test_get_source_freshness_success(
+        self, mock_load_file, mock_invoke, sample_sources_json
+    ):
+        mock_load_file.return_value = sample_sources_json
 
-    @patch("orchestra_dbt.state.source_freshness_invoke")
-    @patch("orchestra_dbt.state.load_file")
-    def test_get_source_freshness_success(self, mock_load_file, mock_invoke):
-        """Test successful source freshness retrieval."""
-        mock_load_file.return_value = {
-            "results": [
-                {
-                    "unique_id": "source.test_db.test_schema.test_table",
-                    "max_loaded_at": datetime(2024, 1, 3, 12, 0, 0),
-                }
-            ]
-        }
+        assert get_source_freshness() == SourceFreshness(
+            sources={
+                "source.test_db.test_schema.test_table": datetime(2024, 1, 3, 12, 0, 0),
+            }
+        )
 
-        result = get_source_freshness()
-
-        assert isinstance(result, SourceFreshness)
-        assert "source.test_db.test_schema.test_table" in result.sources
         mock_invoke.assert_called_once()
         mock_load_file.assert_called_once_with("target/sources.json")
 
 
 class TestConstructDag:
-    """Tests for construct_dag function."""
-
-    @patch("orchestra_dbt.state.load_file")
+    @patch("src.orchestra_dbt.state.load_file")
     def test_construct_dag_with_sources(self, mock_load_file, sample_manifest):
-        """Test DAG construction with sources."""
         mock_load_file.return_value = sample_manifest
 
         source_freshness = SourceFreshness(
@@ -70,6 +61,7 @@ class TestConstructDag:
         assert len(dag.nodes) > 0
         assert len(dag.edges) > 0
         assert "source.test_db.test_schema.test_table" in dag.nodes
+
         # Source should be DIRTY since freshness is newer than state
         assert (
             dag.nodes["source.test_db.test_schema.test_table"].freshness

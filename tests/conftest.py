@@ -1,19 +1,6 @@
-"""
-Shared pytest fixtures and configuration for all tests.
-"""
-
 import os
-from datetime import datetime
-from unittest.mock import Mock
 
-import httpx
 import pytest
-
-from orchestra_dbt.models import (
-    SourceFreshness,
-    StateApiModel,
-    StateItem,
-)
 
 
 @pytest.fixture(autouse=True)
@@ -22,39 +9,6 @@ def mock_env_vars(monkeypatch):
     monkeypatch.setenv("ORCHESTRA_DBT_CACHE_KEY", "test-cache-key")
     monkeypatch.setenv("ORCHESTRA_ENV", "dev")
     yield
-
-
-@pytest.fixture
-def sample_state_item():
-    """Fixture providing a sample StateItem."""
-    return StateItem(
-        last_updated=datetime(2024, 1, 1, 12, 0, 0),
-        checksum="abc123",
-    )
-
-
-@pytest.fixture
-def sample_state_api_model(sample_state_item):
-    """Fixture providing a sample StateApiModel."""
-    return StateApiModel(
-        state={
-            "source.test_db.test_schema.test_table": sample_state_item,
-            "model.test_project.model_a": StateItem(
-                last_updated=datetime(2024, 1, 2, 12, 0, 0),
-                checksum="def456",
-            ),
-        }
-    )
-
-
-@pytest.fixture
-def sample_source_freshness():
-    """Fixture providing a sample SourceFreshness."""
-    return SourceFreshness(
-        sources={
-            "source.test_db.test_schema.test_table": datetime(2024, 1, 3, 12, 0, 0),
-        }
-    )
 
 
 @pytest.fixture
@@ -100,25 +54,6 @@ def sample_sources_json():
             },
         ]
     }
-
-
-@pytest.fixture
-def mock_httpx_response(monkeypatch):
-    """Fixture to mock httpx responses."""
-    mock_response = Mock(spec=httpx.Response)
-    mock_response.json.return_value = {"state": {}}
-    mock_response.raise_for_status = Mock()
-
-    def mock_get(*args, **kwargs):
-        return mock_response
-
-    def mock_patch(*args, **kwargs):
-        return mock_response
-
-    monkeypatch.setattr(httpx, "get", mock_get)
-    monkeypatch.setattr(httpx, "patch", mock_patch)
-
-    return mock_response
 
 
 @pytest.fixture
