@@ -3,10 +3,7 @@ import subprocess
 from .utils import log_info
 
 
-def run_dbt_command(args: list[str]):
+def run_dbt_command(args: list[str]) -> subprocess.CompletedProcess:
     cmd = ["dbt"] + args
     log_info(f"Running: {' '.join(cmd)}")
-    try:
-        subprocess.run(cmd, check=True)
-    except subprocess.CalledProcessError:
-        pass
+    return subprocess.run(cmd)

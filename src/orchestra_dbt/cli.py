@@ -43,8 +43,7 @@ def dbt(dbt_command):
         sys.exit(1)
 
     if not STATE_AWARE_ENABLED:
-        run_dbt_command(dbt_command)
-        sys.exit(0)
+        sys.exit(run_dbt_command(args=dbt_command).returncode)
 
     validate_environment()
     source_freshness = get_source_freshness()
@@ -60,7 +59,7 @@ def dbt(dbt_command):
     log_info(f"Models to run: {', '.join(model_paths_to_update)}")
 
     patch_sql_files(model_paths_to_update)
-    run_dbt_command(modify_dbt_command(list[str](dbt_command)))
+    result = run_dbt_command(modify_dbt_command(list[str](dbt_command)))
 
     for node_id, node in parsed_dag.nodes.items():
         state.state[node_id] = StateItem(
@@ -69,5 +68,5 @@ def dbt(dbt_command):
             if node_id in source_freshness.sources
             else datetime.now(),
         )
-
     save_state(state=state)
+    sys.exit(result.returncode)
