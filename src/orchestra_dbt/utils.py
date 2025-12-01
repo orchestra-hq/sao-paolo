@@ -4,6 +4,8 @@ import sys
 
 import click
 
+from orchestra_dbt.patcher import ORCHESTRA_REUSED_NODE
+
 BASE_API_URL = f"https://{os.getenv('ORCHESTRA_ENV', 'app').lower()}.getorchestra.io/api/engine/public"
 HEADERS = {
     "Authorization": f"Bearer {os.getenv('ORCHESTRA_API_KEY')}",
@@ -37,7 +39,7 @@ def load_file(path: str) -> dict:
 
 
 def modify_dbt_command(cmd: list[str]) -> list[str]:
-    cmd += ["--exclude", "tag:reuse"]
+    cmd += ["--exclude", f"tag:{ORCHESTRA_REUSED_NODE}"]
     return cmd
 
 
