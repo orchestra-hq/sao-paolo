@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-from unittest.mock import patch
 
 import pytest
 
@@ -87,37 +86,151 @@ class TestBuildAfterDurationMinutes:
 
 class TestShouldMarkDirtyFromSingleUpstream:
     @pytest.mark.parametrize(
-        "upstream_node, freshness_config, expected",
+        "upstream_node, current_node, expected",
         [
-            (Node(freshness=Freshness.DIRTY, type=NodeType.MODEL), None, True),
-            (Node(freshness=Freshness.CLEAN, type=NodeType.MODEL), None, False),
+            # Current source has no last updated at.
             (
                 Node(
-                    freshness=Freshness.DIRTY,
+                    freshness=Freshness.CLEAN,
+                    type=NodeType.SOURCE,
+                ),
+                Node(
+                    freshness=Freshness.CLEAN,
+                    type=NodeType.MODEL,
+                ),
+                True,
+            ),
+            # Clean Source -> Model no config
+            (
+                Node(
+                    freshness=Freshness.CLEAN,
+                    type=NodeType.SOURCE,
+                ),
+                Node(
+                    freshness=Freshness.CLEAN,
                     type=NodeType.MODEL,
                     last_updated=datetime.now() - timedelta(minutes=10),
                 ),
-                {"build_after": {"count": 1, "period": "hour"}},
                 False,
             ),
+            # Dirty Source -> Model no config
             (
                 Node(
                     freshness=Freshness.DIRTY,
-                    type=NodeType.MODEL,
-                    last_updated=datetime.now() - timedelta(minutes=90),
+                    type=NodeType.SOURCE,
                 ),
-                {"build_after": {"count": 1, "period": "hour"}},
+                Node(
+                    freshness=Freshness.CLEAN,
+                    type=NodeType.MODEL,
+                    last_updated=datetime.now() - timedelta(minutes=10),
+                ),
+                True,
+            ),
+            # Clean Source -> Model with invalid config
+            (
+                Node(
+                    freshness=Freshness.CLEAN,
+                    type=NodeType.SOURCE,
+                ),
+                Node(
+                    freshness=Freshness.CLEAN,
+                    type=NodeType.MODEL,
+                    last_updated=datetime.now() - timedelta(minutes=10),
+                    freshness_config={
+                        "erm": {
+                            "foo": "bar",
+                        }
+                    },
+                ),
                 False,
+            ),
+            # Dirty Source -> Model should not be built yet
+            (
+                Node(
+                    freshness=Freshness.DIRTY,
+                    type=NodeType.SOURCE,
+                ),
+                Node(
+                    freshness=Freshness.CLEAN,
+                    type=NodeType.MODEL,
+                    last_updated=datetime.now() - timedelta(minutes=10),
+                    freshness_config={
+                        "build_after": {
+                            "count": 15,
+                            "period": "minute",
+                        }
+                    },
+                ),
+                False,
+            ),
+            # Dirty Source -> Model should be built again
+            (
+                Node(
+                    freshness=Freshness.DIRTY,
+                    type=NodeType.SOURCE,
+                ),
+                Node(
+                    freshness=Freshness.CLEAN,
+                    type=NodeType.MODEL,
+                    last_updated=datetime.now() - timedelta(minutes=20),
+                    freshness_config={
+                        "build_after": {
+                            "count": 15,
+                            "period": "minute",
+                        }
+                    },
+                ),
+                True,
+            ),
+            # Clean parent Model -> parent updated a while ago
+            (
+                Node(
+                    freshness=Freshness.CLEAN,
+                    type=NodeType.MODEL,
+                    last_updated=datetime.now() - timedelta(minutes=60),
+                ),
+                Node(
+                    freshness=Freshness.CLEAN,
+                    type=NodeType.MODEL,
+                    last_updated=datetime.now() - timedelta(minutes=20),
+                    freshness_config={
+                        "build_after": {
+                            "count": 15,
+                            "period": "minute",
+                        }
+                    },
+                ),
+                False,
+            ),
+            # Clean parent Model -> parent updated recently
+            (
+                Node(
+                    freshness=Freshness.CLEAN,
+                    type=NodeType.MODEL,
+                    last_updated=datetime.now() - timedelta(minutes=12),
+                ),
+                Node(
+                    freshness=Freshness.CLEAN,
+                    type=NodeType.MODEL,
+                    last_updated=datetime.now() - timedelta(minutes=20),
+                    freshness_config={
+                        "build_after": {
+                            "count": 15,
+                            "period": "minute",
+                        }
+                    },
+                ),
+                True,
             ),
         ],
     )
     def test_should_mark_dirty_from_single_upstream(
-        self, upstream_node: Node, freshness_config: dict | None, expected: bool
+        self, upstream_node: Node, current_node: Node, expected: bool
     ):
         assert (
             should_mark_dirty_from_single_upstream(
                 upstream_node=upstream_node,
-                freshness_config=freshness_config,
+                current_node=current_node,
             )
             is expected
         )
@@ -126,532 +239,256 @@ class TestShouldMarkDirtyFromSingleUpstream:
 class TestCalculateModelsToRun:
     def test_calculate_models_to_run_propagates_dirty(self):
         # Create a simple DAG: source -> model_a -> model_b
-        nodes = {
-            "source.test": Node(
-                freshness=Freshness.DIRTY,
-                type=NodeType.SOURCE,
-                last_updated=datetime.now(),
-            ),
-            "model.a": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                freshness_config=None,
-            ),
-            "model.b": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                freshness_config=None,
-            ),
-        }
-        edges = [
-            Edge(from_="source.test", to_="model.a"),
-            Edge(from_="model.a", to_="model.b"),
-        ]
-
-        result = calculate_models_to_run(ParsedDag(nodes=nodes, edges=edges))
+        result = calculate_models_to_run(
+            ParsedDag(
+                nodes={
+                    "source.test": Node(
+                        freshness=Freshness.DIRTY,
+                        type=NodeType.SOURCE,
+                        last_updated=datetime.now(),
+                    ),
+                    "model.a": Node(
+                        freshness=Freshness.CLEAN,
+                        type=NodeType.MODEL,
+                    ),
+                    "model.b": Node(
+                        freshness=Freshness.CLEAN,
+                        type=NodeType.MODEL,
+                    ),
+                },
+                edges=[
+                    Edge(from_="source.test", to_="model.a"),
+                    Edge(from_="model.a", to_="model.b"),
+                ],
+            )
+        )
 
         # Both models should be dirty now
         assert result.nodes["model.a"].freshness == Freshness.DIRTY
         assert result.nodes["model.b"].freshness == Freshness.DIRTY
 
     def test_calculate_models_to_run_preserves_clean(self):
-        nodes = {
-            "source.test": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.SOURCE,
-                last_updated=datetime.now(),
-            ),
-            "model.a": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                freshness_config=None,
-            ),
-        }
-        edges = [Edge(from_="source.test", to_="model.a")]
-
         result = calculate_models_to_run(
-            ParsedDag(nodes=nodes, edges=edges),
+            ParsedDag(
+                nodes={
+                    "source.test": Node(
+                        freshness=Freshness.CLEAN,
+                        type=NodeType.SOURCE,
+                        last_updated=datetime.now() - timedelta(minutes=20),
+                    ),
+                    "model.a": Node(
+                        freshness=Freshness.CLEAN,
+                        type=NodeType.MODEL,
+                        last_updated=datetime.now() - timedelta(minutes=10),
+                    ),
+                },
+                edges=[Edge(from_="source.test", to_="model.a")],
+            ),
         )
 
         # Model should remain clean
         assert result.nodes["model.a"].freshness == Freshness.CLEAN
 
     def test_calculate_models_to_run_respects_build_after(self):
-        nodes = {
-            "source.test": Node(
-                freshness=Freshness.DIRTY,
-                type=NodeType.SOURCE,
-                last_updated=datetime.now(),
-            ),
-            "model.a": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                freshness_config={"build_after": {"count": 1, "period": "hour"}},
-            ),
-        }
-        edges = [Edge(from_="source.test", to_="model.a")]
-
         result = calculate_models_to_run(
-            ParsedDag(nodes=nodes, edges=edges),
+            ParsedDag(
+                nodes={
+                    "source.test": Node(
+                        freshness=Freshness.DIRTY,
+                        type=NodeType.SOURCE,
+                        last_updated=datetime.now(),
+                    ),
+                    "model.a": Node(
+                        freshness=Freshness.CLEAN,
+                        type=NodeType.MODEL,
+                        freshness_config={
+                            "build_after": {"count": 1, "period": "hour"}
+                        },
+                        last_updated=datetime.now() - timedelta(minutes=20),
+                    ),
+                },
+                edges=[Edge(from_="source.test", to_="model.a")],
+            ),
         )
 
         # Model should remain clean due to build_after config
         assert result.nodes["model.a"].freshness == Freshness.CLEAN
 
-    def test_calculate_models_to_run_with_updates_on_any(self):
-        """Test that updates_on 'any' requires only one upstream to trigger dirty."""
+    @pytest.mark.parametrize(
+        "updates_on, result_freshness",
+        [("any", Freshness.DIRTY), ("all", Freshness.CLEAN)],
+    )
+    def test_calculate_models_to_run_with_updates_on_any_or_all(
+        self, updates_on: str, result_freshness: Freshness
+    ):
         now = datetime.now()
-        nodes = {
-            "model.a": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                last_updated=now - timedelta(minutes=45),
-            ),
-            "model.b": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                last_updated=now - timedelta(hours=2),  # Old, shouldn't trigger
-            ),
-            "model.c": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                freshness_config={
-                    "build_after": {
-                        "count": 30,
-                        "period": "minute",
-                        "updates_on": "any",
-                    }
+
+        result = calculate_models_to_run(
+            ParsedDag(
+                nodes={
+                    "model.a": Node(
+                        freshness=Freshness.DIRTY,
+                        type=NodeType.MODEL,
+                        last_updated=now,
+                    ),
+                    "model.b": Node(
+                        freshness=Freshness.CLEAN,
+                        type=NodeType.MODEL,
+                        last_updated=now - timedelta(hours=2),  # Old, shouldn't trigger
+                    ),
+                    "model.c": Node(
+                        freshness=Freshness.CLEAN,
+                        type=NodeType.MODEL,
+                        freshness_config={
+                            "build_after": {
+                                "count": 30,
+                                "period": "minute",
+                                "updates_on": updates_on,
+                            }
+                        },
+                        last_updated=now - timedelta(minutes=45),
+                    ),
                 },
-            ),
-        }
-        edges = [
-            Edge(from_="model.a", to_="model.c"),
-            Edge(from_="model.b", to_="model.c"),
-        ]
-
-        result = calculate_models_to_run(ParsedDag(nodes=nodes, edges=edges))
-
-        # Should be dirty because model.a was updated recently (45 mins < 30 min threshold backwards)
-        # updates_on 'any' means only one upstream needs to trigger
-        assert result.nodes["model.c"].freshness == Freshness.DIRTY
-
-    def test_calculate_models_to_run_with_updates_on_all(self):
-        """Test that updates_on 'all' requires all upstreams to trigger dirty."""
-        now = datetime.now()
-        nodes = {
-            "model.a": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                last_updated=now - timedelta(minutes=45),
-            ),
-            "model.b": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                last_updated=now - timedelta(hours=2),  # Old, shouldn't trigger
-            ),
-            "model.c": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                freshness_config={
-                    "build_after": {
-                        "count": 30,
-                        "period": "minute",
-                        "updates_on": "all",
-                    }
-                },
-            ),
-        }
-        edges = [
-            Edge(from_="model.a", to_="model.c"),
-            Edge(from_="model.b", to_="model.c"),
-        ]
-
-        result = calculate_models_to_run(ParsedDag(nodes=nodes, edges=edges))
-
-        # Should remain clean because model.b was not updated recently
-        # updates_on 'all' requires both upstreams to trigger
-        assert result.nodes["model.c"].freshness == Freshness.CLEAN
-
-    def test_calculate_models_to_run_with_updates_on_all_both_trigger(self):
-        """Test that updates_on 'all' works when all upstreams trigger dirty."""
-        now = datetime.now()
-        nodes = {
-            "model.a": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                last_updated=now - timedelta(minutes=10),
-            ),
-            "model.b": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                last_updated=now - timedelta(minutes=15),
-            ),
-            "model.c": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                freshness_config={
-                    "build_after": {
-                        "count": 30,
-                        "period": "minute",
-                        "updates_on": "all",
-                    }
-                },
-            ),
-        }
-        edges = [
-            Edge(from_="model.a", to_="model.c"),
-            Edge(from_="model.b", to_="model.c"),
-        ]
-
-        result = calculate_models_to_run(ParsedDag(nodes=nodes, edges=edges))
-
-        # Should be dirty because both upstreams were updated recently
-        assert result.nodes["model.c"].freshness == Freshness.DIRTY
-
-    def test_calculate_models_to_run_upstream_updated_recently(self):
-        """Test the example scenario: upstream updated recently enough triggers downstream."""
-        # Simulating: At 1pm A (new data) -> B (runs), C doesn't run (config forbids)
-        # At 1:30pm C runs (there is fresh upstream data and config now allows it)
-        base_time = datetime(2024, 1, 1, 13, 0, 0)  # 1pm
-
-        # At 1pm: B was just updated
-        nodes_1pm = {
-            "model.b": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                last_updated=base_time,
-            ),
-            "model.c": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                freshness_config={"build_after": {"count": 30, "period": "minute"}},
-                last_updated=base_time - timedelta(hours=1),
-            ),
-        }
-        edges = [Edge(from_="model.b", to_="model.c")]
-
-        # At 1pm, C should NOT run (only 0 minutes have passed, need 30)
-        with patch("src.orchestra_dbt.state.datetime") as mock_datetime:
-            mock_datetime.now.return_value = base_time
-            result = calculate_models_to_run(
-                ParsedDag(nodes=nodes_1pm.copy(), edges=edges)
+                edges=[
+                    Edge(from_="model.a", to_="model.c"),
+                    Edge(from_="model.b", to_="model.c"),
+                ],
             )
-            assert (
-                result.nodes["model.c"].freshness == Freshness.DIRTY
-            )  # Actually, this might be dirty because threshold logic
+        )
 
-        # At 1:30pm: 30 minutes have passed since B was updated
-        nodes_1_30pm = {
-            "model.b": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                last_updated=base_time,  # Still updated at 1pm
-            ),
-            "model.c": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                freshness_config={"build_after": {"count": 30, "period": "minute"}},
-                last_updated=base_time - timedelta(hours=1),
-            ),
-        }
+        assert result.nodes["model.c"].freshness == result_freshness
 
-        with patch("src.orchestra_dbt.state.datetime") as mock_datetime:
-            mock_datetime.now.return_value = base_time + timedelta(minutes=30)
-            result = calculate_models_to_run(
-                ParsedDag(nodes=nodes_1_30pm.copy(), edges=edges),
+    def test_calculate_models_to_run_sample_1(self):
+        now = datetime.now()
+
+        result = calculate_models_to_run(
+            ParsedDag(
+                nodes={
+                    "source.src_orders": Node(
+                        freshness=Freshness.CLEAN,
+                        type=NodeType.SOURCE,
+                        last_updated=now - timedelta(minutes=10),
+                    ),
+                    "source.src_customers": Node(
+                        freshness=Freshness.DIRTY,
+                        type=NodeType.SOURCE,
+                        last_updated=now,
+                    ),
+                    "model.stg_orders": Node(
+                        freshness=Freshness.CLEAN,
+                        type=NodeType.MODEL,
+                        last_updated=now - timedelta(minutes=9),
+                    ),
+                    "model.stg_customers": Node(
+                        freshness=Freshness.CLEAN,
+                        type=NodeType.MODEL,
+                        last_updated=now - timedelta(minutes=9),
+                    ),
+                    "model.int_orders": Node(
+                        freshness=Freshness.CLEAN,
+                        type=NodeType.MODEL,
+                        last_updated=now - timedelta(minutes=8),
+                    ),
+                    "model.dim_customers": Node(
+                        freshness=Freshness.CLEAN,
+                        type=NodeType.MODEL,
+                        last_updated=now - timedelta(minutes=8),
+                    ),
+                    "model.cust_orders": Node(
+                        freshness=Freshness.CLEAN,
+                        type=NodeType.MODEL,
+                        last_updated=now - timedelta(minutes=7),
+                    ),
+                },
+                edges=[
+                    Edge(from_="source.src_orders", to_="model.stg_orders"),
+                    Edge(from_="source.src_customers", to_="model.stg_customers"),
+                    Edge(from_="model.stg_orders", to_="model.int_orders"),
+                    Edge(from_="model.stg_customers", to_="model.dim_customers"),
+                    Edge(from_="model.int_orders", to_="model.cust_orders"),
+                    Edge(from_="model.dim_customers", to_="model.cust_orders"),
+                ],
             )
-            # C should be dirty because B was updated 30 mins ago (within threshold)
-            assert result.nodes["model.c"].freshness == Freshness.DIRTY
+        )
 
-    def test_calculate_models_to_run_upstream_dirty_propagates(self):
-        """Test that dirty upstream always propagates to downstream without config."""
-        nodes = {
-            "model.a": Node(
-                freshness=Freshness.DIRTY,
-                type=NodeType.MODEL,
-                last_updated=None,
-            ),
-            "model.b": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                freshness_config=None,
-            ),
-        }
-        edges = [Edge(from_="model.a", to_="model.b")]
+        # Reused
+        assert result.nodes["model.stg_orders"].freshness == Freshness.CLEAN
+        assert result.nodes["model.int_orders"].freshness == Freshness.CLEAN
 
-        result = calculate_models_to_run(ParsedDag(nodes=nodes, edges=edges))
+        # Rebuilt
+        assert result.nodes["model.stg_customers"].freshness == Freshness.DIRTY
+        assert result.nodes["model.cust_orders"].freshness == Freshness.DIRTY
+        assert result.nodes["model.dim_customers"].freshness == Freshness.DIRTY
 
-        # model.b should be dirty because model.a is dirty and no config
-        assert result.nodes["model.b"].freshness == Freshness.DIRTY
-
-    def test_calculate_models_to_run_dirty_upstream_with_build_after(self):
-        """Test dirty upstream with build_after config."""
+    def test_calculate_models_to_run_sample_2(self):
         now = datetime.now()
-        nodes = {
-            "model.a": Node(
-                freshness=Freshness.DIRTY,
-                type=NodeType.MODEL,
-                last_updated=now - timedelta(minutes=45),
-            ),
-            "model.b": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                freshness_config={"build_after": {"count": 30, "period": "minute"}},
-            ),
-        }
-        edges = [Edge(from_="model.a", to_="model.b")]
 
-        result = calculate_models_to_run(ParsedDag(nodes=nodes, edges=edges))
+        result = calculate_models_to_run(
+            ParsedDag(
+                nodes={
+                    "source.src_orders": Node(
+                        freshness=Freshness.CLEAN,
+                        type=NodeType.SOURCE,
+                        last_updated=now - timedelta(minutes=10),
+                    ),
+                    "source.src_customers": Node(
+                        freshness=Freshness.DIRTY,
+                        type=NodeType.SOURCE,
+                        last_updated=now - timedelta(minutes=5),
+                    ),
+                    "model.stg_orders": Node(
+                        freshness=Freshness.CLEAN,
+                        type=NodeType.MODEL,
+                        last_updated=now - timedelta(minutes=4),
+                    ),
+                    "model.stg_customers": Node(
+                        freshness=Freshness.CLEAN,
+                        type=NodeType.MODEL,
+                        last_updated=now - timedelta(minutes=4),
+                        freshness_config={
+                            "build_after": {
+                                "count": 7,
+                                "period": "minute",
+                            }
+                        },
+                    ),
+                    "model.int_orders": Node(
+                        freshness=Freshness.CLEAN,
+                        type=NodeType.MODEL,
+                        last_updated=now - timedelta(minutes=3),
+                    ),
+                    "model.dim_customers": Node(
+                        freshness=Freshness.CLEAN,
+                        type=NodeType.MODEL,
+                        last_updated=now - timedelta(minutes=3),
+                    ),
+                    "model.cust_orders": Node(
+                        freshness=Freshness.CLEAN,
+                        type=NodeType.MODEL,
+                        last_updated=now - timedelta(minutes=2),
+                        freshness_config={
+                            "build_after": {
+                                "count": 7,
+                                "period": "minute",
+                                "updates_on": "all",
+                            }
+                        },
+                    ),
+                },
+                edges=[
+                    Edge(from_="source.src_orders", to_="model.stg_orders"),
+                    Edge(from_="source.src_customers", to_="model.stg_customers"),
+                    Edge(from_="model.stg_orders", to_="model.int_orders"),
+                    Edge(from_="model.stg_customers", to_="model.dim_customers"),
+                    Edge(from_="model.int_orders", to_="model.cust_orders"),
+                    Edge(from_="model.dim_customers", to_="model.cust_orders"),
+                ],
+            )
+        )
 
-        # model.b should be dirty because model.a is dirty and was updated
-        # 45 mins ago (more than 30 min threshold backwards)
-        assert result.nodes["model.b"].freshness == Freshness.DIRTY
-
-    def test_calculate_models_to_run_node_without_upstream(self):
-        """Test that nodes without upstream dependencies are processed correctly."""
-        nodes = {
-            "model.standalone": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                freshness_config=None,
-            ),
-        }
-        edges = []
-
-        result = calculate_models_to_run(ParsedDag(nodes=nodes, edges=edges))
-
-        # Node without upstream should remain clean (nothing to check)
-        assert result.nodes["model.standalone"].freshness == Freshness.CLEAN
-
-    def test_calculate_models_to_run_upstream_missing_last_updated(self):
-        """Test behavior when upstream has no last_updated timestamp."""
-        nodes = {
-            "model.a": Node(
-                freshness=Freshness.DIRTY,
-                type=NodeType.MODEL,
-                last_updated=None,
-            ),
-            "model.b": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                freshness_config={"build_after": {"count": 30, "period": "minute"}},
-            ),
-        }
-        edges = [Edge(from_="model.a", to_="model.b")]
-
-        result = calculate_models_to_run(ParsedDag(nodes=nodes, edges=edges))
-
-        # If upstream is dirty but no last_updated and has build_after config,
-        # it should propagate because dirty upstream with config
-        assert result.nodes["model.b"].freshness == Freshness.DIRTY
-
-    def test_calculate_models_to_run_upstream_clean_no_config(self):
-        """Test that clean upstream with no config doesn't trigger downstream."""
-        nodes = {
-            "model.a": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                last_updated=datetime.now(),
-            ),
-            "model.b": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                freshness_config=None,
-            ),
-        }
-        edges = [Edge(from_="model.a", to_="model.b")]
-
-        result = calculate_models_to_run(ParsedDag(nodes=nodes, edges=edges))
-
-        # model.b should remain clean
-        assert result.nodes["model.b"].freshness == Freshness.CLEAN
-
-    def test_calculate_models_to_run_complex_dag(self):
-        """Test a more complex DAG with multiple levels."""
-        now = datetime.now()
-        nodes = {
-            "source.s": Node(
-                freshness=Freshness.DIRTY,
-                type=NodeType.SOURCE,
-                last_updated=now,
-            ),
-            "model.stg": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                freshness_config=None,
-            ),
-            "model.int": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                freshness_config={"build_after": {"count": 1, "period": "hour"}},
-                last_updated=now - timedelta(minutes=30),
-            ),
-            "model.mart": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                freshness_config={"build_after": {"count": 30, "period": "minute"}},
-            ),
-        }
-        edges = [
-            Edge(from_="source.s", to_="model.stg"),
-            Edge(from_="model.stg", to_="model.int"),
-            Edge(from_="model.int", to_="model.mart"),
-        ]
-
-        result = calculate_models_to_run(ParsedDag(nodes=nodes, edges=edges))
-
-        # source.s is dirty, so model.stg should be dirty
-        assert result.nodes["model.stg"].freshness == Freshness.DIRTY
-        # model.stg is dirty, so model.int should be dirty (no config on stg)
-        assert result.nodes["model.int"].freshness == Freshness.DIRTY
-        # model.int was updated 30 mins ago, which is within the 30 min threshold
-        assert result.nodes["model.mart"].freshness == Freshness.DIRTY
-
-    def test_calculate_models_to_run_build_after_exact_threshold(self):
-        """Test edge case where update time exactly matches threshold."""
-        base_time = datetime(2024, 1, 1, 12, 0, 0)
-        nodes = {
-            "model.a": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                last_updated=base_time,
-            ),
-            "model.b": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                freshness_config={"build_after": {"count": 30, "period": "minute"}},
-            ),
-        }
-        edges = [Edge(from_="model.a", to_="model.b")]
-
-        # Exactly 30 minutes later
-        with patch("src.orchestra_dbt.state.datetime") as mock_datetime:
-            mock_datetime.now.return_value = base_time + timedelta(minutes=30)
-            result = calculate_models_to_run(ParsedDag(nodes=nodes.copy(), edges=edges))
-            # Should trigger because update is more recent than (now - 30 mins)
-            assert result.nodes["model.b"].freshness == Freshness.DIRTY
-
-    def test_calculate_models_to_run_default_updates_on_is_any(self):
-        """Test that updates_on defaults to 'any' when not specified."""
-        now = datetime.now()
-        nodes = {
-            "model.a": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                last_updated=now - timedelta(minutes=10),
-            ),
-            "model.b": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                last_updated=now - timedelta(hours=2),
-            ),
-            "model.c": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                # No updates_on specified, should default to 'any'
-                freshness_config={"build_after": {"count": 30, "period": "minute"}},
-            ),
-        }
-        edges = [
-            Edge(from_="model.a", to_="model.c"),
-            Edge(from_="model.b", to_="model.c"),
-        ]
-
-        result = calculate_models_to_run(ParsedDag(nodes=nodes, edges=edges))
-
-        # Should be dirty because model.a triggers (defaults to 'any' behavior)
-        assert result.nodes["model.c"].freshness == Freshness.DIRTY
-
-    def test_calculate_models_to_run_no_freshness_config(self):
-        """Test behavior when downstream has no freshness config."""
-        nodes = {
-            "model.a": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                last_updated=datetime.now(),
-            ),
-            "model.b": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                freshness_config=None,
-            ),
-        }
-        edges = [Edge(from_="model.a", to_="model.b")]
-
-        result = calculate_models_to_run(ParsedDag(nodes=nodes, edges=edges))
-
-        # Without config, only dirty upstream triggers downstream
-        assert result.nodes["model.b"].freshness == Freshness.CLEAN
-
-    def test_calculate_models_to_run_multiple_upstreams_one_dirty(self):
-        """Test multiple upstreams where only one is dirty."""
-        nodes = {
-            "model.a": Node(
-                freshness=Freshness.DIRTY,
-                type=NodeType.MODEL,
-                last_updated=datetime.now(),
-            ),
-            "model.b": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                last_updated=datetime.now(),
-            ),
-            "model.c": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                freshness_config={"build_after": {"count": 30, "period": "minute"}},
-            ),
-        }
-        edges = [
-            Edge(from_="model.a", to_="model.c"),
-            Edge(from_="model.b", to_="model.c"),
-        ]
-
-        result = calculate_models_to_run(ParsedDag(nodes=nodes, edges=edges))
-
-        # Should be dirty because model.a is dirty
-        assert result.nodes["model.c"].freshness == Freshness.DIRTY
-
-    def test_calculate_models_to_run_preserves_already_dirty(self):
-        """Test that nodes already marked as dirty are not reprocessed."""
-        nodes = {
-            "model.a": Node(
-                freshness=Freshness.DIRTY,
-                type=NodeType.MODEL,
-                last_updated=datetime.now(),
-            ),
-            "model.b": Node(
-                freshness=Freshness.DIRTY,  # Already dirty
-                type=NodeType.MODEL,
-                freshness_config=None,
-            ),
-        }
-        edges = [Edge(from_="model.a", to_="model.b")]
-
-        result = calculate_models_to_run(ParsedDag(nodes=nodes, edges=edges))
-
-        # Should remain dirty
-        assert result.nodes["model.b"].freshness == Freshness.DIRTY
-
-    def test_calculate_models_to_run_upstream_too_old(self):
-        """Test that upstream updated too long ago doesn't trigger (outside threshold)."""
-        now = datetime.now()
-        nodes = {
-            "model.a": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                last_updated=now - timedelta(hours=2),  # 2 hours ago
-            ),
-            "model.b": Node(
-                freshness=Freshness.CLEAN,
-                type=NodeType.MODEL,
-                freshness_config={"build_after": {"count": 30, "period": "minute"}},
-            ),
-        }
-        edges = [Edge(from_="model.a", to_="model.b")]
-
-        result = calculate_models_to_run(ParsedDag(nodes=nodes, edges=edges))
-
-        # Should remain clean because upstream was updated too long ago
-        # (2 hours > 30 min threshold backwards)
-        assert result.nodes["model.b"].freshness == Freshness.CLEAN
+        # All reused
+        assert result.nodes["model.stg_orders"].freshness == Freshness.CLEAN
+        assert result.nodes["model.int_orders"].freshness == Freshness.CLEAN
+        assert result.nodes["model.stg_customers"].freshness == Freshness.CLEAN
+        assert result.nodes["model.cust_orders"].freshness == Freshness.CLEAN
+        assert result.nodes["model.dim_customers"].freshness == Freshness.CLEAN

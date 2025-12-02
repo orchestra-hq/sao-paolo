@@ -65,55 +65,52 @@ def _get_updates_on_mode(freshness_config: dict | None) -> Literal["any", "all"]
 
 
 def should_mark_dirty_from_single_upstream(
-    upstream_node: Node,
-    freshness_config: dict | None,
+    upstream_node: Node, current_node: Node
 ) -> bool:
-    """
-    Check if a single upstream dependency should cause the downstream model to be marked dirty.
-
-    Returns True if:
-    - The upstream was updated more recently than (now - build_after duration)
-    - OR the upstream is DIRTY itself and falls outside of the config
-    """
-    upstream_last_updated: datetime | None = upstream_node.last_updated
-    if upstream_last_updated is None:
+    if not current_node.last_updated:
+        # This scenario should not occur as the node will be dirty already.
+        # But helps with typing.
         return True
 
-    if not freshness_config:
+    if not current_node.freshness_config:
         return upstream_node.freshness == Freshness.DIRTY
 
-    build_after = freshness_config.get("build_after")
+    # Similar to above - build_after should always exist, so this is more for
+    # type checking.
+    build_after = current_node.freshness_config.get("build_after")
     if not build_after:
         return upstream_node.freshness == Freshness.DIRTY
 
-    threshold_time = datetime.now(upstream_last_updated.tzinfo) - timedelta(
-        minutes=build_after_duration_minutes(build_after)
-    )
+    if current_node.last_updated >= datetime.now(
+        tz=current_node.last_updated.tzinfo
+    ) - timedelta(minutes=build_after_duration_minutes(build_after)):
+        return False
 
-    # Check if upstream was updated more recently than the threshold
-    if upstream_last_updated > threshold_time:
-        return True
+    match upstream_node.freshness:
+        case Freshness.DIRTY:
+            return True
+        case Freshness.CLEAN:
+            return (
+                True
+                if (
+                    upstream_node.last_updated
+                    and upstream_node.last_updated > current_node.last_updated
+                )
+                else False
+            )
 
-    # Check if upstream is DIRTY and falls outside of the config
-    if upstream_node.freshness == Freshness.DIRTY:
-        # If upstream is dirty and was updated at or before the threshold,
-        # enough time has passed and it should trigger dirty
-        return upstream_last_updated <= threshold_time
 
-    return False
-
-
-def _should_mark_dirty_based_on_upstreams(
+def _should_mark_dirty(
     upstream_ids: list[str],
-    freshness_config: dict | None,
+    node: Node,
     dag: ParsedDag,
 ) -> bool:
-    updates_on: Literal["any", "all"] = _get_updates_on_mode(freshness_config)
+    updates_on: Literal["any", "all"] = _get_updates_on_mode(node.freshness_config)
 
     for upstream_id in upstream_ids:
         should_be_dirty = should_mark_dirty_from_single_upstream(
             upstream_node=dag.nodes[upstream_id],
-            freshness_config=freshness_config,
+            current_node=node,
         )
         if updates_on == "all" and not should_be_dirty:
             return False
@@ -133,16 +130,11 @@ def _process_node(
     Process a single node to determine if it should be marked dirty based on upstream dependencies.
     """
     # If already dirty, nothing to do (children will be processed separately)
-    # If no upstream dependencies, nothing to check
+    # If no upstream dependencies (source), nothing to check
     if node.freshness == Freshness.DIRTY or not parents[node_id]:
         return
 
-    # Check all upstream dependencies and apply updates_on logic
-    if _should_mark_dirty_based_on_upstreams(
-        upstream_ids=parents[node_id],
-        freshness_config=node.freshness_config,
-        dag=dag,
-    ):
+    if _should_mark_dirty(upstream_ids=parents[node_id], node=node, dag=dag):
         node.freshness = Freshness.DIRTY
 
 
@@ -159,10 +151,6 @@ def _enqueue_children(
 
 
 def calculate_models_to_run(dag: ParsedDag) -> ParsedDag:
-    """
-    Iterates over all models starting with those that have no dependencies, moving downstream.
-    Each clean model checks its upstream dependencies to determine if it should be marked dirty.
-    """
     children, parents, in_degree = build_dependency_graphs(dag)
 
     # Queue for nodes with no upstream dependencies (in_degree 0)
