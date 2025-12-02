@@ -97,7 +97,12 @@ def build_sla_duration(build_after: dict) -> int:
             mins_multiplier = 1440
         case _:
             raise ValueError(f"Invalid period: {period}")
-    return build_after["count"] * mins_multiplier
+
+    count = build_after["count"]
+    if not isinstance(count, int):
+        raise ValueError(f"Invalid count: {count}")
+
+    return count * mins_multiplier
 
 
 def _valid_sla(child: str, config: dict | None, state: StateApiModel) -> bool:

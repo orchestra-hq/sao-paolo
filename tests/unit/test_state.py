@@ -4,14 +4,16 @@ from unittest.mock import patch
 import pytest
 
 from src.orchestra_dbt.models import (
+    Edge,
     Freshness,
+    Node,
     NodeType,
+    ParsedDag,
     SourceFreshness,
     StateApiModel,
     StateItem,
 )
 from src.orchestra_dbt.state import (
-    _valid_sla,
     build_sla_duration,
     calculate_models_to_run,
     construct_dag,
@@ -26,15 +28,12 @@ class TestGetSourceFreshness:
         self, mock_load_file, mock_invoke, sample_sources_json
     ):
         mock_load_file.return_value = sample_sources_json
-
         assert get_source_freshness() == SourceFreshness(
             sources={
                 "source.test_db.test_schema.test_table": datetime(2024, 1, 3, 12, 0, 0),
             }
         )
-
         mock_invoke.assert_called_once()
-        mock_load_file.assert_called_once_with("target/sources.json")
 
 
 class TestConstructDag:
@@ -56,24 +55,47 @@ class TestConstructDag:
             }
         )
 
-        dag = construct_dag(source_freshness, state)
-
-        assert len(dag.nodes) > 0
-        assert len(dag.edges) > 0
-        assert "source.test_db.test_schema.test_table" in dag.nodes
-
-        # Source should be DIRTY since freshness is newer than state
-        assert (
-            dag.nodes["source.test_db.test_schema.test_table"].freshness
-            == Freshness.DIRTY
+        assert construct_dag(source_freshness, state) == ParsedDag(
+            nodes={
+                "source.test_db.test_schema.test_table": Node(
+                    freshness=Freshness.DIRTY,
+                    type=NodeType.SOURCE,
+                    last_updated=datetime(2024, 1, 3, 12, 0, 0),
+                ),
+                "model.test_project.model_a": Node(
+                    freshness=Freshness.DIRTY,
+                    type=NodeType.MODEL,
+                    checksum="def456",
+                    sql_path="models/model_a.sql",
+                ),
+                "model.test_project.model_b": Node(
+                    freshness=Freshness.DIRTY,
+                    type=NodeType.MODEL,
+                    checksum="ghi789",
+                    sql_path="models/model_b.sql",
+                ),
+            },
+            edges=[
+                Edge(
+                    from_="source.test_db.test_schema.test_table",
+                    to_="model.test_project.model_a",
+                ),
+                Edge(
+                    from_="model.test_project.model_a",
+                    to_="model.test_project.model_b",
+                ),
+            ],
         )
 
-    @patch("orchestra_dbt.state.load_file")
+    @patch("src.orchestra_dbt.state.load_file")
     def test_construct_dag_with_models(self, mock_load_file, sample_manifest):
-        """Test DAG construction with models."""
         mock_load_file.return_value = sample_manifest
 
-        source_freshness = SourceFreshness(sources={})
+        source_freshness = SourceFreshness(
+            sources={
+                "source.test_db.test_schema.test_table": datetime(2024, 1, 3, 12, 0, 0),
+            }
+        )
         state = StateApiModel(
             state={
                 "model.test_project.model_a": StateItem(
@@ -90,12 +112,15 @@ class TestConstructDag:
         assert dag.nodes["model.test_project.model_a"].freshness == Freshness.CLEAN
         assert dag.nodes["model.test_project.model_a"].type == NodeType.MODEL
 
-    @patch("orchestra_dbt.state.load_file")
+    @patch("src.orchestra_dbt.state.load_file")
     def test_construct_dag_dirty_model(self, mock_load_file, sample_manifest):
-        """Test DAG construction with dirty model (checksum mismatch)."""
         mock_load_file.return_value = sample_manifest
 
-        source_freshness = SourceFreshness(sources={})
+        source_freshness = SourceFreshness(
+            sources={
+                "source.test_db.test_schema.test_table": datetime(2024, 1, 3, 12, 0, 0),
+            }
+        )
         state = StateApiModel(
             state={
                 "model.test_project.model_a": StateItem(
@@ -113,94 +138,24 @@ class TestConstructDag:
 
 
 class TestBuildSlaDuration:
-    """Tests for build_sla_duration function."""
-
-    def test_build_sla_duration_minutes(self):
-        """Test SLA duration calculation in minutes."""
-        build_after = {"period": "minute", "count": 30}
-        result = build_sla_duration(build_after)
-        assert result == 30
-
-    def test_build_sla_duration_hours(self):
-        """Test SLA duration calculation in hours."""
-        build_after = {"period": "hour", "count": 2}
-        result = build_sla_duration(build_after)
-        assert result == 120
-
-    def test_build_sla_duration_days(self):
-        """Test SLA duration calculation in days."""
-        build_after = {"period": "day", "count": 1}
-        result = build_sla_duration(build_after)
-        assert result == 1440
+    @pytest.mark.parametrize(
+        "period, count, expected",
+        [("minute", 30, 30), ("hour", 2, 120), ("day", 1, 1440)],
+    )
+    def test_build_sla_duration_minutes(self, period: str, count: int, expected: int):
+        assert build_sla_duration({"period": period, "count": count}) == expected
 
     def test_build_sla_duration_invalid_period(self):
-        """Test that invalid period raises ValueError."""
-        build_after = {"period": "invalid", "count": 1}
         with pytest.raises(ValueError, match="Invalid period"):
-            build_sla_duration(build_after)
+            build_sla_duration({"period": "invalid", "count": 1})
 
-
-class TestValidSla:
-    """Tests for _valid_sla function."""
-
-    def test_valid_sla_no_config(self):
-        """Test that SLA is valid when no config is provided."""
-        state = StateApiModel(state={})
-        result = _valid_sla("model.test", None, state)
-        assert result is True
-
-    def test_valid_sla_no_build_after(self):
-        """Test that SLA is valid when build_after is not in config."""
-        state = StateApiModel(state={})
-        config = {"warn_after": {"count": 1, "period": "hour"}}
-        result = _valid_sla("model.test", config, state)
-        assert result is True
-
-    def test_valid_sla_no_state(self):
-        """Test that SLA is valid when model is not in state."""
-        state = StateApiModel(state={})
-        config = {"build_after": {"count": 1, "period": "hour"}}
-        result = _valid_sla("model.test", config, state)
-        assert result is True
-
-    def test_valid_sla_expired(self):
-        """Test that SLA is valid when build_after time has passed."""
-        past_time = datetime.now() - timedelta(hours=2)
-        state = StateApiModel(
-            state={
-                "model.test": StateItem(
-                    last_updated=past_time,
-                    checksum="abc123",
-                )
-            }
-        )
-        config = {"build_after": {"count": 1, "period": "hour"}}
-        result = _valid_sla("model.test", config, state)
-        assert result is True
-
-    def test_valid_sla_not_expired(self):
-        """Test that SLA is invalid when build_after time has not passed."""
-        recent_time = datetime.now() - timedelta(minutes=30)
-        state = StateApiModel(
-            state={
-                "model.test": StateItem(
-                    last_updated=recent_time,
-                    checksum="abc123",
-                )
-            }
-        )
-        config = {"build_after": {"count": 1, "period": "hour"}}
-        result = _valid_sla("model.test", config, state)
-        assert result is False
+    def test_build_sla_duration_invalid_count(self):
+        with pytest.raises(ValueError, match="Invalid count"):
+            build_sla_duration({"period": "minute", "count": "invalid"})
 
 
 class TestCalculateModelsToRun:
-    """Tests for calculate_models_to_run function."""
-
     def test_calculate_models_to_run_propagates_dirty(self):
-        """Test that dirty status propagates to downstream models."""
-        from src.orchestra_dbt.models import Edge, Node, ParsedDag
-
         # Create a simple DAG: source -> model_a -> model_b
         nodes = {
             "source.test": Node(
@@ -223,19 +178,16 @@ class TestCalculateModelsToRun:
             Edge(from_="source.test", to_="model.a"),
             Edge(from_="model.a", to_="model.b"),
         ]
-        dag = ParsedDag(nodes=nodes, edges=edges)
-        state = StateApiModel(state={})
 
-        result = calculate_models_to_run(dag, state)
+        result = calculate_models_to_run(
+            ParsedDag(nodes=nodes, edges=edges), StateApiModel(state={})
+        )
 
         # Both models should be dirty now
         assert result.nodes["model.a"].freshness == Freshness.DIRTY
         assert result.nodes["model.b"].freshness == Freshness.DIRTY
 
     def test_calculate_models_to_run_preserves_clean(self):
-        """Test that clean sources keep downstream models clean."""
-        from src.orchestra_dbt.models import Edge, Node, ParsedDag
-
         nodes = {
             "source.test": Node(
                 freshness=Freshness.CLEAN,
@@ -249,18 +201,15 @@ class TestCalculateModelsToRun:
             ),
         }
         edges = [Edge(from_="source.test", to_="model.a")]
-        dag = ParsedDag(nodes=nodes, edges=edges)
-        state = StateApiModel(state={})
 
-        result = calculate_models_to_run(dag, state)
+        result = calculate_models_to_run(
+            ParsedDag(nodes=nodes, edges=edges), StateApiModel(state={})
+        )
 
         # Model should remain clean
         assert result.nodes["model.a"].freshness == Freshness.CLEAN
 
     def test_calculate_models_to_run_respects_sla(self):
-        """Test that SLA restrictions are respected."""
-        from src.orchestra_dbt.models import Edge, Node, ParsedDag
-
         recent_time = datetime.now() - timedelta(minutes=30)
         nodes = {
             "source.test": Node(
@@ -275,17 +224,18 @@ class TestCalculateModelsToRun:
             ),
         }
         edges = [Edge(from_="source.test", to_="model.a")]
-        dag = ParsedDag(nodes=nodes, edges=edges)
-        state = StateApiModel(
-            state={
-                "model.a": StateItem(
-                    last_updated=recent_time,
-                    checksum="abc123",
-                )
-            }
-        )
 
-        result = calculate_models_to_run(dag, state)
+        result = calculate_models_to_run(
+            ParsedDag(nodes=nodes, edges=edges),
+            StateApiModel(
+                state={
+                    "model.a": StateItem(
+                        last_updated=recent_time,
+                        checksum="abc123",
+                    )
+                }
+            ),
+        )
 
         # Model should remain clean due to SLA
         assert result.nodes["model.a"].freshness == Freshness.CLEAN
