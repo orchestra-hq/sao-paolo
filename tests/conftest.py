@@ -1,5 +1,3 @@
-import os
-
 import pytest
 
 
@@ -13,7 +11,6 @@ def mock_env_vars(monkeypatch):
 
 @pytest.fixture
 def sample_manifest():
-    """Fixture providing a sample dbt manifest.json structure."""
     return {
         "nodes": {
             "model.test_project.model_a": {
@@ -45,7 +42,6 @@ def sample_manifest():
 
 @pytest.fixture
 def sample_sources_json():
-    """Fixture providing a sample sources.json structure."""
     return {
         "results": [
             {
@@ -54,24 +50,3 @@ def sample_sources_json():
             },
         ]
     }
-
-
-@pytest.fixture
-def temp_dir(tmp_path):
-    """Fixture providing a temporary directory for file operations."""
-    original_cwd = os.getcwd()
-    os.chdir(tmp_path)
-    yield tmp_path
-    os.chdir(original_cwd)
-
-
-@pytest.fixture
-def sample_sql_file_content():
-    """Fixture providing sample SQL file content."""
-    return """-- Some SQL model
-SELECT
-    id,
-    name,
-    created_at
-FROM {{ ref('some_model') }}
-"""

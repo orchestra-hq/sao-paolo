@@ -14,9 +14,6 @@ pytest tests/unit/
 # Run only integration tests
 pytest tests/integration/
 
-# Run with coverage
-pytest --cov=orchestra_dbt --cov-report=html
-
 # Run specific test file
 pytest tests/unit/test_cache.py
 
