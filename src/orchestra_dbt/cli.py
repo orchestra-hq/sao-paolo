@@ -3,16 +3,14 @@ from datetime import datetime
 
 import click
 
+from orchestra_dbt.dag import construct_dag
+from orchestra_dbt.source_freshness import get_source_freshness
+
 from .cache import load_state, save_state
 from .dbt_runner import run_dbt_command
 from .models import NodeType, StateItem
 from .patcher import patch_sql_files
-from .state import (
-    Freshness,
-    calculate_models_to_run,
-    construct_dag,
-    get_source_freshness,
-)
+from .sao import Freshness, calculate_models_to_run
 from .utils import log_info, modify_dbt_command, validate_environment
 
 STATE_AWARE_ENABLED = True
@@ -47,11 +45,14 @@ def dbt(dbt_command):
 
     validate_environment()
     source_freshness = get_source_freshness()
+    if not source_freshness:
+        sys.exit(run_dbt_command(args=dbt_command).returncode)
+
     state = load_state()
     log_info("State loaded")
 
     parsed_dag = construct_dag(source_freshness, state)
-    calculate_models_to_run(parsed_dag, state)
+    calculate_models_to_run(parsed_dag)
 
     model_paths_to_update = [
         m.sql_path
