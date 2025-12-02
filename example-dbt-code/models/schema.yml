@@ -28,23 +28,23 @@ models:
 
   - name: stg_customers
     description: "Cleaned and standardized customers data"
-    # config:
-    #   freshness:
-    #     build_after:
-    #       count: 6
-    #       period: hour
+    config:
+      freshness:
+        build_after:
+          count: 1
+          period: hour
 
   - name: int_orders
     description: "Intermediate orders table for further aggregations"
 
   - name: cust_orders
     description: "Final mart combining customers and their orders"
-    # config:
-    #   freshness:
-    #     build_after:
-    #       count: 12
-    #       period: hour
-    #       updates_on: all
+    config:
+      freshness:
+        build_after:
+          count: 1
+          period: hour
+          updates_on: all
 
   - name: dim_customers
     description: "Dimension table for customers"
