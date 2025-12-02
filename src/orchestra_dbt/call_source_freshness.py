@@ -12,5 +12,4 @@ def source_freshness_invoke():
     try:
         dbtRunner().invoke(["source", "freshness", "-q"])
     except Exception:
-        # TODO: improve.
         log_warn("Error running dbt source freshness (a source could be expired).")

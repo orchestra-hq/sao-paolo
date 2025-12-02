@@ -48,6 +48,8 @@ def dbt(dbt_command):
     validate_environment()
     source_freshness = get_source_freshness()
     state = load_state()
+    log_info("State loaded")
+
     parsed_dag = construct_dag(source_freshness, state)
     calculate_models_to_run(parsed_dag, state)
 

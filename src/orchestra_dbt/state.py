@@ -30,57 +30,49 @@ def construct_dag(source_freshness: SourceFreshness, state: StateApiModel) -> Pa
     nodes: dict[str, Node] = {}
     edges: list[Edge] = []
 
-    for node_id, downstream_nodes in manifest.get("child_map", {}).items():
+    for node_id in manifest.get("child_map", {}).keys():
         node_id = str(node_id)
         if not node_id.startswith("source."):
             continue
-
-        if node_id in state.state:
-            freshness = (
-                Freshness.DIRTY
-                if source_freshness.sources[node_id] > state.state[node_id].last_updated
-                else Freshness.CLEAN
-            )
-        else:
-            freshness = Freshness.DIRTY
-
-        nodes[node_id] = Node(
-            freshness=freshness,
-            last_updated=source_freshness.sources[node_id],
-            type=NodeType.SOURCE,
-        )
-
-        for dep in downstream_nodes:
-            dep = str(dep)
-            if dep.startswith("model."):
-                edges.append(Edge(from_=node_id, to_=dep))
-
-    for node_id, node in manifest.get("nodes", {}).items():
-        if not node["resource_type"] == "model":
-            continue
-
-        node_id = str(node_id)
-        checksum = node["checksum"]["checksum"]
 
         nodes[node_id] = Node(
             freshness=(
                 Freshness.DIRTY
                 if node_id not in state.state
+                or source_freshness.sources[node_id] > state.state[node_id].last_updated
+                else Freshness.CLEAN
+            ),
+            type=NodeType.SOURCE,
+            last_updated=source_freshness.sources[node_id],
+        )
+
+    for node_id, node in manifest.get("nodes", {}).items():
+        if node.get("resource_type") != "model":
+            continue
+
+        node_id = str(node_id)
+        checksum = node.get("checksum", {}).get("checksum")
+        checksum = str(checksum) if checksum else None
+
+        nodes[node_id] = Node(
+            freshness=(
+                Freshness.DIRTY
+                if node_id not in state.state
+                or not checksum
                 or checksum != state.state[node_id].checksum
                 else Freshness.CLEAN
             ),
+            type=NodeType.MODEL,
+            checksum=checksum,
+            freshness_config=node.get("config", {}).get("freshness"),
             last_updated=(
                 state.state[node_id].last_updated if node_id in state.state else None
             ),
-            type=NodeType.MODEL,
-            checksum=checksum,
-            freshness_config=node["config"]["freshness"],
-            sql_path=node["original_file_path"],
+            sql_path=node.get("original_file_path"),
         )
 
         for dep in node.get("depends_on", {}).get("nodes", []):
-            if dep in manifest.get("nodes", {}):
-                edges.append(Edge(from_=str(dep), to_=node_id))
+            edges.append(Edge(from_=str(dep), to_=node_id))
 
     return ParsedDag(nodes=nodes, edges=edges)
 
@@ -127,8 +119,8 @@ def _valid_sla(child: str, config: dict | None, state: StateApiModel) -> bool:
 
 
 def calculate_models_to_run(dag: ParsedDag, state: StateApiModel) -> ParsedDag:
-    children = defaultdict[str, list[str]](list)
-    in_degree = defaultdict[str, int](int)
+    children: defaultdict[str, list[str]] = defaultdict[str, list[str]](list)
+    in_degree: defaultdict[str, int] = defaultdict[str, int](int)
 
     for edge in dag.edges:
         parent, child = edge.from_, edge.to_

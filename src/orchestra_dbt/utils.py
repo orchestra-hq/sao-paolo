@@ -17,10 +17,6 @@ def log_info(msg):
     _log(msg, None)
 
 
-def log_success(msg):
-    _log(msg, "green")
-
-
 def log_warn(msg):
     _log(msg, "yellow")
 
@@ -40,7 +36,7 @@ def modify_dbt_command(cmd: list[str]) -> list[str]:
 
 
 def validate_environment():
-    log_info("Validating environment (checking API key and cache key)")
+    log_info("Validating environment (checking API key and cache key are set)")
 
     vals_to_check = ["ORCHESTRA_API_KEY", "ORCHESTRA_DBT_CACHE_KEY"]
     valid_orchestra_envs = ["app", "stage", "dev"]
