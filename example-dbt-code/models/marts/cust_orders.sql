@@ -1,3 +1,7 @@
+{{ config(
+    tags = ['ORCHESTRA_REUSED_NODE']
+) }}
+
 with orders as (
     select * from {{ ref('int_orders') }}
 ),
