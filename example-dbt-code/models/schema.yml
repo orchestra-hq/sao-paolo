@@ -48,8 +48,6 @@ models:
   - name: cust_orders
     description: "Final mart combining customers and their orders"
     config:
-      tags:
-        - ORCHESTRA_REUSED_NODE
       freshness:
         build_after:
           count: 12
