@@ -1,0 +1,16 @@
+version: 2
+
+models:
+  - name: dim_wizards
+    description: "Dimension table for wizards enriched with world data"
+    columns:
+      - name: id
+        tests: [not_null, unique]
+  - name: fct_orders
+    description: "Fact table for wand_orders including wizard and wand attributes"
+    columns:
+      - name: id
+        tests: [not_null, unique]
+      - name: amount
+        tests:
+          - not_null
