@@ -59,18 +59,22 @@ def main(args):
     parsed_dag = construct_dag(source_freshness, state)
     calculate_models_to_run(parsed_dag)
 
-    models_to_reuse: list[Node] = []
+    models_to_reuse: dict[str, Node] = {}
     models_count = 0
-    for node in parsed_dag.nodes.values():
+    for node_id, node in parsed_dag.nodes.items():
         if node.type != NodeType.MODEL:
             continue
         models_count += 1
         if node.freshness == Freshness.CLEAN:
-            models_to_reuse.append(node)
-    log_info(f"Reusing {len(models_to_reuse)}/{models_count} models")
+            models_to_reuse[node_id] = node
 
-    patch_sql_files(models_to_reuse)
+    log_info("Models to be reused:")
+    for node_id in models_to_reuse.keys():
+        log_info(f" - {node_id}")
+
+    patch_sql_files(list(models_to_reuse.values()))
     result = subprocess.run(modify_dbt_command(cmd=list(args)))
+    log_info(f"{len(models_to_reuse)}/{models_count} models reused.")
 
     for node_id, node in parsed_dag.nodes.items():
         state.state[node_id] = StateItem(
