@@ -55,7 +55,6 @@ def main(args):
         sys.exit(subprocess.run(args).returncode)
 
     state = load_state()
-    log_info("State loaded")
 
     parsed_dag = construct_dag(source_freshness, state)
     calculate_models_to_run(parsed_dag)
@@ -71,7 +70,7 @@ def main(args):
     log_info(f"Reusing {len(models_to_reuse)}/{models_count} models")
 
     patch_sql_files(models_to_reuse)
-    result = subprocess.run(modify_dbt_command(cmd=args))
+    result = subprocess.run(modify_dbt_command(cmd=list(args)))
 
     for node_id, node in parsed_dag.nodes.items():
         state.state[node_id] = StateItem(
@@ -81,5 +80,4 @@ def main(args):
             else datetime.now(),
         )
     save_state(state=state)
-    log_info("State saved")
     sys.exit(result.returncode)
