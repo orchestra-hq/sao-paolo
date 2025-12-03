@@ -1,5 +1,6 @@
 import sys
 from datetime import datetime
+from importlib.metadata import version
 
 import click
 
@@ -8,12 +9,20 @@ from orchestra_dbt.source_freshness import get_source_freshness
 
 from .cache import load_state, save_state
 from .dbt_runner import run_dbt_command
-from .models import NodeType, StateItem
+from .models import Node, NodeType, StateItem
 from .patcher import patch_sql_files
 from .sao import Freshness, calculate_models_to_run
-from .utils import log_info, modify_dbt_command, validate_environment
+from .utils import SERVICE_NAME, log_info, modify_dbt_command, validate_environment
 
 STATE_AWARE_ENABLED = True
+
+
+def _welcome():
+    try:
+        project_version = version(SERVICE_NAME)
+    except Exception:
+        project_version = "unknown"
+    log_info(f"Version: {project_version}")
 
 
 # -------------------------------
@@ -40,7 +49,10 @@ def dbt(dbt_command):
         click.echo("Usage: orchestra-dbt dbt [DBT_COMMAND] [ARGS...]")
         sys.exit(1)
 
+    _welcome()
+
     if not STATE_AWARE_ENABLED:
+        log_info("Stateful orchestration disabled.")
         sys.exit(run_dbt_command(args=dbt_command).returncode)
 
     validate_environment()
@@ -54,14 +66,17 @@ def dbt(dbt_command):
     parsed_dag = construct_dag(source_freshness, state)
     calculate_models_to_run(parsed_dag)
 
-    model_paths_to_update = [
-        m.sql_path
-        for m in parsed_dag.nodes.values()
-        if m.freshness == Freshness.DIRTY and m.type == NodeType.MODEL and m.sql_path
-    ]
-    log_info(f"Models to run: {', '.join(model_paths_to_update)}")
+    models_to_reuse: list[Node] = []
+    models_count = 0
+    for node in parsed_dag.nodes.values():
+        if node.type != NodeType.MODEL:
+            continue
+        models_count += 1
+        if node.freshness == Freshness.CLEAN:
+            models_to_reuse.append(node)
+    log_info(f"Reusing {len(models_to_reuse)}/{models_count} models")
 
-    patch_sql_files(model_paths_to_update)
+    patch_sql_files(models_to_reuse)
     result = run_dbt_command(modify_dbt_command(list[str](dbt_command)))
 
     for node_id, node in parsed_dag.nodes.items():
@@ -72,4 +87,5 @@ def dbt(dbt_command):
             else datetime.now(),
         )
     save_state(state=state)
+    log_info("State saved")
     sys.exit(result.returncode)

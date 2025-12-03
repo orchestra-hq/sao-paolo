@@ -11,8 +11,7 @@
     "ruff.organizeImports": true,
     "ruff.fixAll": true,
     "python.testing.pytestArgs": [
-        "tests",
-        "-vv"
+        "tests"
     ],
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true,

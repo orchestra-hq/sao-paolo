@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+from datetime import datetime
 
 import click
 
@@ -10,7 +11,11 @@ SERVICE_NAME = "orchestra-dbt"
 
 
 def _log(msg: str, fg: str | None):
-    click.echo(click.style(f"[{SERVICE_NAME}] {msg}", fg=fg))
+    click.echo(
+        click.style(
+            f"{datetime.now().strftime('%H:%M:%S')} [{SERVICE_NAME}] {msg}", fg=fg
+        )
+    )
 
 
 def log_info(msg):
@@ -22,7 +27,7 @@ def log_warn(msg):
 
 
 def log_error(msg):
-    _log(f"ERROR: {msg}", "red")
+    _log(f"[ERROR] {msg}", "red")
 
 
 def load_file(path: str) -> dict:
@@ -38,10 +43,9 @@ def modify_dbt_command(cmd: list[str]) -> list[str]:
 def validate_environment():
     log_info("Validating environment (checking API key and cache key are set)")
 
-    vals_to_check = ["ORCHESTRA_API_KEY", "ORCHESTRA_DBT_CACHE_KEY"]
-    valid_orchestra_envs = ["app", "stage", "dev"]
+    valid_orchestra_envs: list[str] = ["app", "stage", "dev"]
 
-    for val in vals_to_check:
+    for val in ["ORCHESTRA_API_KEY", "ORCHESTRA_DBT_CACHE_KEY"]:
         if not os.getenv(val):
             log_error(f"Missing {val} environment variable.")
             sys.exit(2)
