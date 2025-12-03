@@ -40,14 +40,13 @@ def main(args):
         log_error("Usage: orchestra-dbt dbt [DBT_COMMAND] [ARGS...]")
         sys.exit(1)
 
-    _welcome()
-
-    if not STATE_AWARE_ENABLED:
-        log_info("Stateful orchestration disabled.")
+    if args[1] not in ["build", "run", "test"]:
+        # No stateful orchestration to perform on other dbt commands.
         sys.exit(subprocess.run(args).returncode)
 
-    if args[1] == "retry":
-        # No stateful orchestration to run on dbt retry.
+    _welcome()
+    if not STATE_AWARE_ENABLED:
+        log_info("Stateful orchestration disabled.")
         sys.exit(subprocess.run(args).returncode)
 
     validate_environment()
