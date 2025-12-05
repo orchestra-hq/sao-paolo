@@ -40,7 +40,12 @@ def update_selectors_yaml(selector_tag: str) -> bool:
     random_uuid_underscore_selector_tag = str(uuid.uuid4()).replace("-", "_")
     selectors[existing_selector_index]["name"] = random_uuid_underscore_selector_tag
     selectors.append(
-        _get_reused_selector_definition(random_uuid_underscore_selector_tag)
+        {
+            "name": selector_tag,
+            "definition": _get_reused_selector_definition(
+                random_uuid_underscore_selector_tag
+            ),
+        }
     )
 
     try:

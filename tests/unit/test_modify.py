@@ -36,16 +36,15 @@ class TestUpdateSelectorsYaml:
 
         # Check that a new selector was added with intersection logic
         new_selector = saved_data["selectors"][2]
-        assert "intersection" in new_selector
-        assert len(new_selector["intersection"]) == 2
-        assert new_selector["intersection"][0]["method"] == "selector"
-        assert new_selector["intersection"][0]["value"] == renamed_selector["name"]
-        assert "exclude" in new_selector["intersection"][1]
-        assert new_selector["intersection"][1]["exclude"][0]["method"] == "tag"
-        assert (
-            new_selector["intersection"][1]["exclude"][0]["value"]
-            == ORCHESTRA_REUSED_NODE
-        )
+        assert new_selector == {
+            "name": selector_tag,
+            "definition": {
+                "intersection": [
+                    {"method": "selector", "value": renamed_selector["name"]},
+                    {"exclude": [{"method": "tag", "value": ORCHESTRA_REUSED_NODE}]},
+                ]
+            },
+        }
 
     def test_update_selectors_yaml_file_not_found(self):
         with patch("src.orchestra_dbt.modify.load_yaml", side_effect=FileNotFoundError):
@@ -148,6 +147,7 @@ class TestUpdateSelectorsYaml:
         # Check that other selectors are preserved
         assert saved_data["selectors"][0]["name"] == "selector_a"
         assert saved_data["selectors"][2]["name"] == "selector_b"
+        assert saved_data["selectors"][3]["name"] == selector_tag
 
 
 class TestModifyDbtCommand:
