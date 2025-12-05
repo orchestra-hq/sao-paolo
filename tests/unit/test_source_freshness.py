@@ -7,11 +7,11 @@ from src.orchestra_dbt.source_freshness import get_source_freshness
 
 class TestGetSourceFreshness:
     @patch("src.orchestra_dbt.source_freshness.dbtRunner.invoke")
-    @patch("src.orchestra_dbt.source_freshness.load_file")
+    @patch("src.orchestra_dbt.source_freshness.load_json")
     def test_get_source_freshness_success(
-        self, mock_load_file, mock_invoke, sample_sources_json
+        self, mock_load_json, mock_invoke, sample_sources_json
     ):
-        mock_load_file.return_value = sample_sources_json
+        mock_load_json.return_value = sample_sources_json
         result = get_source_freshness()
         assert result is not None
         expected = SourceFreshness(

@@ -7,11 +7,11 @@ from .models import (
     SourceFreshness,
     StateApiModel,
 )
-from .utils import load_file
+from .utils import load_json
 
 
 def construct_dag(source_freshness: SourceFreshness, state: StateApiModel) -> ParsedDag:
-    manifest = load_file("target/manifest.json")
+    manifest = load_json("target/manifest.json")
 
     nodes: dict[str, Node] = {}
     edges: list[Edge] = []

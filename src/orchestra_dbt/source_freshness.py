@@ -10,7 +10,7 @@ from dbt_common.exceptions import DbtRuntimeError
 
 from orchestra_dbt.models import SourceFreshness
 
-from .utils import load_file, log_info, log_warn
+from .utils import load_json, log_info, log_warn
 
 
 class OrchestraFreshnessRunner(FreshnessRunner):
@@ -52,7 +52,7 @@ def get_source_freshness() -> SourceFreshness | None:
         return SourceFreshness(
             sources={
                 source["unique_id"]: source["max_loaded_at"]
-                for source in load_file("target/sources.json")["results"]
+                for source in load_json("target/sources.json")["results"]
             }
         )
     except Exception as e:

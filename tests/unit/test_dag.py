@@ -15,9 +15,9 @@ from src.orchestra_dbt.models import (
 
 
 class TestConstructDag:
-    @patch("src.orchestra_dbt.dag.load_file")
-    def test_construct_dag_with_sources(self, mock_load_file, sample_manifest):
-        mock_load_file.return_value = sample_manifest
+    @patch("src.orchestra_dbt.dag.load_json")
+    def test_construct_dag_with_sources(self, mock_load_json, sample_manifest):
+        mock_load_json.return_value = sample_manifest
 
         source_freshness = SourceFreshness(
             sources={
@@ -65,9 +65,9 @@ class TestConstructDag:
             ],
         )
 
-    @patch("src.orchestra_dbt.dag.load_file")
-    def test_construct_dag_with_models(self, mock_load_file, sample_manifest):
-        mock_load_file.return_value = sample_manifest
+    @patch("src.orchestra_dbt.dag.load_json")
+    def test_construct_dag_with_models(self, mock_load_json, sample_manifest):
+        mock_load_json.return_value = sample_manifest
 
         source_freshness = SourceFreshness(
             sources={
@@ -90,9 +90,9 @@ class TestConstructDag:
         assert dag.nodes["model.test_project.model_a"].freshness == Freshness.CLEAN
         assert dag.nodes["model.test_project.model_a"].type == NodeType.MODEL
 
-    @patch("src.orchestra_dbt.dag.load_file")
-    def test_construct_dag_dirty_model(self, mock_load_file, sample_manifest):
-        mock_load_file.return_value = sample_manifest
+    @patch("src.orchestra_dbt.dag.load_json")
+    def test_construct_dag_dirty_model(self, mock_load_json, sample_manifest):
+        mock_load_json.return_value = sample_manifest
 
         source_freshness = SourceFreshness(
             sources={

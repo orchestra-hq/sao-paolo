@@ -4,8 +4,7 @@ import sys
 from datetime import datetime
 
 import click
-
-from orchestra_dbt.models import ORCHESTRA_REUSED_NODE
+import yaml
 
 SERVICE_NAME = "orchestra-dbt"
 
@@ -30,14 +29,19 @@ def log_error(msg):
     _log(f"[ERROR] {msg}", "red")
 
 
-def load_file(path: str) -> dict:
+def load_json(path: str) -> dict:
     with open(path, "r") as f:
         return json.load(f)
 
 
-def modify_dbt_command(cmd: list[str]) -> list[str]:
-    cmd += ["--exclude", f"tag:{ORCHESTRA_REUSED_NODE}"]
-    return cmd
+def load_yaml(path: str) -> dict:
+    with open(path, "r") as f:
+        return yaml.safe_load(f)
+
+
+def save_yaml(path: str, data: dict) -> None:
+    with open(path, "w") as f:
+        yaml.safe_dump(data, f)
 
 
 def validate_environment():

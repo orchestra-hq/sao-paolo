@@ -6,19 +6,14 @@ from importlib.metadata import version
 import click
 
 from orchestra_dbt.dag import construct_dag
+from orchestra_dbt.modify import modify_dbt_command
 from orchestra_dbt.source_freshness import get_source_freshness
 
 from .cache import load_state, save_state
 from .models import Node, NodeType, StateItem
 from .patcher import patch_sql_files
 from .sao import Freshness, calculate_models_to_run
-from .utils import (
-    SERVICE_NAME,
-    log_error,
-    log_info,
-    modify_dbt_command,
-    validate_environment,
-)
+from .utils import SERVICE_NAME, log_error, log_info, validate_environment
 
 STATE_AWARE_ENABLED = True
 

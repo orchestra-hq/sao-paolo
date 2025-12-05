@@ -5,7 +5,7 @@ description = "To be announced!"
 authors = [{ name = "Oliver Crawford" }]
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["click", "dbt-core", "httpx", "pydantic"]
+dependencies = ["click", "dbt-core", "httpx", "pydantic", "pyyaml"]
 
 [project.optional-dependencies]
 dev = ["basedpyright", "pytest", "pytest-httpx", "ruff"]
