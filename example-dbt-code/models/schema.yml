@@ -25,6 +25,9 @@ models:
         tests:
           - not_null
           - unique
+    config:
+      tags:
+        - a
 
   - name: stg_customers
     description: "Cleaned and standardized customers data"
@@ -33,9 +36,14 @@ models:
         build_after:
           count: 3
           period: minute
+      tags:
+        - b
 
   - name: int_orders
     description: "Intermediate orders table for further aggregations"
+    config:
+      tags:
+        - a
 
   - name: cust_orders
     description: "Final mart combining customers and their orders"
@@ -45,6 +53,12 @@ models:
           count: 3
           period: minute
           updates_on: all
+      tags:
+        - a
+        - b
 
   - name: dim_customers
     description: "Dimension table for customers"
+    config:
+      tags:
+        - b

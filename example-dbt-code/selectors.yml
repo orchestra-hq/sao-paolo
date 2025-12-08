@@ -1,15 +1,7 @@
 selectors:
-  - name: sel_a
+  - name: selection_a
     definition:
       tag: a
-  - name: sel_b_old
+  - name: selection_b
     definition:
       tag: b
-  - name: sel_b
-    definition:
-      intersection:
-        - method: selector
-          value: sel_b_old
-        - exclude:
-            - method: tag
-              value: reuse
