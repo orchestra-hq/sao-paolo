@@ -8,8 +8,7 @@ from dbt.contracts.graph.nodes import SourceDefinition
 from dbt.task.freshness import FreshnessRunner, FreshnessTask
 from dbt_common.exceptions import DbtRuntimeError
 
-from orchestra_dbt.models import SourceFreshness
-
+from .models import SourceFreshness
 from .utils import load_json, log_info, log_warn
 
 

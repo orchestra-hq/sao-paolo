@@ -5,7 +5,7 @@ from .models import ORCHESTRA_REUSED_NODE, Node
 from .utils import log_warn
 
 
-def patch_file(file_path: Path):
+def patch_file(file_path: Path) -> None:
     file_path.write_text(
         "{{{{ config(tags=[{}]) }}}}\n\n".format(f'"{ORCHESTRA_REUSED_NODE}"')
         + file_path.read_text(encoding="utf-8"),
@@ -13,17 +13,30 @@ def patch_file(file_path: Path):
     )
 
 
-def patch_sql_files(models_to_reuse: list[Node]):
+def patch_sql_files(
+    models_to_reuse: dict[str, Node], models_to_run: list[str] | None
+) -> None:
     cwd = Path(os.getcwd())
     sql_files = list[Path](cwd.rglob("*.sql"))
     if not sql_files:
         log_warn("No SQL files found in project directory.")
         return
 
-    sql_files_to_patch: list[str] = [n.sql_path for n in models_to_reuse if n.sql_path]
+    models_to_patch: dict[str, str] = {
+        model.sql_path: model_id
+        for model_id, model in models_to_reuse.items()
+        if model.sql_path
+    }
+
     for sql_file in sql_files:
         relative_path = str(sql_file.relative_to(cwd))
-        if relative_path.startswith("models") and relative_path in sql_files_to_patch:
+        if (
+            relative_path.startswith("models")
+            and relative_path in models_to_patch
+            and (
+                models_to_run is None or models_to_patch[relative_path] in models_to_run
+            )
+        ):
             try:
                 patch_file(file_path=sql_file)
             except Exception as e:

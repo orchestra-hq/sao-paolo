@@ -5,15 +5,15 @@ from importlib.metadata import version
 
 import click
 
-from orchestra_dbt.dag import construct_dag
-from orchestra_dbt.modify import modify_dbt_command
-from orchestra_dbt.source_freshness import get_source_freshness
-
 from .cache import load_state, save_state
+from .dag import construct_dag
+from .ls import get_models_to_run
 from .models import Node, NodeType, StateItem
+from .modify import modify_dbt_command
 from .patcher import patch_sql_files
 from .sao import Freshness, calculate_models_to_run
-from .utils import SERVICE_NAME, log_error, log_info, validate_environment
+from .source_freshness import get_source_freshness
+from .utils import SERVICE_NAME, log_debug, log_error, log_info, validate_environment
 
 STATE_AWARE_ENABLED = True
 
@@ -30,21 +30,24 @@ def _welcome():
     context_settings={"ignore_unknown_options": True, "allow_extra_args": True}
 )
 @click.argument("args", nargs=-1, type=click.UNPROCESSED)
-def main(args):
+def main(args: tuple):
     if not args or args[0] != "dbt" or len(args) < 2:
         log_error("Usage: orchestra-dbt dbt [DBT_COMMAND] [ARGS...]")
         sys.exit(1)
 
     if args[1] not in ["build", "run", "test"]:
-        # No stateful orchestration to perform on other dbt commands.
+        log_debug(f"dbt command {args[1]} not supported for stateful orchestration.")
         sys.exit(subprocess.run(args).returncode)
 
     _welcome()
+
     if not STATE_AWARE_ENABLED:
         log_info("Stateful orchestration disabled.")
         sys.exit(subprocess.run(args).returncode)
 
     validate_environment()
+
+    models_to_run: list[str] | None = get_models_to_run(args[2:])
     source_freshness = get_source_freshness()
     if not source_freshness:
         sys.exit(subprocess.run(args).returncode)
@@ -63,11 +66,11 @@ def main(args):
         if node.freshness == Freshness.CLEAN:
             models_to_reuse[node_id] = node
 
-    log_info("Models to be reused:")
+    log_info(f"{len(models_to_reuse)} models to be reused.")
     for node_id in models_to_reuse.keys():
-        log_info(f" - {node_id}")
+        log_debug(f" - {node_id}")
 
-    patch_sql_files(list(models_to_reuse.values()))
+    patch_sql_files(models_to_reuse=models_to_reuse, models_to_run=models_to_run)
     result = subprocess.run(modify_dbt_command(cmd=list(args)))
     log_info(f"{len(models_to_reuse)}/{models_count} models reused.")
 

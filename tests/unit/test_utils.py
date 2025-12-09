@@ -11,12 +11,9 @@ class TestValidateEnvironment:
         "osenv",
         [
             {},
-            {"ORCHESTRA_API_KEY": "test-key"},
-            {"ORCHESTRA_DBT_CACHE_KEY": "test-cache"},
             {
                 "ORCHESTRA_ENV": "invalid",
                 "ORCHESTRA_API_KEY": "test-key",
-                "ORCHESTRA_DBT_CACHE_KEY": "test-cache",
             },
         ],
     )
@@ -30,7 +27,6 @@ class TestValidateEnvironment:
             os.environ,
             {
                 "ORCHESTRA_API_KEY": "test-key",
-                "ORCHESTRA_DBT_CACHE_KEY": "test-cache",
                 "ORCHESTRA_ENV": "app",
             },
             clear=True,
