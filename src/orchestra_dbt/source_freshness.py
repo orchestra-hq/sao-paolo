@@ -55,4 +55,4 @@ def get_source_freshness() -> SourceFreshness | None:
             }
         )
     except Exception as e:
-        log_warn(f"Error running dbt source freshness (a source could be expired). {e}")
+        log_warn(f"Error running dbt source freshness: {e}")

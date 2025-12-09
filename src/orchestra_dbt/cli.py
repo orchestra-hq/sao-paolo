@@ -5,6 +5,8 @@ from importlib.metadata import version
 
 import click
 
+from orchestra_dbt.models import SourceFreshness
+
 from .cache import load_state, save_state
 from .dag import construct_dag
 from .ls import get_models_to_run
@@ -48,7 +50,7 @@ def main(args: tuple):
     validate_environment()
 
     models_to_run: list[str] | None = get_models_to_run(args[2:])
-    source_freshness = get_source_freshness()
+    source_freshness: SourceFreshness | None = get_source_freshness()
     if not source_freshness:
         sys.exit(subprocess.run(args).returncode)
 
@@ -70,9 +72,12 @@ def main(args: tuple):
     for node_id in models_to_reuse.keys():
         log_debug(f" - {node_id}")
 
-    patch_sql_files(models_to_reuse=models_to_reuse, models_to_run=models_to_run)
-    result = subprocess.run(modify_dbt_command(cmd=list(args)))
-    log_info(f"{len(models_to_reuse)}/{models_count} models reused.")
+    if len(models_to_reuse) != 0:
+        patch_sql_files(models_to_reuse={}, models_to_run=models_to_run)
+        result = subprocess.run(modify_dbt_command(cmd=list(args)))
+        log_info(f"{len(models_to_reuse)}/{models_count} models reused.")
+    else:
+        result = subprocess.run(list(args))
 
     for node_id, node in parsed_dag.nodes.items():
         state.state[node_id] = StateItem(

@@ -1,5 +1,4 @@
 import json
-import os
 
 import httpx
 from pydantic import ValidationError
@@ -15,7 +14,7 @@ def load_state() -> StateApiModel:
                 **get_headers(),
                 "Accept": "application/json",
             },
-            url=f"{get_base_api_url()}/state/{os.environ['ORCHESTRA_DBT_CACHE_KEY']}",
+            url=f"{get_base_api_url()}/state/DBT_CORE",
         )
         response.raise_for_status()
     except httpx.HTTPStatusError as e:
@@ -39,7 +38,7 @@ def save_state(state: StateApiModel) -> None:
                 "Content-Type": "application/json",
             },
             json=json.loads(state.model_dump_json(exclude_none=True)),
-            url=f"{get_base_api_url()}/state/{os.environ['ORCHESTRA_DBT_CACHE_KEY']}",
+            url=f"{get_base_api_url()}/state/DBT_CORE",
         )
         response.raise_for_status()
         log_info("State saved")

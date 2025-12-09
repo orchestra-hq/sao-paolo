@@ -61,6 +61,8 @@ def validate_environment() -> None:
         log_error("Missing ORCHESTRA_API_KEY environment variable.")
         sys.exit(1)
 
+    log_debug("Environment validated.")
+
 
 def get_base_api_url() -> str:
     return f"https://{os.getenv('ORCHESTRA_ENV', 'app').lower()}.getorchestra.io/api/engine/public"

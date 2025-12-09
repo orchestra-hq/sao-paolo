@@ -9,7 +9,7 @@ from src.orchestra_dbt.models import StateApiModel, StateItem
 class TestLoadState:
     def test_load_state_success(self, httpx_mock: HTTPXMock):
         httpx_mock.add_response(
-            url="https://dev.getorchestra.io/api/engine/public/state/test-cache-key",
+            url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
             match_headers={
                 "Accept": "application/json",
                 "Authorization": "Bearer test-api-key",
@@ -34,7 +34,7 @@ class TestLoadState:
 
     def test_load_state_http_error(self, httpx_mock: HTTPXMock):
         httpx_mock.add_response(
-            url="https://dev.getorchestra.io/api/engine/public/state/test-cache-key",
+            url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
             match_headers={
                 "Accept": "application/json",
                 "Authorization": "Bearer test-api-key",
@@ -45,7 +45,7 @@ class TestLoadState:
 
     def test_load_state_validation_error(self, httpx_mock: HTTPXMock):
         httpx_mock.add_response(
-            url="https://dev.getorchestra.io/api/engine/public/state/test-cache-key",
+            url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
             match_headers={
                 "Accept": "application/json",
                 "Authorization": "Bearer test-api-key",
@@ -59,7 +59,7 @@ class TestSaveState:
     def test_save_state_success(self, httpx_mock: HTTPXMock):
         httpx_mock.add_response(
             method="PATCH",
-            url="https://dev.getorchestra.io/api/engine/public/state/test-cache-key",
+            url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
             match_headers={
                 "Authorization": "Bearer test-api-key",
                 "Content-Type": "application/json",
@@ -98,7 +98,7 @@ class TestSaveState:
     def test_save_state_http_error(self, httpx_mock: HTTPXMock):
         httpx_mock.add_response(
             method="PATCH",
-            url="https://dev.getorchestra.io/api/engine/public/state/test-cache-key",
+            url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
             match_headers={
                 "Content-Type": "application/json",
                 "Authorization": "Bearer test-api-key",

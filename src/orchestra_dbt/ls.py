@@ -1,9 +1,11 @@
 from dbt.cli.main import dbtRunner, dbtRunnerResult
 
-from .utils import log_debug, log_warn
+from .utils import log_debug, log_info, log_warn
 
 
 def get_models_to_run(args: tuple) -> list[str] | None:
+    log_info("Finding models to be executed:")
+
     try:
         res: dbtRunnerResult = dbtRunner().invoke(
             ["ls", "--resource-type", "model"] + list(args)
