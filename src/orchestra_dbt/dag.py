@@ -27,8 +27,6 @@ def construct_dag(source_freshness: SourceFreshness, state: StateApiModel) -> Pa
         if node.get("resource_type") != "model":
             continue
 
-        print(node)
-
         node_id = str(node_id)
         checksum = str(node["checksum"]["checksum"])
 
