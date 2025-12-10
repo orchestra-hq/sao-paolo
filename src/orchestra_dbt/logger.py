@@ -10,8 +10,8 @@ from .models import ModelNode
 def _log(msg: str, fg: str | None, error: bool = False) -> None:
     text = str(datetime.now().strftime("%H:%M:%S"))
     if error:
-        text += " [ERROR] "
-    text += f"[{SERVICE_NAME}] {msg}"
+        text += " [ERROR]"
+    text += f" [{SERVICE_NAME}] {msg}"
     click.echo(message=click.style(text=text, fg=fg))
 
 
