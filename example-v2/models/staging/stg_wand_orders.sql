@@ -1,1 +1,0 @@
-with src as (select * from {{ source('raw','wand_orders') }}) select * from src

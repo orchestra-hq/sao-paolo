@@ -1,10 +1,10 @@
-name: dbt_state_example
+name: example
 config-version: 2
 
 profile: default
 
 models:
-  dbt_state_example:
+  example:
     staging:
       +schema: staging
       +materialized: view

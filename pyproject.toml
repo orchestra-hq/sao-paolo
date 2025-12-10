@@ -7,11 +7,11 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "click",
- "dbt-core",
- "dbt-databricks>=1.11.0",
- "httpx",
- "pydantic",
- "pyyaml",
+    "dbt-core",
+    "dbt-databricks",
+    "httpx",
+    "pydantic",
+    "pyyaml",
 ]
 
 [project.optional-dependencies]

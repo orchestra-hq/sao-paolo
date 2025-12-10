@@ -1082,7 +1082,7 @@ requires-dist = [
     { name = "basedpyright", marker = "extra == 'dev'" },
     { name = "click" },
     { name = "dbt-core" },
-    { name = "dbt-databricks", specifier = ">=1.11.0" },
+    { name = "dbt-databricks" },
     { name = "httpx" },
     { name = "pydantic" },
     { name = "pytest", marker = "extra == 'dev'" },
