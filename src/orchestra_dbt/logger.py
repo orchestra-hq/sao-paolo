@@ -7,12 +7,12 @@ from .constants import SERVICE_NAME
 from .models import ModelNode
 
 
-def _log(msg: str, fg: str | None):
-    click.echo(
-        click.style(
-            f"{datetime.now().strftime('%H:%M:%S')} [{SERVICE_NAME}] {msg}", fg=fg
-        )
-    )
+def _log(msg: str, fg: str | None, error: bool = False) -> None:
+    text = str(datetime.now().strftime("%H:%M:%S"))
+    if error:
+        text += " [ERROR] "
+    text += f"[{SERVICE_NAME}] {msg}"
+    click.echo(message=click.style(text=text, fg=fg))
 
 
 def log_debug(msg):
@@ -29,7 +29,7 @@ def log_warn(msg):
 
 
 def log_error(msg):
-    _log(f"[ERROR] {msg}", "red")
+    _log(msg, "red", error=True)
 
 
 def log_reused_models(models_to_reuse: dict[str, ModelNode]):
