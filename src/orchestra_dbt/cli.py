@@ -5,12 +5,10 @@ from importlib.metadata import version
 
 import click
 
-from orchestra_dbt.models import SourceFreshness
-
 from .cache import load_state, save_state
 from .dag import construct_dag
 from .ls import get_models_to_run
-from .models import Node, NodeType, StateItem
+from .models import Node, NodeType, SourceFreshness, StateItem
 from .modify import modify_dbt_command
 from .patcher import patch_sql_files
 from .sao import Freshness, calculate_models_to_run
@@ -55,7 +53,6 @@ def main(args: tuple):
         sys.exit(subprocess.run(args).returncode)
 
     state = load_state()
-
     parsed_dag = construct_dag(source_freshness, state)
     calculate_models_to_run(parsed_dag)
 
@@ -79,12 +76,15 @@ def main(args: tuple):
     else:
         result = subprocess.run(list(args))
 
+    # TODO: upload of state needs fixing.
     for node_id, node in parsed_dag.nodes.items():
+        if node.type != NodeType.MODEL or not node.checksum:
+            continue
         state.state[node_id] = StateItem(
             checksum=node.checksum,
-            last_updated=source_freshness.sources[node_id]
-            if node_id in source_freshness.sources
-            else datetime.now(),
+            last_updated=datetime.now(),
+            sources=node.sources,
         )
+
     save_state(state=state)
     sys.exit(result.returncode)

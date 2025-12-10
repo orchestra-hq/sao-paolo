@@ -18,7 +18,8 @@ class NodeType(Enum):
 
 class StateItem(BaseModel):
     last_updated: datetime
-    checksum: str | None = None
+    checksum: str
+    sources: dict[str, datetime]
 
 
 class StateApiModel(BaseModel):
@@ -34,8 +35,9 @@ class Node(BaseModel):
     type: NodeType
 
     checksum: str | None = None
-    last_updated: datetime | None = None
     freshness_config: dict | None = None
+    last_updated: datetime | None = None
+    sources: dict[str, datetime] = {}
     sql_path: str | None = None
 
 

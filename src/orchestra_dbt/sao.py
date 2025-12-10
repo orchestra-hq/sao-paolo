@@ -2,7 +2,7 @@ from collections import defaultdict, deque
 from datetime import datetime, timedelta
 from typing import Literal
 
-from .models import Freshness, Node, ParsedDag
+from .models import Freshness, Node, NodeType, ParsedDag
 
 
 def build_dependency_graphs(
@@ -53,7 +53,7 @@ def build_after_duration_minutes(build_after: dict[str, str | int]) -> int:
     return count * mins_multiplier
 
 
-def _get_updates_on_mode(freshness_config: dict | None) -> Literal["any", "all"]:
+def _get_updates_on(freshness_config: dict | None) -> Literal["any", "all"]:
     if not freshness_config:
         return "any"
 
@@ -65,28 +65,46 @@ def _get_updates_on_mode(freshness_config: dict | None) -> Literal["any", "all"]
 
 
 def should_mark_dirty_from_single_upstream(
-    upstream_node: Node, current_node: Node
+    upstream_id: str, upstream_node: Node, current_node: Node
 ) -> bool:
     if not current_node.last_updated:
         # This scenario should not occur as the node will be dirty already.
         # But helps with typing.
         return True
 
+    # Based on if the upstream is a source or a node, calculate if it is dirty or not.
+    match upstream_node.type:
+        case NodeType.SOURCE:
+            if upstream_id not in current_node.sources:
+                upstream_freshness = Freshness.DIRTY
+            else:
+                if not upstream_node.last_updated:
+                    upstream_freshness = Freshness.DIRTY
+                else:
+                    upstream_freshness = (
+                        Freshness.DIRTY
+                        if upstream_node.last_updated
+                        > current_node.sources[upstream_id]
+                        else Freshness.CLEAN
+                    )
+        case _:
+            upstream_freshness = upstream_node.freshness
+
     if not current_node.freshness_config:
-        return upstream_node.freshness == Freshness.DIRTY
+        return upstream_freshness == Freshness.DIRTY
 
     # Similar to above - build_after should always exist, so this is more for
     # type checking.
     build_after = current_node.freshness_config.get("build_after")
     if not build_after:
-        return upstream_node.freshness == Freshness.DIRTY
+        return upstream_freshness == Freshness.DIRTY
 
     if current_node.last_updated >= datetime.now(
         tz=current_node.last_updated.tzinfo
     ) - timedelta(minutes=build_after_duration_minutes(build_after)):
         return False
 
-    match upstream_node.freshness:
+    match upstream_freshness:
         case Freshness.DIRTY:
             return True
         case Freshness.CLEAN:
@@ -105,10 +123,11 @@ def _should_mark_dirty(
     node: Node,
     dag: ParsedDag,
 ) -> bool:
-    updates_on: Literal["any", "all"] = _get_updates_on_mode(node.freshness_config)
+    updates_on: Literal["any", "all"] = _get_updates_on(node.freshness_config)
 
     for upstream_id in upstream_ids:
-        should_be_dirty = should_mark_dirty_from_single_upstream(
+        should_be_dirty: bool = should_mark_dirty_from_single_upstream(
+            upstream_id=upstream_id,
             upstream_node=dag.nodes[upstream_id],
             current_node=node,
         )
@@ -130,7 +149,7 @@ def _process_node(
     Process a single node to determine if it should be marked dirty based on upstream dependencies.
     """
     # If already dirty, nothing to do (children will be processed separately)
-    # If no upstream dependencies (source), nothing to check
+    # If no upstream dependencies, nothing to check
     if node.freshness == Freshness.DIRTY or not parents[node_id]:
         return
 

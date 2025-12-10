@@ -22,12 +22,7 @@ def construct_dag(source_freshness: SourceFreshness, state: StateApiModel) -> Pa
             continue
 
         nodes[node_id] = Node(
-            freshness=(
-                Freshness.DIRTY
-                if node_id not in state.state
-                or source_freshness.sources[node_id] > state.state[node_id].last_updated
-                else Freshness.CLEAN
-            ),
+            freshness=Freshness.CLEAN,
             type=NodeType.SOURCE,
             last_updated=source_freshness.sources[node_id],
         )
@@ -39,6 +34,9 @@ def construct_dag(source_freshness: SourceFreshness, state: StateApiModel) -> Pa
         node_id = str(node_id)
         checksum = node.get("checksum", {}).get("checksum")
         checksum = str(checksum) if checksum else None
+
+        if not checksum:
+            continue
 
         nodes[node_id] = Node(
             freshness=(
@@ -54,6 +52,7 @@ def construct_dag(source_freshness: SourceFreshness, state: StateApiModel) -> Pa
             last_updated=(
                 state.state[node_id].last_updated if node_id in state.state else None
             ),
+            sources=state.state[node_id].sources if node_id in state.state else {},
             sql_path=node.get("original_file_path"),
         )
 

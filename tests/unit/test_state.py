@@ -86,10 +86,11 @@ class TestBuildAfterDurationMinutes:
 
 class TestShouldMarkDirtyFromSingleUpstream:
     @pytest.mark.parametrize(
-        "upstream_node, current_node, expected",
+        "upstream_id, upstream_node, current_node, expected",
         [
             # Current source has no last updated at.
             (
+                "source.test",
                 Node(
                     freshness=Freshness.CLEAN,
                     type=NodeType.SOURCE,
@@ -97,45 +98,63 @@ class TestShouldMarkDirtyFromSingleUpstream:
                 Node(
                     freshness=Freshness.CLEAN,
                     type=NodeType.MODEL,
+                    sources={
+                        "source.test": datetime.now(),
+                    },
                 ),
                 True,
             ),
             # Clean Source -> Model no config
             (
+                "source.test",
                 Node(
                     freshness=Freshness.CLEAN,
                     type=NodeType.SOURCE,
+                    last_updated=datetime.now() - timedelta(minutes=10),
                 ),
                 Node(
                     freshness=Freshness.CLEAN,
                     type=NodeType.MODEL,
                     last_updated=datetime.now() - timedelta(minutes=10),
+                    sources={
+                        "source.test": datetime.now() - timedelta(minutes=10),
+                    },
                 ),
                 False,
             ),
             # Dirty Source -> Model no config
             (
+                "source.test",
                 Node(
                     freshness=Freshness.DIRTY,
                     type=NodeType.SOURCE,
+                    last_updated=datetime.now(),
                 ),
                 Node(
                     freshness=Freshness.CLEAN,
                     type=NodeType.MODEL,
                     last_updated=datetime.now() - timedelta(minutes=10),
+                    sources={
+                        "source.test": datetime.now() - timedelta(minutes=10),
+                    },
                 ),
                 True,
             ),
             # Clean Source -> Model with invalid config
             (
+                "source.test",
                 Node(
                     freshness=Freshness.CLEAN,
                     type=NodeType.SOURCE,
+                    last_updated=datetime.now() - timedelta(minutes=10),
                 ),
                 Node(
                     freshness=Freshness.CLEAN,
                     type=NodeType.MODEL,
                     last_updated=datetime.now() - timedelta(minutes=10),
+                    sources={
+                        "source.test": datetime.now() - timedelta(minutes=10),
+                    },
                     freshness_config={
                         "erm": {
                             "foo": "bar",
@@ -146,14 +165,19 @@ class TestShouldMarkDirtyFromSingleUpstream:
             ),
             # Dirty Source -> Model should not be built yet
             (
+                "source.test",
                 Node(
                     freshness=Freshness.DIRTY,
                     type=NodeType.SOURCE,
+                    last_updated=datetime.now(),
                 ),
                 Node(
                     freshness=Freshness.CLEAN,
                     type=NodeType.MODEL,
                     last_updated=datetime.now() - timedelta(minutes=10),
+                    sources={
+                        "source.test": datetime.now() - timedelta(minutes=10),
+                    },
                     freshness_config={
                         "build_after": {
                             "count": 15,
@@ -165,14 +189,19 @@ class TestShouldMarkDirtyFromSingleUpstream:
             ),
             # Dirty Source -> Model should be built again
             (
+                "source.test",
                 Node(
                     freshness=Freshness.DIRTY,
                     type=NodeType.SOURCE,
+                    last_updated=datetime.now(),
                 ),
                 Node(
                     freshness=Freshness.CLEAN,
                     type=NodeType.MODEL,
                     last_updated=datetime.now() - timedelta(minutes=20),
+                    sources={
+                        "source.test": datetime.now() - timedelta(minutes=20),
+                    },
                     freshness_config={
                         "build_after": {
                             "count": 15,
@@ -184,6 +213,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
             ),
             # Clean parent Model -> parent updated a while ago
             (
+                "model.a",
                 Node(
                     freshness=Freshness.CLEAN,
                     type=NodeType.MODEL,
@@ -193,6 +223,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     freshness=Freshness.CLEAN,
                     type=NodeType.MODEL,
                     last_updated=datetime.now() - timedelta(minutes=20),
+                    sources={},
                     freshness_config={
                         "build_after": {
                             "count": 15,
@@ -204,6 +235,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
             ),
             # Clean parent Model -> parent updated recently
             (
+                "model.a",
                 Node(
                     freshness=Freshness.CLEAN,
                     type=NodeType.MODEL,
@@ -213,6 +245,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     freshness=Freshness.CLEAN,
                     type=NodeType.MODEL,
                     last_updated=datetime.now() - timedelta(minutes=20),
+                    sources={},
                     freshness_config={
                         "build_after": {
                             "count": 15,
@@ -225,10 +258,11 @@ class TestShouldMarkDirtyFromSingleUpstream:
         ],
     )
     def test_should_mark_dirty_from_single_upstream(
-        self, upstream_node: Node, current_node: Node, expected: bool
+        self, upstream_id: str, upstream_node: Node, current_node: Node, expected: bool
     ):
         assert (
             should_mark_dirty_from_single_upstream(
+                upstream_id=upstream_id,
                 upstream_node=upstream_node,
                 current_node=current_node,
             )
@@ -274,12 +308,15 @@ class TestCalculateModelsToRun:
                     "source.test": Node(
                         freshness=Freshness.CLEAN,
                         type=NodeType.SOURCE,
-                        last_updated=datetime.now() - timedelta(minutes=20),
+                        last_updated=datetime.now() - timedelta(minutes=10),
                     ),
                     "model.a": Node(
                         freshness=Freshness.CLEAN,
                         type=NodeType.MODEL,
-                        last_updated=datetime.now() - timedelta(minutes=10),
+                        last_updated=datetime.now() - timedelta(minutes=5),
+                        sources={
+                            "source.test": datetime.now() - timedelta(minutes=10),
+                        },
                     ),
                 },
                 edges=[Edge(from_="source.test", to_="model.a")],
@@ -370,7 +407,7 @@ class TestCalculateModelsToRun:
                         last_updated=now - timedelta(minutes=10),
                     ),
                     "source.src_customers": Node(
-                        freshness=Freshness.DIRTY,
+                        freshness=Freshness.CLEAN,
                         type=NodeType.SOURCE,
                         last_updated=now,
                     ),
@@ -378,11 +415,17 @@ class TestCalculateModelsToRun:
                         freshness=Freshness.CLEAN,
                         type=NodeType.MODEL,
                         last_updated=now - timedelta(minutes=9),
+                        sources={
+                            "source.src_orders": now - timedelta(minutes=10),
+                        },
                     ),
                     "model.stg_customers": Node(
                         freshness=Freshness.CLEAN,
                         type=NodeType.MODEL,
                         last_updated=now - timedelta(minutes=9),
+                        sources={
+                            "source.src_customers": now - timedelta(minutes=10),
+                        },
                     ),
                     "model.int_orders": Node(
                         freshness=Freshness.CLEAN,
@@ -432,7 +475,7 @@ class TestCalculateModelsToRun:
                         last_updated=now - timedelta(minutes=10),
                     ),
                     "source.src_customers": Node(
-                        freshness=Freshness.DIRTY,
+                        freshness=Freshness.CLEAN,
                         type=NodeType.SOURCE,
                         last_updated=now - timedelta(minutes=5),
                     ),
@@ -440,6 +483,9 @@ class TestCalculateModelsToRun:
                         freshness=Freshness.CLEAN,
                         type=NodeType.MODEL,
                         last_updated=now - timedelta(minutes=4),
+                        sources={
+                            "source.src_orders": now - timedelta(minutes=10),
+                        },
                     ),
                     "model.stg_customers": Node(
                         freshness=Freshness.CLEAN,
@@ -450,6 +496,9 @@ class TestCalculateModelsToRun:
                                 "count": 7,
                                 "period": "minute",
                             }
+                        },
+                        sources={
+                            "source.src_customers": now - timedelta(minutes=6),
                         },
                     ),
                     "model.int_orders": Node(

@@ -8,7 +8,7 @@ def get_models_to_run(args: tuple) -> list[str] | None:
 
     try:
         res: dbtRunnerResult = dbtRunner().invoke(
-            ["ls", "--resource-type", "model"] + list(args)
+            ["ls", "--resource-type", "model"] + list(args) + ["--quiet"]
         )
         if not res.success:
             raise ValueError(f"dbt ls failed to run correctly: {res.exception}")

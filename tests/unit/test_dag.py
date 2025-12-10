@@ -26,9 +26,10 @@ class TestConstructDag:
         )
         state = StateApiModel(
             state={
-                "source.test_db.test_schema.test_table": StateItem(
+                "model.test_project.model_a": StateItem(
                     last_updated=datetime(2024, 1, 1, 12, 0, 0),
-                    checksum=None,
+                    checksum="def456",
+                    sources={},
                 )
             }
         )
@@ -36,12 +37,13 @@ class TestConstructDag:
         assert construct_dag(source_freshness, state) == ParsedDag(
             nodes={
                 "source.test_db.test_schema.test_table": Node(
-                    freshness=Freshness.DIRTY,
+                    freshness=Freshness.CLEAN,
                     type=NodeType.SOURCE,
                     last_updated=datetime(2024, 1, 3, 12, 0, 0),
                 ),
                 "model.test_project.model_a": Node(
-                    freshness=Freshness.DIRTY,
+                    freshness=Freshness.CLEAN,
+                    last_updated=datetime(2024, 1, 1, 12, 0, 0),
                     type=NodeType.MODEL,
                     checksum="def456",
                     sql_path="models/model_a.sql",
@@ -79,6 +81,11 @@ class TestConstructDag:
                 "model.test_project.model_a": StateItem(
                     last_updated=datetime(2024, 1, 2, 12, 0, 0),
                     checksum="def456",
+                    sources={
+                        "source.test_db.test_schema.test_table": datetime(
+                            2024, 1, 3, 12, 0, 0
+                        ),
+                    },
                 )
             }
         )
@@ -104,6 +111,11 @@ class TestConstructDag:
                 "model.test_project.model_a": StateItem(
                     last_updated=datetime(2024, 1, 2, 12, 0, 0),
                     checksum="old_checksum",  # Different from manifest
+                    sources={
+                        "source.test_db.test_schema.test_table": datetime(
+                            2024, 1, 3, 12, 0, 0
+                        ),
+                    },
                 )
             }
         )

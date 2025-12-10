@@ -17,8 +17,11 @@ class TestLoadState:
             json={
                 "state": {
                     "model.test": {
-                        "last_updated": "2024-01-01T12:00:00",
                         "checksum": "123",
+                        "last_updated": "2024-01-01T12:00:00",
+                        "sources": {
+                            "source.test": "2024-01-01T11:00:00",
+                        },
                     }
                 }
             },
@@ -28,6 +31,9 @@ class TestLoadState:
                 "model.test": StateItem(
                     last_updated=datetime(2024, 1, 1, 12, 0, 0),
                     checksum="123",
+                    sources={
+                        "source.test": datetime(2024, 1, 1, 11, 0, 0),
+                    },
                 )
             }
         )
@@ -69,10 +75,16 @@ class TestSaveState:
                     "model.test": {
                         "last_updated": "2024-01-01T14:00:00",
                         "checksum": "123",
+                        "sources": {
+                            "source.test": "2024-01-01T11:00:00",
+                        },
                     },
                     "model.new": {
                         "last_updated": "2024-01-01T14:00:00",
                         "checksum": "456",
+                        "sources": {
+                            "source.test": "2024-01-01T11:00:00",
+                        },
                     },
                 }
             },
@@ -84,10 +96,16 @@ class TestSaveState:
                         "model.test": StateItem(
                             last_updated=datetime(2024, 1, 1, 14, 0, 0),
                             checksum="123",
+                            sources={
+                                "source.test": datetime(2024, 1, 1, 11, 0, 0),
+                            },
                         ),
                         "model.new": StateItem(
                             last_updated=datetime(2024, 1, 1, 14, 0, 0),
                             checksum="456",
+                            sources={
+                                "source.test": datetime(2024, 1, 1, 11, 0, 0),
+                            },
                         ),
                     }
                 )
