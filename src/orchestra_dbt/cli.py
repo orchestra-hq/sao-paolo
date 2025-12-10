@@ -76,14 +76,26 @@ def main(args: tuple):
     else:
         result = subprocess.run(list(args))
 
-    # TODO: upload of state needs fixing.
     for node_id, node in parsed_dag.nodes.items():
         if node.type != NodeType.MODEL or not node.checksum:
             continue
+
+        # Build sources dict from parent nodes that are sources
+        sources_dict: dict[str, datetime] = {}
+        for edge in parsed_dag.edges:
+            if edge.to_ == node_id:
+                if edge.from_ in parsed_dag.nodes:
+                    parent_node = parsed_dag.nodes[edge.from_]
+                    if (
+                        parent_node.type == NodeType.SOURCE
+                        and edge.from_ in source_freshness.sources
+                    ):
+                        sources_dict[edge.from_] = source_freshness.sources[edge.from_]
+
         state.state[node_id] = StateItem(
             checksum=node.checksum,
             last_updated=datetime.now(),
-            sources=node.sources,
+            sources=sources_dict,
         )
 
     save_state(state=state)
