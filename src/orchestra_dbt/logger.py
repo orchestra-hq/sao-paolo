@@ -12,12 +12,12 @@ def _log(msg: str, fg: str | None, error: bool = False) -> None:
     if error:
         text += " [ERROR]"
     text += f" [{SERVICE_NAME}] {msg}"
-    click.echo(message=click.style(text=text, fg=fg))
+    click.echo(message=click.style(text=text, fg=fg), color=True)
 
 
 def log_debug(msg):
     if os.getenv("ORCHESTRA_DBT_DEBUG"):
-        _log(f"[DEBUG] {msg}", None)
+        _log(msg, None)
 
 
 def log_info(msg):
