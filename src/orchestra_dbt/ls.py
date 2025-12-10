@@ -1,6 +1,6 @@
 from dbt.cli.main import dbtRunner, dbtRunnerResult
 
-from .utils import log_debug, log_info, log_warn
+from .logger import log_debug, log_info, log_warn
 
 
 def get_model_paths_to_run(args: tuple) -> list[str] | None:

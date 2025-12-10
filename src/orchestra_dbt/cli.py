@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -5,25 +6,38 @@ from importlib.metadata import version
 
 import click
 
-from .cache import load_state, save_state
+from .constants import SERVICE_NAME, STATE_AWARE_ENABLED, VALID_ORCHESTRA_ENVS
 from .dag import construct_dag
+from .logger import log_debug, log_error, log_info
 from .ls import get_model_paths_to_run
 from .models import Node, NodeType, SourceFreshness, StateItem
 from .modify import modify_dbt_command
 from .patcher import patch_sql_files
 from .sao import Freshness, calculate_models_to_run
 from .source_freshness import get_source_freshness
-from .utils import SERVICE_NAME, log_debug, log_error, log_info, validate_environment
-
-STATE_AWARE_ENABLED = True
+from .state import load_state, save_state
 
 
-def _welcome():
+def _welcome() -> None:
     try:
         project_version = version(SERVICE_NAME)
     except Exception:
         project_version = "unknown"
     log_info(f"Version: {project_version}")
+
+
+def _validate_environment() -> None:
+    if os.getenv("ORCHESTRA_ENV", "app").lower() not in VALID_ORCHESTRA_ENVS:
+        log_error(
+            f"Invalid ORCHESTRA_ENV environment variable. Must be one of: {', '.join(VALID_ORCHESTRA_ENVS)}"
+        )
+        sys.exit(1)
+
+    if not os.getenv("ORCHESTRA_API_KEY"):
+        log_error("Missing ORCHESTRA_API_KEY environment variable.")
+        sys.exit(1)
+
+    log_debug("Environment validated.")
 
 
 @click.command(
@@ -45,7 +59,7 @@ def main(args: tuple):
         log_info("Stateful orchestration disabled.")
         sys.exit(subprocess.run(args).returncode)
 
-    validate_environment()
+    _validate_environment()
 
     model_paths_to_run: list[str] | None = get_model_paths_to_run(args[2:])
     source_freshness: SourceFreshness | None = get_source_freshness()

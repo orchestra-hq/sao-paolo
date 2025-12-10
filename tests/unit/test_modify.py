@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 import pytest
 
-from src.orchestra_dbt.models import ORCHESTRA_REUSED_NODE
+from src.orchestra_dbt.constants import ORCHESTRA_REUSED_NODE
 from src.orchestra_dbt.modify import modify_dbt_command, update_selectors_yaml
 
 

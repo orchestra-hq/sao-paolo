@@ -1,8 +1,9 @@
 import uuid
 from typing import Any
 
-from orchestra_dbt.models import ORCHESTRA_REUSED_NODE
-from orchestra_dbt.utils import load_yaml, log_error, log_warn, save_yaml
+from .constants import ORCHESTRA_REUSED_NODE
+from .logger import log_error, log_warn
+from .utils import load_yaml, save_yaml
 
 
 def _get_reused_selector_definition(existing_selector: str) -> dict[str, Any]:

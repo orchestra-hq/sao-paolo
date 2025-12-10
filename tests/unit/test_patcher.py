@@ -1,4 +1,4 @@
-from src.orchestra_dbt.models import ORCHESTRA_REUSED_NODE
+from src.orchestra_dbt.constants import ORCHESTRA_REUSED_NODE
 from src.orchestra_dbt.patcher import patch_file
 
 

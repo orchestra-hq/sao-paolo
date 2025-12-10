@@ -1,20 +1,31 @@
 import json
+import os
 
 import httpx
 from pydantic import ValidationError
 
+from .logger import log_error, log_info, log_warn
 from .models import StateApiModel
-from .utils import get_base_api_url, get_headers, log_error, log_info, log_warn
+
+
+def _get_base_api_url() -> str:
+    return f"https://{os.getenv('ORCHESTRA_ENV', 'app').lower()}.getorchestra.io/api/engine/public"
+
+
+def _get_headers() -> dict:
+    return {
+        "Authorization": f"Bearer {os.getenv('ORCHESTRA_API_KEY')}",
+    }
 
 
 def load_state() -> StateApiModel:
     try:
         response = httpx.get(
             headers={
-                **get_headers(),
+                **_get_headers(),
                 "Accept": "application/json",
             },
-            url=f"{get_base_api_url()}/state/DBT_CORE",
+            url=f"{_get_base_api_url()}/state/DBT_CORE",
         )
         response.raise_for_status()
     except httpx.HTTPStatusError as e:
@@ -34,11 +45,11 @@ def save_state(state: StateApiModel) -> None:
     try:
         response = httpx.patch(
             headers={
-                **get_headers(),
+                **_get_headers(),
                 "Content-Type": "application/json",
             },
             json=json.loads(state.model_dump_json(exclude_none=True)),
-            url=f"{get_base_api_url()}/state/DBT_CORE",
+            url=f"{_get_base_api_url()}/state/DBT_CORE",
         )
         response.raise_for_status()
         log_info("State saved")
