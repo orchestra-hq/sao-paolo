@@ -3,6 +3,6 @@ with source as (
 )
 select
     customer_id,
-    customer_name,
-    customer_email
+    customer_email,
+    customer_name
 from source

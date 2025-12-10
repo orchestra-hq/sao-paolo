@@ -14,7 +14,7 @@ def patch_file(file_path: Path) -> None:
 
 
 def patch_sql_files(
-    models_to_reuse: dict[str, Node], models_to_run: list[str] | None
+    models_to_reuse: dict[str, Node], model_paths_to_run: list[str] | None
 ) -> None:
     cwd = Path(os.getcwd())
     sql_files = list[Path](cwd.rglob("*.sql"))
@@ -33,9 +33,7 @@ def patch_sql_files(
         if (
             relative_path.startswith("models")
             and relative_path in models_to_patch
-            and (
-                models_to_run is None or models_to_patch[relative_path] in models_to_run
-            )
+            and (model_paths_to_run is None or relative_path in model_paths_to_run)
         ):
             try:
                 patch_file(file_path=sql_file)

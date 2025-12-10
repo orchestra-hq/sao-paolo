@@ -1,13 +1,13 @@
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from importlib.metadata import version
 
 import click
 
 from .cache import load_state, save_state
 from .dag import construct_dag
-from .ls import get_models_to_run
+from .ls import get_model_paths_to_run
 from .models import Node, NodeType, SourceFreshness, StateItem
 from .modify import modify_dbt_command
 from .patcher import patch_sql_files
@@ -47,7 +47,7 @@ def main(args: tuple):
 
     validate_environment()
 
-    models_to_run: list[str] | None = get_models_to_run(args[2:])
+    model_paths_to_run: list[str] | None = get_model_paths_to_run(args[2:])
     source_freshness: SourceFreshness | None = get_source_freshness()
     if not source_freshness:
         sys.exit(subprocess.run(args).returncode)
@@ -70,7 +70,9 @@ def main(args: tuple):
         log_debug(f" - {node_id}")
 
     if len(models_to_reuse) != 0:
-        patch_sql_files(models_to_reuse={}, models_to_run=models_to_run)
+        patch_sql_files(
+            models_to_reuse=models_to_reuse, model_paths_to_run=model_paths_to_run
+        )
         result = subprocess.run(modify_dbt_command(cmd=list(args)))
         log_info(f"{len(models_to_reuse)}/{models_count} models reused.")
     else:
@@ -94,7 +96,7 @@ def main(args: tuple):
 
         state.state[node_id] = StateItem(
             checksum=node.checksum,
-            last_updated=datetime.now(),
+            last_updated=datetime.now(tz=timezone.utc),
             sources=sources_dict,
         )
 
