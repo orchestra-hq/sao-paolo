@@ -3,7 +3,6 @@ from pathlib import Path
 
 from .constants import ORCHESTRA_REUSED_NODE
 from .logger import log_warn
-from .models import Node
 
 
 def patch_file(file_path: Path) -> None:
@@ -14,28 +13,15 @@ def patch_file(file_path: Path) -> None:
     )
 
 
-def patch_sql_files(
-    models_to_reuse: dict[str, Node], model_paths_to_run: list[str] | None
-) -> None:
+def patch_sql_files(sql_paths_to_patch: list[str]) -> None:
     cwd = Path(os.getcwd())
     sql_files = list[Path](cwd.rglob("*.sql"))
     if not sql_files:
         log_warn("No SQL files found in project directory.")
         return
 
-    models_to_patch: dict[str, str] = {
-        model.sql_path: model_id
-        for model_id, model in models_to_reuse.items()
-        if model.sql_path
-    }
-
     for sql_file in sql_files:
-        relative_path = str(sql_file.relative_to(cwd))
-        if (
-            relative_path.startswith("models")
-            and relative_path in models_to_patch
-            and (model_paths_to_run is None or relative_path in model_paths_to_run)
-        ):
+        if str(sql_file.relative_to(cwd)) in sql_paths_to_patch:
             try:
                 patch_file(file_path=sql_file)
             except Exception as e:

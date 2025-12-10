@@ -1,21 +1,20 @@
 import os
 import subprocess
 import sys
-from datetime import datetime, timezone
 from importlib.metadata import version
 
 import click
 
 from .constants import SERVICE_NAME, STATE_AWARE_ENABLED, VALID_ORCHESTRA_ENVS
 from .dag import construct_dag
-from .logger import log_debug, log_error, log_info
+from .logger import log_debug, log_error, log_info, log_reused_models
 from .ls import get_model_paths_to_run
-from .models import Node, NodeType, SourceFreshness, StateItem
+from .models import ModelNode, SourceFreshness
 from .modify import modify_dbt_command
 from .patcher import patch_sql_files
 from .sao import Freshness, calculate_models_to_run
 from .source_freshness import get_source_freshness
-from .state import load_state, save_state
+from .state import load_state, save_state, update_state
 
 
 def _welcome() -> None:
@@ -68,51 +67,32 @@ def main(args: tuple):
 
     state = load_state()
     parsed_dag = construct_dag(source_freshness, state)
+
+    # Edit the DAG inline.
     calculate_models_to_run(parsed_dag)
 
-    models_to_reuse: dict[str, Node] = {}
+    models_to_reuse: dict[str, ModelNode] = {}
     models_count = 0
     for node_id, node in parsed_dag.nodes.items():
-        if node.type != NodeType.MODEL:
+        if not isinstance(node, ModelNode):
+            continue
+        if model_paths_to_run and node.sql_path not in model_paths_to_run:
             continue
         models_count += 1
         if node.freshness == Freshness.CLEAN:
             models_to_reuse[node_id] = node
 
-    log_info(f"{len(models_to_reuse)} models to be reused.")
-    for node_id in models_to_reuse.keys():
-        log_debug(f" - {node_id}")
+    log_reused_models(models_to_reuse)
 
     if len(models_to_reuse) != 0:
         patch_sql_files(
-            models_to_reuse=models_to_reuse, model_paths_to_run=model_paths_to_run
+            sql_paths_to_patch=[model.sql_path for model in models_to_reuse.values()]
         )
         result = subprocess.run(modify_dbt_command(cmd=list(args)))
         log_info(f"{len(models_to_reuse)}/{models_count} models reused.")
     else:
         result = subprocess.run(list(args))
 
-    for node_id, node in parsed_dag.nodes.items():
-        if node.type != NodeType.MODEL or not node.checksum:
-            continue
-
-        # Build sources dict from parent nodes that are sources
-        sources_dict: dict[str, datetime] = {}
-        for edge in parsed_dag.edges:
-            if edge.to_ == node_id:
-                if edge.from_ in parsed_dag.nodes:
-                    parent_node = parsed_dag.nodes[edge.from_]
-                    if (
-                        parent_node.type == NodeType.SOURCE
-                        and edge.from_ in source_freshness.sources
-                    ):
-                        sources_dict[edge.from_] = source_freshness.sources[edge.from_]
-
-        state.state[node_id] = StateItem(
-            checksum=node.checksum,
-            last_updated=datetime.now(tz=timezone.utc),
-            sources=sources_dict,
-        )
-
+    update_state(state=state, parsed_dag=parsed_dag, source_freshness=source_freshness)
     save_state(state=state)
     sys.exit(result.returncode)

@@ -29,14 +29,22 @@ class SourceFreshness(BaseModel):
 
 
 class Node(BaseModel):
-    freshness: Freshness
+    last_updated: datetime | None = None
     type: NodeType
 
-    checksum: str | None = None
-    freshness_config: dict | None = None
-    last_updated: datetime | None = None
+
+class SourceNode(Node):
+    type: NodeType = NodeType.SOURCE
+
+
+class ModelNode(Node):
+    checksum: str
+    freshness: Freshness
     sources: dict[str, datetime] = {}
-    sql_path: str | None = None
+    sql_path: str
+    type: NodeType = NodeType.MODEL
+
+    freshness_config: dict | None = None
 
 
 class Edge(BaseModel):

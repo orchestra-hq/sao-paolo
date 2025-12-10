@@ -5,10 +5,11 @@ from src.orchestra_dbt.dag import construct_dag
 from src.orchestra_dbt.models import (
     Edge,
     Freshness,
-    Node,
+    ModelNode,
     NodeType,
     ParsedDag,
     SourceFreshness,
+    SourceNode,
     StateApiModel,
     StateItem,
 )
@@ -36,21 +37,17 @@ class TestConstructDag:
 
         assert construct_dag(source_freshness, state) == ParsedDag(
             nodes={
-                "source.test_db.test_schema.test_table": Node(
-                    freshness=Freshness.CLEAN,
-                    type=NodeType.SOURCE,
+                "source.test_db.test_schema.test_table": SourceNode(
                     last_updated=datetime(2024, 1, 3, 12, 0, 0),
                 ),
-                "model.test_project.model_a": Node(
+                "model.test_project.model_a": ModelNode(
                     freshness=Freshness.CLEAN,
                     last_updated=datetime(2024, 1, 1, 12, 0, 0),
-                    type=NodeType.MODEL,
                     checksum="def456",
                     sql_path="models/model_a.sql",
                 ),
-                "model.test_project.model_b": Node(
+                "model.test_project.model_b": ModelNode(
                     freshness=Freshness.DIRTY,
-                    type=NodeType.MODEL,
                     checksum="ghi789",
                     sql_path="models/model_b.sql",
                 ),
@@ -94,6 +91,7 @@ class TestConstructDag:
 
         assert "model.test_project.model_a" in dag.nodes
         # Model should be CLEAN since checksum matches
+        assert isinstance(dag.nodes["model.test_project.model_a"], ModelNode)
         assert dag.nodes["model.test_project.model_a"].freshness == Freshness.CLEAN
         assert dag.nodes["model.test_project.model_a"].type == NodeType.MODEL
 
@@ -124,4 +122,5 @@ class TestConstructDag:
 
         assert "model.test_project.model_a" in dag.nodes
         # Model should be DIRTY since checksum doesn't match
+        assert isinstance(dag.nodes["model.test_project.model_a"], ModelNode)
         assert dag.nodes["model.test_project.model_a"].freshness == Freshness.DIRTY

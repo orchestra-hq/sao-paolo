@@ -5,9 +5,11 @@ import pytest
 from src.orchestra_dbt.models import (
     Edge,
     Freshness,
+    ModelNode,
     Node,
     NodeType,
     ParsedDag,
+    SourceNode,
 )
 from src.orchestra_dbt.sao import (
     build_after_duration_minutes,
@@ -22,21 +24,25 @@ class TestBuildDependencyGraphs:
         assert build_dependency_graphs(
             dag=ParsedDag(
                 nodes={
-                    "model.a": Node(
+                    "model.a": ModelNode(
                         freshness=Freshness.CLEAN,
-                        type=NodeType.MODEL,
+                        checksum="1",
+                        sql_path="models/model_a.sql",
                     ),
-                    "model.b": Node(
+                    "model.b": ModelNode(
                         freshness=Freshness.CLEAN,
-                        type=NodeType.MODEL,
+                        checksum="2",
+                        sql_path="models/model_b.sql",
                     ),
-                    "model.c": Node(
+                    "model.c": ModelNode(
                         freshness=Freshness.CLEAN,
-                        type=NodeType.MODEL,
+                        checksum="3",
+                        sql_path="models/model_c.sql",
                     ),
-                    "model.d": Node(
+                    "model.d": ModelNode(
                         freshness=Freshness.CLEAN,
-                        type=NodeType.MODEL,
+                        checksum="4",
+                        sql_path="models/model_d.sql",
                     ),
                 },
                 edges=[
@@ -91,12 +97,13 @@ class TestShouldMarkDirtyFromSingleUpstream:
             # Current source has no last updated at.
             (
                 "source.test",
-                Node(
-                    freshness=Freshness.CLEAN,
+                SourceNode(
                     type=NodeType.SOURCE,
                 ),
-                Node(
+                ModelNode(
                     freshness=Freshness.CLEAN,
+                    checksum="1",
+                    sql_path="models/model_a.sql",
                     type=NodeType.MODEL,
                     sources={
                         "source.test": datetime.now(),
@@ -107,14 +114,14 @@ class TestShouldMarkDirtyFromSingleUpstream:
             # Clean Source -> Model no config
             (
                 "source.test",
-                Node(
-                    freshness=Freshness.CLEAN,
+                SourceNode(
                     type=NodeType.SOURCE,
                     last_updated=datetime.now() - timedelta(minutes=10),
                 ),
-                Node(
+                ModelNode(
                     freshness=Freshness.CLEAN,
-                    type=NodeType.MODEL,
+                    checksum="1",
+                    sql_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=10),
                     sources={
                         "source.test": datetime.now() - timedelta(minutes=10),
@@ -125,14 +132,14 @@ class TestShouldMarkDirtyFromSingleUpstream:
             # Dirty Source -> Model no config
             (
                 "source.test",
-                Node(
-                    freshness=Freshness.DIRTY,
+                SourceNode(
                     type=NodeType.SOURCE,
                     last_updated=datetime.now(),
                 ),
-                Node(
+                ModelNode(
                     freshness=Freshness.CLEAN,
-                    type=NodeType.MODEL,
+                    checksum="1",
+                    sql_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=10),
                     sources={
                         "source.test": datetime.now() - timedelta(minutes=10),
@@ -143,14 +150,14 @@ class TestShouldMarkDirtyFromSingleUpstream:
             # Clean Source -> Model with invalid config
             (
                 "source.test",
-                Node(
-                    freshness=Freshness.CLEAN,
+                SourceNode(
                     type=NodeType.SOURCE,
                     last_updated=datetime.now() - timedelta(minutes=10),
                 ),
-                Node(
+                ModelNode(
                     freshness=Freshness.CLEAN,
-                    type=NodeType.MODEL,
+                    checksum="1",
+                    sql_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=10),
                     sources={
                         "source.test": datetime.now() - timedelta(minutes=10),
@@ -166,14 +173,14 @@ class TestShouldMarkDirtyFromSingleUpstream:
             # Dirty Source -> Model should not be built yet
             (
                 "source.test",
-                Node(
-                    freshness=Freshness.DIRTY,
+                SourceNode(
                     type=NodeType.SOURCE,
                     last_updated=datetime.now(),
                 ),
-                Node(
+                ModelNode(
                     freshness=Freshness.CLEAN,
-                    type=NodeType.MODEL,
+                    checksum="1",
+                    sql_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=10),
                     sources={
                         "source.test": datetime.now() - timedelta(minutes=10),
@@ -190,14 +197,14 @@ class TestShouldMarkDirtyFromSingleUpstream:
             # Dirty Source -> Model should be built again
             (
                 "source.test",
-                Node(
-                    freshness=Freshness.DIRTY,
+                SourceNode(
                     type=NodeType.SOURCE,
                     last_updated=datetime.now(),
                 ),
-                Node(
+                ModelNode(
                     freshness=Freshness.CLEAN,
-                    type=NodeType.MODEL,
+                    checksum="1",
+                    sql_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=20),
                     sources={
                         "source.test": datetime.now() - timedelta(minutes=20),
@@ -214,14 +221,16 @@ class TestShouldMarkDirtyFromSingleUpstream:
             # Clean parent Model -> parent updated a while ago
             (
                 "model.a",
-                Node(
+                ModelNode(
                     freshness=Freshness.CLEAN,
-                    type=NodeType.MODEL,
+                    checksum="1",
+                    sql_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=60),
                 ),
-                Node(
+                ModelNode(
                     freshness=Freshness.CLEAN,
-                    type=NodeType.MODEL,
+                    checksum="1",
+                    sql_path="models/model_b.sql",
                     last_updated=datetime.now() - timedelta(minutes=20),
                     sources={},
                     freshness_config={
@@ -236,14 +245,16 @@ class TestShouldMarkDirtyFromSingleUpstream:
             # Clean parent Model -> parent updated recently
             (
                 "model.a",
-                Node(
+                ModelNode(
                     freshness=Freshness.CLEAN,
-                    type=NodeType.MODEL,
+                    checksum="1",
+                    sql_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=12),
                 ),
-                Node(
+                ModelNode(
                     freshness=Freshness.CLEAN,
-                    type=NodeType.MODEL,
+                    checksum="1",
+                    sql_path="models/model_b.sql",
                     last_updated=datetime.now() - timedelta(minutes=20),
                     sources={},
                     freshness_config={
@@ -258,7 +269,11 @@ class TestShouldMarkDirtyFromSingleUpstream:
         ],
     )
     def test_should_mark_dirty_from_single_upstream(
-        self, upstream_id: str, upstream_node: Node, current_node: Node, expected: bool
+        self,
+        upstream_id: str,
+        upstream_node: Node,
+        current_node: ModelNode,
+        expected: bool,
     ):
         assert (
             should_mark_dirty_from_single_upstream(
@@ -273,83 +288,91 @@ class TestShouldMarkDirtyFromSingleUpstream:
 class TestCalculateModelsToRun:
     def test_calculate_models_to_run_propagates_dirty(self):
         # Create a simple DAG: source -> model_a -> model_b
-        result = calculate_models_to_run(
-            ParsedDag(
-                nodes={
-                    "source.test": Node(
-                        freshness=Freshness.DIRTY,
-                        type=NodeType.SOURCE,
-                        last_updated=datetime.now(),
-                    ),
-                    "model.a": Node(
-                        freshness=Freshness.CLEAN,
-                        type=NodeType.MODEL,
-                    ),
-                    "model.b": Node(
-                        freshness=Freshness.CLEAN,
-                        type=NodeType.MODEL,
-                    ),
-                },
-                edges=[
-                    Edge(from_="source.test", to_="model.a"),
-                    Edge(from_="model.a", to_="model.b"),
-                ],
-            )
+        dag = ParsedDag(
+            nodes={
+                "source.test": SourceNode(
+                    type=NodeType.SOURCE,
+                    last_updated=datetime.now(),
+                ),
+                "model.a": ModelNode(
+                    freshness=Freshness.CLEAN,
+                    checksum="1",
+                    sql_path="models/model_a.sql",
+                ),
+                "model.b": ModelNode(
+                    freshness=Freshness.CLEAN,
+                    checksum="2",
+                    sql_path="models/model_b.sql",
+                ),
+            },
+            edges=[
+                Edge(from_="source.test", to_="model.a"),
+                Edge(from_="model.a", to_="model.b"),
+            ],
         )
+        calculate_models_to_run(dag=dag)
 
         # Both models should be dirty now
-        assert result.nodes["model.a"].freshness == Freshness.DIRTY
-        assert result.nodes["model.b"].freshness == Freshness.DIRTY
+        assert (
+            isinstance(dag.nodes["model.a"], ModelNode)
+            and dag.nodes["model.a"].freshness == Freshness.DIRTY
+        )
+        assert (
+            isinstance(dag.nodes["model.b"], ModelNode)
+            and dag.nodes["model.b"].freshness == Freshness.DIRTY
+        )
 
     def test_calculate_models_to_run_preserves_clean(self):
-        result = calculate_models_to_run(
-            ParsedDag(
-                nodes={
-                    "source.test": Node(
-                        freshness=Freshness.CLEAN,
-                        type=NodeType.SOURCE,
-                        last_updated=datetime.now() - timedelta(minutes=10),
-                    ),
-                    "model.a": Node(
-                        freshness=Freshness.CLEAN,
-                        type=NodeType.MODEL,
-                        last_updated=datetime.now() - timedelta(minutes=5),
-                        sources={
-                            "source.test": datetime.now() - timedelta(minutes=10),
-                        },
-                    ),
-                },
-                edges=[Edge(from_="source.test", to_="model.a")],
-            ),
+        dag = ParsedDag(
+            nodes={
+                "source.test": SourceNode(
+                    type=NodeType.SOURCE,
+                    last_updated=datetime.now() - timedelta(minutes=10),
+                ),
+                "model.a": ModelNode(
+                    freshness=Freshness.CLEAN,
+                    checksum="1",
+                    sql_path="models/model_a.sql",
+                    last_updated=datetime.now() - timedelta(minutes=5),
+                    sources={
+                        "source.test": datetime.now() - timedelta(minutes=10),
+                    },
+                ),
+            },
+            edges=[Edge(from_="source.test", to_="model.a")],
         )
+        calculate_models_to_run(dag=dag)
 
         # Model should remain clean
-        assert result.nodes["model.a"].freshness == Freshness.CLEAN
-
-    def test_calculate_models_to_run_respects_build_after(self):
-        result = calculate_models_to_run(
-            ParsedDag(
-                nodes={
-                    "source.test": Node(
-                        freshness=Freshness.DIRTY,
-                        type=NodeType.SOURCE,
-                        last_updated=datetime.now(),
-                    ),
-                    "model.a": Node(
-                        freshness=Freshness.CLEAN,
-                        type=NodeType.MODEL,
-                        freshness_config={
-                            "build_after": {"count": 1, "period": "hour"}
-                        },
-                        last_updated=datetime.now() - timedelta(minutes=20),
-                    ),
-                },
-                edges=[Edge(from_="source.test", to_="model.a")],
-            ),
+        assert (
+            isinstance(dag.nodes["model.a"], ModelNode)
+            and dag.nodes["model.a"].freshness == Freshness.CLEAN
         )
 
+    def test_calculate_models_to_run_respects_build_after(self):
+        dag = ParsedDag(
+            nodes={
+                "source.test": SourceNode(
+                    type=NodeType.SOURCE,
+                    last_updated=datetime.now(),
+                ),
+                "model.a": ModelNode(
+                    freshness=Freshness.CLEAN,
+                    checksum="1",
+                    sql_path="models/model_a.sql",
+                    freshness_config={"build_after": {"count": 1, "period": "hour"}},
+                    last_updated=datetime.now() - timedelta(minutes=20),
+                ),
+            },
+            edges=[Edge(from_="source.test", to_="model.a")],
+        )
+        calculate_models_to_run(dag=dag)
+
         # Model should remain clean due to build_after config
-        assert result.nodes["model.a"].freshness == Freshness.CLEAN
+        assert (
+            isinstance(dag.nodes["model.a"], ModelNode)
+            and dag.nodes["model.a"].freshness == Freshness.CLEAN
+        )
 
     @pytest.mark.parametrize(
         "updates_on, result_freshness",
@@ -360,184 +383,226 @@ class TestCalculateModelsToRun:
     ):
         now = datetime.now()
 
-        result = calculate_models_to_run(
-            ParsedDag(
-                nodes={
-                    "model.a": Node(
-                        freshness=Freshness.DIRTY,
-                        type=NodeType.MODEL,
-                        last_updated=now,
-                    ),
-                    "model.b": Node(
-                        freshness=Freshness.CLEAN,
-                        type=NodeType.MODEL,
-                        last_updated=now - timedelta(hours=2),  # Old, shouldn't trigger
-                    ),
-                    "model.c": Node(
-                        freshness=Freshness.CLEAN,
-                        type=NodeType.MODEL,
-                        freshness_config={
-                            "build_after": {
-                                "count": 30,
-                                "period": "minute",
-                                "updates_on": updates_on,
-                            }
-                        },
-                        last_updated=now - timedelta(minutes=45),
-                    ),
-                },
-                edges=[
-                    Edge(from_="model.a", to_="model.c"),
-                    Edge(from_="model.b", to_="model.c"),
-                ],
-            )
+        dag = ParsedDag(
+            nodes={
+                "model.a": ModelNode(
+                    freshness=Freshness.DIRTY,
+                    checksum="1",
+                    sql_path="models/model_a.sql",
+                    last_updated=now,
+                ),
+                "model.b": ModelNode(
+                    freshness=Freshness.CLEAN,
+                    checksum="2",
+                    sql_path="models/model_b.sql",
+                    last_updated=now - timedelta(hours=2),  # Old, shouldn't trigger
+                ),
+                "model.c": ModelNode(
+                    freshness=Freshness.CLEAN,
+                    checksum="3",
+                    sql_path="models/model_c.sql",
+                    freshness_config={
+                        "build_after": {
+                            "count": 30,
+                            "period": "minute",
+                            "updates_on": updates_on,
+                        }
+                    },
+                    last_updated=now - timedelta(minutes=45),
+                ),
+            },
+            edges=[
+                Edge(from_="model.a", to_="model.c"),
+                Edge(from_="model.b", to_="model.c"),
+            ],
         )
 
-        assert result.nodes["model.c"].freshness == result_freshness
+        calculate_models_to_run(dag=dag)
+        assert (
+            isinstance(dag.nodes["model.c"], ModelNode)
+            and dag.nodes["model.c"].freshness == result_freshness
+        )
 
     def test_calculate_models_to_run_sample_1(self):
         now = datetime.now()
 
-        result = calculate_models_to_run(
-            ParsedDag(
-                nodes={
-                    "source.src_orders": Node(
-                        freshness=Freshness.CLEAN,
-                        type=NodeType.SOURCE,
-                        last_updated=now - timedelta(minutes=10),
-                    ),
-                    "source.src_customers": Node(
-                        freshness=Freshness.CLEAN,
-                        type=NodeType.SOURCE,
-                        last_updated=now,
-                    ),
-                    "model.stg_orders": Node(
-                        freshness=Freshness.CLEAN,
-                        type=NodeType.MODEL,
-                        last_updated=now - timedelta(minutes=9),
-                        sources={
-                            "source.src_orders": now - timedelta(minutes=10),
-                        },
-                    ),
-                    "model.stg_customers": Node(
-                        freshness=Freshness.CLEAN,
-                        type=NodeType.MODEL,
-                        last_updated=now - timedelta(minutes=9),
-                        sources={
-                            "source.src_customers": now - timedelta(minutes=10),
-                        },
-                    ),
-                    "model.int_orders": Node(
-                        freshness=Freshness.CLEAN,
-                        type=NodeType.MODEL,
-                        last_updated=now - timedelta(minutes=8),
-                    ),
-                    "model.dim_customers": Node(
-                        freshness=Freshness.CLEAN,
-                        type=NodeType.MODEL,
-                        last_updated=now - timedelta(minutes=8),
-                    ),
-                    "model.cust_orders": Node(
-                        freshness=Freshness.CLEAN,
-                        type=NodeType.MODEL,
-                        last_updated=now - timedelta(minutes=7),
-                    ),
-                },
-                edges=[
-                    Edge(from_="source.src_orders", to_="model.stg_orders"),
-                    Edge(from_="source.src_customers", to_="model.stg_customers"),
-                    Edge(from_="model.stg_orders", to_="model.int_orders"),
-                    Edge(from_="model.stg_customers", to_="model.dim_customers"),
-                    Edge(from_="model.int_orders", to_="model.cust_orders"),
-                    Edge(from_="model.dim_customers", to_="model.cust_orders"),
-                ],
-            )
+        dag = ParsedDag(
+            nodes={
+                "source.src_orders": SourceNode(
+                    type=NodeType.SOURCE,
+                    last_updated=now - timedelta(minutes=10),
+                ),
+                "source.src_customers": SourceNode(
+                    type=NodeType.SOURCE,
+                    last_updated=now,
+                ),
+                "model.stg_orders": ModelNode(
+                    freshness=Freshness.CLEAN,
+                    checksum="1",
+                    sql_path="models/model_stg_orders.sql",
+                    last_updated=now - timedelta(minutes=9),
+                    sources={
+                        "source.src_orders": now - timedelta(minutes=10),
+                    },
+                ),
+                "model.stg_customers": ModelNode(
+                    freshness=Freshness.CLEAN,
+                    checksum="2",
+                    sql_path="models/model_stg_customers.sql",
+                    last_updated=now - timedelta(minutes=9),
+                    sources={
+                        "source.src_customers": now - timedelta(minutes=10),
+                    },
+                ),
+                "model.int_orders": ModelNode(
+                    freshness=Freshness.CLEAN,
+                    checksum="3",
+                    sql_path="models/model_int_orders.sql",
+                    last_updated=now - timedelta(minutes=8),
+                ),
+                "model.dim_customers": ModelNode(
+                    freshness=Freshness.CLEAN,
+                    checksum="4",
+                    sql_path="models/model_dim_customers.sql",
+                    last_updated=now - timedelta(minutes=8),
+                ),
+                "model.cust_orders": ModelNode(
+                    freshness=Freshness.CLEAN,
+                    checksum="5",
+                    sql_path="models/model_cust_orders.sql",
+                    last_updated=now - timedelta(minutes=7),
+                ),
+            },
+            edges=[
+                Edge(from_="source.src_orders", to_="model.stg_orders"),
+                Edge(from_="source.src_customers", to_="model.stg_customers"),
+                Edge(from_="model.stg_orders", to_="model.int_orders"),
+                Edge(from_="model.stg_customers", to_="model.dim_customers"),
+                Edge(from_="model.int_orders", to_="model.cust_orders"),
+                Edge(from_="model.dim_customers", to_="model.cust_orders"),
+            ],
         )
 
+        calculate_models_to_run(dag=dag)
+
         # Reused
-        assert result.nodes["model.stg_orders"].freshness == Freshness.CLEAN
-        assert result.nodes["model.int_orders"].freshness == Freshness.CLEAN
+        assert (
+            isinstance(dag.nodes["model.stg_orders"], ModelNode)
+            and dag.nodes["model.stg_orders"].freshness == Freshness.CLEAN
+        )
+        assert (
+            isinstance(dag.nodes["model.int_orders"], ModelNode)
+            and dag.nodes["model.int_orders"].freshness == Freshness.CLEAN
+        )
 
         # Rebuilt
-        assert result.nodes["model.stg_customers"].freshness == Freshness.DIRTY
-        assert result.nodes["model.cust_orders"].freshness == Freshness.DIRTY
-        assert result.nodes["model.dim_customers"].freshness == Freshness.DIRTY
+        assert (
+            isinstance(dag.nodes["model.stg_customers"], ModelNode)
+            and dag.nodes["model.stg_customers"].freshness == Freshness.DIRTY
+        )
+        assert (
+            isinstance(dag.nodes["model.cust_orders"], ModelNode)
+            and dag.nodes["model.cust_orders"].freshness == Freshness.DIRTY
+        )
+        assert (
+            isinstance(dag.nodes["model.dim_customers"], ModelNode)
+            and dag.nodes["model.dim_customers"].freshness == Freshness.DIRTY
+        )
 
     def test_calculate_models_to_run_sample_2(self):
         now = datetime.now()
 
-        result = calculate_models_to_run(
-            ParsedDag(
-                nodes={
-                    "source.src_orders": Node(
-                        freshness=Freshness.CLEAN,
-                        type=NodeType.SOURCE,
-                        last_updated=now - timedelta(minutes=10),
-                    ),
-                    "source.src_customers": Node(
-                        freshness=Freshness.CLEAN,
-                        type=NodeType.SOURCE,
-                        last_updated=now - timedelta(minutes=5),
-                    ),
-                    "model.stg_orders": Node(
-                        freshness=Freshness.CLEAN,
-                        type=NodeType.MODEL,
-                        last_updated=now - timedelta(minutes=4),
-                        sources={
-                            "source.src_orders": now - timedelta(minutes=10),
-                        },
-                    ),
-                    "model.stg_customers": Node(
-                        freshness=Freshness.CLEAN,
-                        type=NodeType.MODEL,
-                        last_updated=now - timedelta(minutes=4),
-                        freshness_config={
-                            "build_after": {
-                                "count": 7,
-                                "period": "minute",
-                            }
-                        },
-                        sources={
-                            "source.src_customers": now - timedelta(minutes=6),
-                        },
-                    ),
-                    "model.int_orders": Node(
-                        freshness=Freshness.CLEAN,
-                        type=NodeType.MODEL,
-                        last_updated=now - timedelta(minutes=3),
-                    ),
-                    "model.dim_customers": Node(
-                        freshness=Freshness.CLEAN,
-                        type=NodeType.MODEL,
-                        last_updated=now - timedelta(minutes=3),
-                    ),
-                    "model.cust_orders": Node(
-                        freshness=Freshness.CLEAN,
-                        type=NodeType.MODEL,
-                        last_updated=now - timedelta(minutes=2),
-                        freshness_config={
-                            "build_after": {
-                                "count": 7,
-                                "period": "minute",
-                                "updates_on": "all",
-                            }
-                        },
-                    ),
-                },
-                edges=[
-                    Edge(from_="source.src_orders", to_="model.stg_orders"),
-                    Edge(from_="source.src_customers", to_="model.stg_customers"),
-                    Edge(from_="model.stg_orders", to_="model.int_orders"),
-                    Edge(from_="model.stg_customers", to_="model.dim_customers"),
-                    Edge(from_="model.int_orders", to_="model.cust_orders"),
-                    Edge(from_="model.dim_customers", to_="model.cust_orders"),
-                ],
-            )
+        dag = ParsedDag(
+            nodes={
+                "source.src_orders": SourceNode(
+                    type=NodeType.SOURCE,
+                    last_updated=now - timedelta(minutes=10),
+                ),
+                "source.src_customers": SourceNode(
+                    type=NodeType.SOURCE,
+                    last_updated=now - timedelta(minutes=5),
+                ),
+                "model.stg_orders": ModelNode(
+                    freshness=Freshness.CLEAN,
+                    checksum="1",
+                    sql_path="models/model_stg_orders.sql",
+                    last_updated=now - timedelta(minutes=4),
+                    sources={
+                        "source.src_orders": now - timedelta(minutes=10),
+                    },
+                ),
+                "model.stg_customers": ModelNode(
+                    freshness=Freshness.CLEAN,
+                    checksum="2",
+                    sql_path="models/model_stg_customers.sql",
+                    last_updated=now - timedelta(minutes=4),
+                    freshness_config={
+                        "build_after": {
+                            "count": 7,
+                            "period": "minute",
+                        }
+                    },
+                    sources={
+                        "source.src_customers": now - timedelta(minutes=6),
+                    },
+                ),
+                "model.int_orders": ModelNode(
+                    freshness=Freshness.CLEAN,
+                    checksum="3",
+                    sql_path="models/model_int_orders.sql",
+                    last_updated=now - timedelta(minutes=3),
+                ),
+                "model.dim_customers": ModelNode(
+                    freshness=Freshness.CLEAN,
+                    checksum="4",
+                    sql_path="models/model_dim_customers.sql",
+                    last_updated=now - timedelta(minutes=3),
+                ),
+                "model.cust_orders": ModelNode(
+                    freshness=Freshness.CLEAN,
+                    type=NodeType.MODEL,
+                    sql_path="models/model_cust_orders.sql",
+                    checksum="5",
+                    last_updated=now - timedelta(minutes=2),
+                    freshness_config={
+                        "build_after": {
+                            "count": 7,
+                            "period": "minute",
+                            "updates_on": "all",
+                        }
+                    },
+                ),
+            },
+            edges=[
+                Edge(from_="source.src_orders", to_="model.stg_orders"),
+                Edge(from_="source.src_customers", to_="model.stg_customers"),
+                Edge(from_="model.stg_orders", to_="model.int_orders"),
+                Edge(from_="model.stg_customers", to_="model.dim_customers"),
+                Edge(from_="model.int_orders", to_="model.cust_orders"),
+                Edge(from_="model.dim_customers", to_="model.cust_orders"),
+            ],
         )
 
+        calculate_models_to_run(dag=dag)
+
         # All reused
-        assert result.nodes["model.stg_orders"].freshness == Freshness.CLEAN
-        assert result.nodes["model.int_orders"].freshness == Freshness.CLEAN
-        assert result.nodes["model.stg_customers"].freshness == Freshness.CLEAN
-        assert result.nodes["model.cust_orders"].freshness == Freshness.CLEAN
-        assert result.nodes["model.dim_customers"].freshness == Freshness.CLEAN
+        assert (
+            isinstance(dag.nodes["model.stg_orders"], ModelNode)
+            and dag.nodes["model.stg_orders"].freshness == Freshness.CLEAN
+        )
+        assert (
+            isinstance(dag.nodes["model.int_orders"], ModelNode)
+            and dag.nodes["model.int_orders"].freshness == Freshness.CLEAN
+        )
+        assert (
+            isinstance(dag.nodes["model.stg_customers"], ModelNode)
+            and dag.nodes["model.stg_customers"].freshness == Freshness.CLEAN
+        )
+        assert (
+            isinstance(dag.nodes["model.cust_orders"], ModelNode)
+            and dag.nodes["model.cust_orders"].freshness == Freshness.CLEAN
+        )
+        assert (
+            isinstance(dag.nodes["model.dim_customers"], ModelNode)
+            and dag.nodes["model.dim_customers"].freshness == Freshness.CLEAN
+        )

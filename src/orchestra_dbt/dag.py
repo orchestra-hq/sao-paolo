@@ -1,10 +1,11 @@
 from .models import (
     Edge,
     Freshness,
+    ModelNode,
     Node,
-    NodeType,
     ParsedDag,
     SourceFreshness,
+    SourceNode,
     StateApiModel,
 )
 from .utils import load_json
@@ -20,25 +21,18 @@ def construct_dag(source_freshness: SourceFreshness, state: StateApiModel) -> Pa
         node_id = str(node_id)
         if not node_id.startswith("source."):
             continue
-
-        nodes[node_id] = Node(
-            freshness=Freshness.CLEAN,
-            type=NodeType.SOURCE,
-            last_updated=source_freshness.sources[node_id],
-        )
+        nodes[node_id] = SourceNode(last_updated=source_freshness.sources[node_id])
 
     for node_id, node in manifest.get("nodes", {}).items():
         if node.get("resource_type") != "model":
             continue
 
+        print(node)
+
         node_id = str(node_id)
-        checksum = node.get("checksum", {}).get("checksum")
-        checksum = str(checksum) if checksum else None
+        checksum = str(node["checksum"]["checksum"])
 
-        if not checksum:
-            continue
-
-        nodes[node_id] = Node(
+        nodes[node_id] = ModelNode(
             freshness=(
                 Freshness.DIRTY
                 if node_id not in state.state
@@ -46,14 +40,13 @@ def construct_dag(source_freshness: SourceFreshness, state: StateApiModel) -> Pa
                 or checksum != state.state[node_id].checksum
                 else Freshness.CLEAN
             ),
-            type=NodeType.MODEL,
             checksum=checksum,
             freshness_config=node.get("config", {}).get("freshness"),
             last_updated=(
                 state.state[node_id].last_updated if node_id in state.state else None
             ),
             sources=state.state[node_id].sources if node_id in state.state else {},
-            sql_path=node.get("original_file_path"),
+            sql_path=node["original_file_path"],
         )
 
         for dep in node.get("depends_on", {}).get("nodes", []):

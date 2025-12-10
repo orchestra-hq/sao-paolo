@@ -2,7 +2,7 @@ from collections import defaultdict, deque
 from datetime import datetime, timedelta
 from typing import Literal
 
-from .models import Freshness, Node, NodeType, ParsedDag
+from .models import Freshness, ModelNode, Node, ParsedDag, SourceNode
 
 
 def build_dependency_graphs(
@@ -65,7 +65,7 @@ def _get_updates_on(freshness_config: dict | None) -> Literal["any", "all"]:
 
 
 def should_mark_dirty_from_single_upstream(
-    upstream_id: str, upstream_node: Node, current_node: Node
+    upstream_id: str, upstream_node: Node, current_node: ModelNode
 ) -> bool:
     if not current_node.last_updated:
         # This scenario should not occur as the node will be dirty already.
@@ -73,22 +73,22 @@ def should_mark_dirty_from_single_upstream(
         return True
 
     # Based on if the upstream is a source or a node, calculate if it is dirty or not.
-    match upstream_node.type:
-        case NodeType.SOURCE:
-            if upstream_id not in current_node.sources:
+    if isinstance(upstream_node, SourceNode):
+        if upstream_id not in current_node.sources:
+            upstream_freshness = Freshness.DIRTY
+        else:
+            if not upstream_node.last_updated:
                 upstream_freshness = Freshness.DIRTY
             else:
-                if not upstream_node.last_updated:
-                    upstream_freshness = Freshness.DIRTY
-                else:
-                    upstream_freshness = (
-                        Freshness.DIRTY
-                        if upstream_node.last_updated
-                        > current_node.sources[upstream_id]
-                        else Freshness.CLEAN
-                    )
-        case _:
-            upstream_freshness = upstream_node.freshness
+                upstream_freshness = (
+                    Freshness.DIRTY
+                    if upstream_node.last_updated > current_node.sources[upstream_id]
+                    else Freshness.CLEAN
+                )
+    elif isinstance(upstream_node, ModelNode):
+        upstream_freshness = upstream_node.freshness
+    else:
+        return True
 
     if not current_node.freshness_config:
         return upstream_freshness == Freshness.DIRTY
@@ -120,7 +120,7 @@ def should_mark_dirty_from_single_upstream(
 
 def _should_mark_dirty(
     upstream_ids: list[str],
-    node: Node,
+    node: ModelNode,
     dag: ParsedDag,
 ) -> bool:
     updates_on: Literal["any", "all"] = _get_updates_on(node.freshness_config)
@@ -140,21 +140,17 @@ def _should_mark_dirty(
 
 
 def _process_node(
-    node_id: str,
-    node: Node,
-    parents: dict[str, list[str]],
-    dag: ParsedDag,
+    current_id: str, parents: dict[str, list[str]], dag: ParsedDag
 ) -> None:
     """
     Process a single node to determine if it should be marked dirty based on upstream dependencies.
     """
-    # If already dirty, nothing to do (children will be processed separately)
-    # If no upstream dependencies, nothing to check
-    if node.freshness == Freshness.DIRTY or not parents[node_id]:
+    node: Node = dag.nodes[current_id]
+    if not isinstance(node, ModelNode) or node.freshness == Freshness.DIRTY:
         return
-
-    if _should_mark_dirty(upstream_ids=parents[node_id], node=node, dag=dag):
-        node.freshness = Freshness.DIRTY
+    else:
+        if _should_mark_dirty(upstream_ids=parents[current_id], node=node, dag=dag):
+            node.freshness = Freshness.DIRTY
 
 
 def _enqueue_children(
@@ -169,7 +165,7 @@ def _enqueue_children(
             queue.append(child)
 
 
-def calculate_models_to_run(dag: ParsedDag) -> ParsedDag:
+def calculate_models_to_run(dag: ParsedDag):
     children, parents, in_degree = build_dependency_graphs(dag)
 
     # Queue for nodes with no upstream dependencies (in_degree 0)
@@ -179,13 +175,9 @@ def calculate_models_to_run(dag: ParsedDag) -> ParsedDag:
         current = queue.popleft()
 
         # Process the node to potentially mark it as dirty
-        _process_node(
-            node_id=current, node=dag.nodes[current], parents=parents, dag=dag
-        )
+        _process_node(current_id=current, parents=parents, dag=dag)
 
         # Queue children for processing
         _enqueue_children(
             node_id=current, children=children, in_degree=in_degree, queue=queue
         )
-
-    return dag
