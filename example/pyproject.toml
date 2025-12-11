@@ -2,4 +2,4 @@
 name = "example"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = ["dbt-databricks"]
+dependencies = ["dbt-databricks", "dbt-loom"]
