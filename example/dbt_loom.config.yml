@@ -1,0 +1,6 @@
+manifests:
+  - name: aws_project # This should match the project's real name
+    type: s3
+    config:
+      bucket_name: ${AWS_BUCKET}
+      object_name: ${MANIFEST_LOC}
