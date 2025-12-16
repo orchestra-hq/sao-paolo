@@ -20,7 +20,7 @@ def patch_sql_files(sql_paths_to_patch: list[str]) -> None:
         log_warn("No SQL files found in project directory.")
         return
     else:
-        log_info(f"Found {len(sql_files)} to process.")
+        log_info(f"Found {len(sql_files)} SQL files in path.")
 
     for sql_file in sql_files:
         relative_path = str(sql_file.relative_to(cwd))
