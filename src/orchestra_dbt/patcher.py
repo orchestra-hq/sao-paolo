@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 from .constants import ORCHESTRA_REUSED_NODE
-from .logger import log_warn
+from .logger import log_info, log_warn
 
 
 def patch_file(file_path: Path) -> None:
@@ -21,8 +21,10 @@ def patch_sql_files(sql_paths_to_patch: list[str]) -> None:
         return
 
     for sql_file in sql_files:
-        if str(sql_file.relative_to(cwd)) in sql_paths_to_patch:
+        relative_path = str(sql_file.relative_to(cwd))
+        if relative_path in sql_paths_to_patch:
             try:
+                log_info(f"Patching {relative_path}...")
                 patch_file(file_path=sql_file)
             except Exception as e:
                 log_warn(f"Failed to add exclusion tag to {sql_file}: {e}")
