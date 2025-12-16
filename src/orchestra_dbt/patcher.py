@@ -19,6 +19,8 @@ def patch_sql_files(sql_paths_to_patch: list[str]) -> None:
     if not sql_files:
         log_warn("No SQL files found in project directory.")
         return
+    else:
+        log_info(f"Found {len(sql_files)} to process.")
 
     for sql_file in sql_files:
         relative_path = str(sql_file.relative_to(cwd))
@@ -27,4 +29,4 @@ def patch_sql_files(sql_paths_to_patch: list[str]) -> None:
                 log_info(f"Patching {relative_path}...")
                 patch_file(file_path=sql_file)
             except Exception as e:
-                log_warn(f"Failed to add exclusion tag to {sql_file}: {e}")
+                log_warn(f"Failed to add tag to {sql_file}: {e}")

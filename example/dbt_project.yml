@@ -11,6 +11,7 @@ models:
     intermediate:
       +schema: intermediate
       +materialized: view
+      +tags: []
     marts:
       +schema: marts
       +materialized: table
