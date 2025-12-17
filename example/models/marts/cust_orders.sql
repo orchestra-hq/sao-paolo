@@ -6,7 +6,7 @@ customers as (
 )
 select
     c.customer_id,
-    c.customer_name,
+    c.customer_name_v3,
     o.order_id,
     o.order_month,
     o.total_customer_spend
