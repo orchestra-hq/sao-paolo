@@ -17,6 +17,8 @@ def construct_dag(source_freshness: SourceFreshness, state: StateApiModel) -> Pa
     nodes: dict[str, Node] = {}
     edges: list[Edge] = []
 
+    project_name_from_manifest = manifest["metadata"]["project_name"]
+
     for node_id in manifest.get("child_map", {}).keys():
         node_id = str(node_id)
         if not node_id.startswith("source."):
@@ -29,6 +31,9 @@ def construct_dag(source_freshness: SourceFreshness, state: StateApiModel) -> Pa
 
         node_id = str(node_id)
         checksum = str(node["checksum"]["checksum"])
+        sql_path = str(node["original_file_path"])
+        if node["package_name"] != project_name_from_manifest:
+            sql_path = f"dbt_packages/{node['package_name']}/{sql_path}"
 
         nodes[node_id] = ModelNode(
             freshness=(
@@ -44,7 +49,7 @@ def construct_dag(source_freshness: SourceFreshness, state: StateApiModel) -> Pa
                 state.state[node_id].last_updated if node_id in state.state else None
             ),
             sources=state.state[node_id].sources if node_id in state.state else {},
-            sql_path=node["original_file_path"],
+            sql_path=sql_path,
         )
 
         for dep in node.get("depends_on", {}).get("nodes", []):

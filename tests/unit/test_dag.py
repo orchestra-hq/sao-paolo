@@ -54,10 +54,10 @@ class TestConstructDag:
                         ),
                     },
                 ),
-                "model.test_project.model_b": ModelNode(
+                "model.test_project_2.model_b": ModelNode(
                     freshness=Freshness.DIRTY,
                     checksum="ghi789",
-                    sql_path="models/model_b.sql",
+                    sql_path="dbt_packages/test_project_2/models/model_b.sql",
                 ),
             },
             edges=[
@@ -67,7 +67,7 @@ class TestConstructDag:
                 ),
                 Edge(
                     from_="model.test_project.model_a",
-                    to_="model.test_project.model_b",
+                    to_="model.test_project_2.model_b",
                 ),
             ],
         )

@@ -1,0 +1,4 @@
+packages:
+  - local: ../example_package
+    name: my_utils
+sha1_hash: 1efa1bf3758cc9ab76a564705f7ea41b9fad6abc
