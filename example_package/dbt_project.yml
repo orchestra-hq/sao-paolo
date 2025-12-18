@@ -5,4 +5,3 @@ config-version: 2
 models:
   my_utils:
     +materialized: view
-

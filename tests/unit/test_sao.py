@@ -27,21 +27,25 @@ class TestBuildDependencyGraphs:
                     "model.a": ModelNode(
                         freshness=Freshness.CLEAN,
                         checksum="1",
+                        model_path="models/model_a.sql",
                         sql_path="models/model_a.sql",
                     ),
                     "model.b": ModelNode(
                         freshness=Freshness.CLEAN,
                         checksum="2",
+                        model_path="models/model_b.sql",
                         sql_path="models/model_b.sql",
                     ),
                     "model.c": ModelNode(
                         freshness=Freshness.CLEAN,
                         checksum="3",
+                        model_path="models/model_c.sql",
                         sql_path="models/model_c.sql",
                     ),
                     "model.d": ModelNode(
                         freshness=Freshness.CLEAN,
                         checksum="4",
+                        model_path="models/model_d.sql",
                         sql_path="models/model_d.sql",
                     ),
                 },
@@ -103,6 +107,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                 ModelNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
+                    model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     type=NodeType.MODEL,
                     sources={
@@ -121,6 +126,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                 ModelNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
+                    model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=10),
                     sources={
@@ -139,6 +145,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                 ModelNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
+                    model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=10),
                     sources={
@@ -157,6 +164,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                 ModelNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
+                    model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=10),
                     sources={
@@ -180,6 +188,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                 ModelNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
+                    model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=10),
                     sources={
@@ -204,6 +213,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                 ModelNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
+                    model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=20),
                     sources={
@@ -224,12 +234,14 @@ class TestShouldMarkDirtyFromSingleUpstream:
                 ModelNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
+                    model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=60),
                 ),
                 ModelNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
+                    model_path="models/model_b.sql",
                     sql_path="models/model_b.sql",
                     last_updated=datetime.now() - timedelta(minutes=20),
                     sources={},
@@ -248,12 +260,14 @@ class TestShouldMarkDirtyFromSingleUpstream:
                 ModelNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
+                    model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=12),
                 ),
                 ModelNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
+                    model_path="models/model_b.sql",
                     sql_path="models/model_b.sql",
                     last_updated=datetime.now() - timedelta(minutes=20),
                     sources={},
@@ -297,11 +311,13 @@ class TestCalculateModelsToRun:
                 "model.a": ModelNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
+                    model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                 ),
                 "model.b": ModelNode(
                     freshness=Freshness.CLEAN,
                     checksum="2",
+                    model_path="models/model_b.sql",
                     sql_path="models/model_b.sql",
                 ),
             },
@@ -332,6 +348,7 @@ class TestCalculateModelsToRun:
                 "model.a": ModelNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
+                    model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=5),
                     sources={
@@ -359,6 +376,7 @@ class TestCalculateModelsToRun:
                 "model.a": ModelNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
+                    model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     freshness_config={"build_after": {"count": 1, "period": "hour"}},
                     last_updated=datetime.now() - timedelta(minutes=20),
@@ -388,18 +406,21 @@ class TestCalculateModelsToRun:
                 "model.a": ModelNode(
                     freshness=Freshness.DIRTY,
                     checksum="1",
+                    model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     last_updated=now,
                 ),
                 "model.b": ModelNode(
                     freshness=Freshness.CLEAN,
                     checksum="2",
+                    model_path="models/model_b.sql",
                     sql_path="models/model_b.sql",
                     last_updated=now - timedelta(hours=2),  # Old, shouldn't trigger
                 ),
                 "model.c": ModelNode(
                     freshness=Freshness.CLEAN,
                     checksum="3",
+                    model_path="models/model_c.sql",
                     sql_path="models/model_c.sql",
                     freshness_config={
                         "build_after": {
@@ -439,6 +460,7 @@ class TestCalculateModelsToRun:
                 "model.stg_orders": ModelNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
+                    model_path="models/model_stg_orders.sql",
                     sql_path="models/model_stg_orders.sql",
                     last_updated=now - timedelta(minutes=9),
                     sources={
@@ -448,6 +470,7 @@ class TestCalculateModelsToRun:
                 "model.stg_customers": ModelNode(
                     freshness=Freshness.CLEAN,
                     checksum="2",
+                    model_path="models/model_stg_customers.sql",
                     sql_path="models/model_stg_customers.sql",
                     last_updated=now - timedelta(minutes=9),
                     sources={
@@ -457,18 +480,21 @@ class TestCalculateModelsToRun:
                 "model.int_orders": ModelNode(
                     freshness=Freshness.CLEAN,
                     checksum="3",
+                    model_path="models/model_int_orders.sql",
                     sql_path="models/model_int_orders.sql",
                     last_updated=now - timedelta(minutes=8),
                 ),
                 "model.dim_customers": ModelNode(
                     freshness=Freshness.CLEAN,
                     checksum="4",
+                    model_path="models/model_dim_customers.sql",
                     sql_path="models/model_dim_customers.sql",
                     last_updated=now - timedelta(minutes=8),
                 ),
                 "model.cust_orders": ModelNode(
                     freshness=Freshness.CLEAN,
                     checksum="5",
+                    model_path="models/model_cust_orders.sql",
                     sql_path="models/model_cust_orders.sql",
                     last_updated=now - timedelta(minutes=7),
                 ),
@@ -525,6 +551,7 @@ class TestCalculateModelsToRun:
                 "model.stg_orders": ModelNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
+                    model_path="models/model_stg_orders.sql",
                     sql_path="models/model_stg_orders.sql",
                     last_updated=now - timedelta(minutes=4),
                     sources={
@@ -534,6 +561,7 @@ class TestCalculateModelsToRun:
                 "model.stg_customers": ModelNode(
                     freshness=Freshness.CLEAN,
                     checksum="2",
+                    model_path="models/model_stg_customers.sql",
                     sql_path="models/model_stg_customers.sql",
                     last_updated=now - timedelta(minutes=4),
                     freshness_config={
@@ -549,18 +577,21 @@ class TestCalculateModelsToRun:
                 "model.int_orders": ModelNode(
                     freshness=Freshness.CLEAN,
                     checksum="3",
+                    model_path="models/model_int_orders.sql",
                     sql_path="models/model_int_orders.sql",
                     last_updated=now - timedelta(minutes=3),
                 ),
                 "model.dim_customers": ModelNode(
                     freshness=Freshness.CLEAN,
                     checksum="4",
+                    model_path="models/model_dim_customers.sql",
                     sql_path="models/model_dim_customers.sql",
                     last_updated=now - timedelta(minutes=3),
                 ),
                 "model.cust_orders": ModelNode(
                     freshness=Freshness.CLEAN,
                     type=NodeType.MODEL,
+                    model_path="models/model_cust_orders.sql",
                     sql_path="models/model_cust_orders.sql",
                     checksum="5",
                     last_updated=now - timedelta(minutes=2),

@@ -170,6 +170,7 @@ class TestUpdateState:
                 "model.test_project.model_a": ModelNode(
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
+                    model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                 )
             },
@@ -209,6 +210,7 @@ class TestUpdateState:
                 "model.test_project.model_a": ModelNode(
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
+                    model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                 ),
             },
@@ -243,6 +245,7 @@ class TestUpdateState:
                 "model.test_project.model_a": ModelNode(
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
+                    model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                 )
             },
@@ -276,6 +279,7 @@ class TestUpdateState:
                 "model.test_project.model_a": ModelNode(
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
+                    model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                 )
             },
@@ -346,11 +350,13 @@ class TestUpdateState:
                 "model.test_project.model_a": ModelNode(
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
+                    model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                 ),
                 "model.test_project.model_b": ModelNode(
                     checksum="def456",
                     freshness=Freshness.CLEAN,
+                    model_path="models/model_b.sql",
                     sql_path="models/model_b.sql",
                 ),
             },
@@ -390,6 +396,7 @@ class TestUpdateState:
                 "model.test_project.model_a": ModelNode(
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
+                    model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                 ),
             },
@@ -448,6 +455,7 @@ class TestUpdateState:
                 "model.test_project.model_a": ModelNode(
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
+                    model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                 ),
             },
@@ -514,6 +522,7 @@ class TestUpdateState:
                 "model.test_project.model_a": ModelNode(
                     checksum="new_checksum",
                     freshness=Freshness.CLEAN,
+                    model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                 )
             },
@@ -550,11 +559,13 @@ class TestUpdateState:
                 "model.test_project.model_a": ModelNode(
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
+                    model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                 ),
                 "model.test_project.model_b": ModelNode(
                     checksum="def456",
                     freshness=Freshness.CLEAN,
+                    model_path="models/model_b.sql",
                     sql_path="models/model_b.sql",
                 ),
             },
@@ -592,6 +603,7 @@ class TestUpdateState:
                 "model.test_project.model_a": ModelNode(
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
+                    model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                 )
             },
@@ -622,6 +634,7 @@ class TestUpdateState:
                 "model.test_project.model_a": ModelNode(
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
+                    model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                 )
             },

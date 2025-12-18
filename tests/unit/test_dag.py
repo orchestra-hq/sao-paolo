@@ -47,6 +47,7 @@ class TestConstructDag:
                     freshness=Freshness.CLEAN,
                     last_updated=datetime(2024, 1, 1, 12, 0, 0),
                     checksum="def456",
+                    model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     sources={
                         "source.test_db.test_schema.test_table": datetime(
@@ -57,6 +58,7 @@ class TestConstructDag:
                 "model.test_project_2.model_b": ModelNode(
                     freshness=Freshness.DIRTY,
                     checksum="ghi789",
+                    model_path="models/model_b.sql",
                     sql_path="dbt_packages/test_project_2/models/model_b.sql",
                 ),
             },

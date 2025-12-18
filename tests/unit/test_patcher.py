@@ -1,5 +1,5 @@
 from src.orchestra_dbt.constants import ORCHESTRA_REUSED_NODE
-from src.orchestra_dbt.patcher import patch_file
+from src.orchestra_dbt.patcher import patch_file, revert_patch_file
 
 
 class TestPatchFile:
@@ -37,3 +37,11 @@ WHERE active = true
         assert "SELECT" in result
         assert "FROM customers" in result
         assert "old_tag" in result
+
+    def test_revert_patch_file(self, tmp_path):
+        sql_file = tmp_path / "test_model.sql"
+        original_content = "\n\tTEST_CONTENT\n"
+        sql_file.write_text(original_content, encoding="utf-8")
+        patch_file(sql_file)
+        revert_patch_file(sql_file)
+        assert sql_file.read_text(encoding="utf-8") == original_content

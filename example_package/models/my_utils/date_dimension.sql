@@ -13,7 +13,7 @@ from
             explode (
                 sequence (
                     to_date ('2020-01-01'),
-                    to_date ('2029-12-31'),
+                    to_date ('2028-12-31'),
                     interval 1 day
                 )
             ) as date_day

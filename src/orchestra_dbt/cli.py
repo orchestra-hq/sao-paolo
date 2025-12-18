@@ -11,7 +11,7 @@ from .logger import log_debug, log_error, log_info, log_reused_models
 from .ls import get_model_paths_to_run
 from .models import ModelNode, SourceFreshness
 from .modify import modify_dbt_command
-from .patcher import patch_sql_files
+from .patcher import patch_sql_files, revert_patching
 from .sao import Freshness, calculate_models_to_run
 from .source_freshness import get_source_freshness
 from .state import load_state, save_state, update_state
@@ -76,7 +76,7 @@ def main(args: tuple):
     for node_id, node in parsed_dag.nodes.items():
         if not isinstance(node, ModelNode):
             continue
-        if model_paths_to_run and node.sql_path not in model_paths_to_run:
+        if model_paths_to_run and node.model_path not in model_paths_to_run:
             continue
         models_count += 1
         if node.freshness == Freshness.CLEAN:
@@ -90,6 +90,12 @@ def main(args: tuple):
         )
         result = subprocess.run(modify_dbt_command(cmd=list(args)))
         log_info(f"{len(models_to_reuse)}/{models_count} models reused.")
+        if os.getenv("ORCHESTRA_LOCAL_RUN", "false").lower() == "true":
+            revert_patching(
+                sql_paths_to_revert=[
+                    model.sql_path for model in models_to_reuse.values()
+                ]
+            )
     else:
         result = subprocess.run(list(args))
 

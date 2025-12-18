@@ -31,9 +31,11 @@ def construct_dag(source_freshness: SourceFreshness, state: StateApiModel) -> Pa
 
         node_id = str(node_id)
         checksum = str(node["checksum"]["checksum"])
-        sql_path = str(node["original_file_path"])
+        model_path = str(node["original_file_path"])
         if node["package_name"] != project_name_from_manifest:
-            sql_path = f"dbt_packages/{node['package_name']}/{sql_path}"
+            sql_path = f"dbt_packages/{node['package_name']}/{model_path}"
+        else:
+            sql_path = model_path
 
         nodes[node_id] = ModelNode(
             freshness=(
@@ -48,6 +50,7 @@ def construct_dag(source_freshness: SourceFreshness, state: StateApiModel) -> Pa
             last_updated=(
                 state.state[node_id].last_updated if node_id in state.state else None
             ),
+            model_path=model_path,
             sources=state.state[node_id].sources if node_id in state.state else {},
             sql_path=sql_path,
         )
