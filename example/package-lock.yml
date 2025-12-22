@@ -1,4 +1,7 @@
 packages:
   - local: ../example_package
     name: my_utils
-sha1_hash: 1efa1bf3758cc9ab76a564705f7ea41b9fad6abc
+  - name: dbt_utils
+    package: dbt-labs/dbt_utils
+    version: 1.3.3
+sha1_hash: 4df0a980db014369d330191215cee7499edb3108

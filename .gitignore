@@ -211,3 +211,4 @@ __marimo__/
 data.duckdb
 profiles.yml
 logs/
+*/dbt_packages

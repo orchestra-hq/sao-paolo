@@ -5,12 +5,13 @@ from importlib.metadata import version
 
 import click
 
-from .constants import SERVICE_NAME, STATE_AWARE_ENABLED, VALID_ORCHESTRA_ENVS
+from .constants import SERVICE_NAME, VALID_ORCHESTRA_ENVS
 from .dag import construct_dag
 from .logger import log_debug, log_error, log_info, log_reused_models
 from .ls import get_model_paths_to_run
 from .models import ModelNode, SourceFreshness
 from .modify import modify_dbt_command
+from .orchestra import is_warn
 from .patcher import patch_sql_files, revert_patching
 from .sao import Freshness, calculate_models_to_run
 from .source_freshness import get_source_freshness
@@ -22,7 +23,7 @@ def _welcome() -> None:
         project_version = version(SERVICE_NAME)
     except Exception:
         project_version = "unknown"
-    log_info(f"Version: {project_version}")
+    log_info(f"Version: {project_version}. Stateful orchestration enabled.")
 
 
 def _validate_environment() -> None:
@@ -48,16 +49,23 @@ def main(args: tuple):
         log_error("Usage: orchestra-dbt dbt [DBT_COMMAND] [ARGS...]")
         sys.exit(1)
 
+    if args[1] == "orchestra":
+        match args[2]:
+            case "is_warn":
+                is_warn()
+            case _:
+                log_error(f"dbt orchestra command {args[2]} not known.")
+                sys.exit(1)
+        sys.exit(0)
+
+    if not os.getenv("ORCHESTRA_USE_STATEFUL", "false").lower() == "true":
+        sys.exit(subprocess.run(args).returncode)
+
     if args[1] not in ["build", "run", "test"]:
         log_debug(f"dbt command {args[1]} not supported for stateful orchestration.")
         sys.exit(subprocess.run(args).returncode)
 
     _welcome()
-
-    if not STATE_AWARE_ENABLED:
-        log_info("Stateful orchestration disabled.")
-        sys.exit(subprocess.run(args).returncode)
-
     _validate_environment()
 
     model_paths_to_run: list[str] | None = get_model_paths_to_run(args[2:])

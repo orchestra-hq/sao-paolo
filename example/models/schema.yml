@@ -44,6 +44,14 @@ models:
     config:
       tags:
         - a
+    tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "order_id IS NOT NULL"
+          config:
+            warn_if: "= 0"
+            error_if: "> 100"
+            severity: warn
 
   - name: cust_orders
     description: "Final mart combining customers and their orders"
