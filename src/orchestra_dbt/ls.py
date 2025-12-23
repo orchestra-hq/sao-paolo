@@ -1,9 +1,18 @@
-from dbt.cli.main import dbtRunner, dbtRunnerResult
-
-from .logger import log_debug, log_info, log_warn
+from .logger import log_debug, log_error, log_info, log_warn
 
 
 def get_model_paths_to_run(args: tuple) -> list[str] | None:
+    try:
+        from dbt.cli.main import (  # pyright: ignore[reportMissingImports]
+            dbtRunner,
+            dbtRunnerResult,
+        )
+    except ImportError as missing_dbt_core_error:
+        log_error(
+            f"dbt-core is not installed. Please install it. Issue: {missing_dbt_core_error}"
+        )
+        raise missing_dbt_core_error
+
     log_info("Finding model paths to be executed:")
 
     try:

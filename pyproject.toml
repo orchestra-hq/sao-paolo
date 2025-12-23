@@ -5,17 +5,17 @@ description = "To be announced!"
 authors = [{ name = "Oliver Crawford" }]
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = [
-    "click",
-    "dbt-core", # TODO: remove
-    "dbt-databricks", # TODO: remove
-    "httpx",
-    "pydantic",
-    "pyyaml",
-]
+dependencies = ["click", "httpx", "pydantic", "pyyaml"]
 
 [project.optional-dependencies]
-dev = ["basedpyright", "pytest", "pytest-httpx", "ruff"]
+dev = [
+    "basedpyright",
+    "dbt-core",
+    "dbt-snowflake", # Change/add adapters for local development requirements.
+    "pytest-httpx",
+    "pytest",
+    "ruff",
+]
 
 [project.scripts]
 orchestra-dbt = "orchestra_dbt.cli:main"

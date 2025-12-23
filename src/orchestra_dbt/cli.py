@@ -16,6 +16,7 @@ from .patcher import patch_sql_files, revert_patching
 from .sao import Freshness, calculate_models_to_run
 from .source_freshness import get_source_freshness
 from .state import load_state, save_state, update_state
+from .target_finder import find_target_in_args
 
 
 def _welcome() -> None:
@@ -59,17 +60,38 @@ def main(args: tuple):
         sys.exit(0)
 
     if not os.getenv("ORCHESTRA_USE_STATEFUL", "false").lower() == "true":
-        sys.exit(subprocess.run(args).returncode)
+        log_debug("Stateful orchestration is disabled. Running dbt command directly.")
+        try:
+            return subprocess.run(args).returncode
+        except FileNotFoundError as file_not_found_error:
+            log_error(
+                f"dbt-core is not installed. Please install it. Issue: {file_not_found_error}"
+            )
+            sys.exit(1)
 
     if args[1] not in ["build", "run", "test"]:
         log_debug(f"dbt command {args[1]} not supported for stateful orchestration.")
-        sys.exit(subprocess.run(args).returncode)
+        try:
+            return subprocess.run(args).returncode
+        except FileNotFoundError as file_not_found_error:
+            log_error(
+                f"dbt-core is not installed. Please install it. Issue: {file_not_found_error}"
+            )
+            sys.exit(1)
 
     _welcome()
     _validate_environment()
 
-    model_paths_to_run: list[str] | None = get_model_paths_to_run(args[2:])
-    source_freshness: SourceFreshness | None = get_source_freshness()
+    selected_target = find_target_in_args(list(args))
+
+    try:
+        model_paths_to_run: list[str] | None = get_model_paths_to_run(args[2:])
+    except ImportError:
+        sys.exit(1)
+
+    source_freshness: SourceFreshness | None = get_source_freshness(
+        target=selected_target
+    )
     if not source_freshness:
         sys.exit(subprocess.run(args).returncode)
 
