@@ -4,3 +4,6 @@ version = "0.1.0"
 requires-python = ">=3.12"
 # dependencies = ["dbt-databricks", "dbt-loom"]
 dependencies = ["dbt-bigquery", "dbt-core", "dbt-databricks", "dbt-snowflake"]
+
+[tool.poetry]
+package-mode = false
