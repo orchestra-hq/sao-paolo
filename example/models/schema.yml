@@ -30,7 +30,6 @@ models:
         - a
       meta:
         owner: "adam@test.io"
-        subteam: "!subteam^S0A6R0YDZKP"
 
   - name: stg_customers
     description: "Cleaned and standardized customers data"
@@ -43,6 +42,7 @@ models:
         - b
       meta:
         owner: "eve@test.io"
+        subteam: "!subteam^S0A6R0YDZKP"
 
   - name: int_orders
     description: "Intermediate orders table for further aggregations"
