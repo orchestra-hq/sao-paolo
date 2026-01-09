@@ -36,7 +36,7 @@ models:
     config:
       freshness:
         build_after:
-          count: 3
+          count: 1
           period: minute
       tags:
         - b

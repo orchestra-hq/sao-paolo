@@ -15,9 +15,6 @@ def get_source_freshness(target: str | None) -> SourceFreshness | None:
             FreshnessStatus,
         )
         from dbt.cli.main import dbtRunner  # pyright: ignore[reportMissingImports]
-        from dbt.contracts.graph.nodes import (  # pyright: ignore[reportMissingImports]
-            SourceDefinition,
-        )
         from dbt.task.freshness import (  # pyright: ignore[reportMissingImports]
             FreshnessRunner,
             FreshnessTask,
@@ -57,7 +54,8 @@ def get_source_freshness(target: str | None) -> SourceFreshness | None:
     log_info("Calculating source freshness")
 
     # Patching of this runs freshness for all defined sources in the dbt config.
-    SourceDefinition.has_freshness = True  # pyright: ignore[reportAttributeAccessIssue]
+    # This can lead to erroneous results depending on the metadata of the warehouse.
+    # SourceDefinition.has_freshness = True  # pyright: ignore[reportAttributeAccessIssue]
 
     # Patch the execute method of the FreshnessRunner to still execute, but if it
     # fails and hits a dbt RuntimeError, return a base SourceFreshnessResult that is defined here.

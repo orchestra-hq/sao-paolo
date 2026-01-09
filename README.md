@@ -11,7 +11,7 @@ uv sync --extra dev
 ## Running
 
 ```bash
-orchestra-dbt dbt run
+ORCHESTRA_ENV=dev ORCHESTRA_API_KEY=<API_KEY> ORCHESTRA_USE_STATEFUL=true ORCHESTRA_LOCAL_RUN=true orchestra-dbt dbt run --target snowflake
 ```
 
 ## Testing
