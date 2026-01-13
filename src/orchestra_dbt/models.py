@@ -4,12 +4,12 @@ from enum import Enum
 from pydantic import BaseModel
 
 
-class Freshness(Enum):
+class Freshness(str, Enum):
     CLEAN = "CLEAN"
     DIRTY = "DIRTY"
 
 
-class NodeType(Enum):
+class NodeType(str, Enum):
     MODEL = "MODEL"
     SOURCE = "SOURCE"
 
@@ -30,11 +30,11 @@ class SourceFreshness(BaseModel):
 
 class Node(BaseModel):
     last_updated: datetime | None = None
-    type: NodeType
+    node_type: NodeType
 
 
 class SourceNode(Node):
-    type: NodeType = NodeType.SOURCE
+    node_type: NodeType = NodeType.SOURCE
 
 
 class ModelNode(Node):
@@ -43,7 +43,7 @@ class ModelNode(Node):
     model_path: str
     sources: dict[str, datetime] = {}
     sql_path: str
-    type: NodeType = NodeType.MODEL
+    node_type: NodeType = NodeType.MODEL
 
     freshness_config: dict | None = None
 

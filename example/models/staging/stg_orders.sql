@@ -5,6 +5,5 @@ select
     order_id,
     customer_id,
     order_date,
-    total_amount,
-    foobar
+    total_amount
 from source
