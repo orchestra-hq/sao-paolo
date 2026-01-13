@@ -2,6 +2,7 @@ import json
 import os
 from datetime import datetime
 from functools import lru_cache
+from typing import cast
 
 import httpx
 from pydantic import ValidationError
@@ -74,9 +75,10 @@ def update_state(
     state: StateApiModel, parsed_dag: ParsedDag, source_freshness: SourceFreshness
 ) -> None:
     for node_id, node in parsed_dag.nodes.items():
-        if not isinstance(node, ModelNode):
+        if node.node_type == NodeType.SOURCE:
             continue
 
+        model_node: ModelNode = cast(ModelNode, node)
         last_updated_from_run_results = get_last_updated_from_run_results(node_id)
         if not last_updated_from_run_results:
             continue
@@ -88,13 +90,13 @@ def update_state(
                 if edge.from_ in parsed_dag.nodes:
                     parent_node = parsed_dag.nodes[edge.from_]
                     if (
-                        parent_node.type == NodeType.SOURCE
+                        parent_node.node_type == NodeType.SOURCE
                         and edge.from_ in source_freshness.sources
                     ):
                         sources_dict[edge.from_] = source_freshness.sources[edge.from_]
 
         state.state[node_id] = StateItem(
-            checksum=node.checksum,
+            checksum=model_node.checksum,
             last_updated=last_updated_from_run_results,
             sources=sources_dict,
         )
