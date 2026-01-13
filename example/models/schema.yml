@@ -29,7 +29,9 @@ models:
       tags:
         - a
       meta:
-        owner: "adam@test.io"
+        owner:
+          - "adam@test.io"
+          - "brett@test.io"
 
   - name: stg_customers
     description: "Cleaned and standardized customers data"
