@@ -20,4 +20,4 @@ def save_yaml(path: str, data: dict) -> None:
 
 
 def get_integration_account_id_from_env() -> str | None:
-    return os.getenv("INTEGRATION_ACCOUNT_ID")
+    return os.getenv("ORCHESTRA_INTEGRATION_ACCOUNT_ID")
