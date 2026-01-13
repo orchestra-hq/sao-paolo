@@ -1,8 +1,8 @@
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
-from typing import Literal
+from typing import Literal, cast
 
-from .models import Freshness, ModelNode, Node, ParsedDag, SourceNode
+from .models import Freshness, ModelNode, Node, NodeType, ParsedDag
 
 
 def build_dependency_graphs(
@@ -73,7 +73,7 @@ def should_mark_dirty_from_single_upstream(
         return True
 
     # Based on if the upstream is a source or a node, calculate if it is dirty or not.
-    if isinstance(upstream_node, SourceNode):
+    if upstream_node.node_type == NodeType.SOURCE:
         if upstream_id not in current_node.sources:
             upstream_freshness = Freshness.DIRTY
         else:
@@ -85,8 +85,9 @@ def should_mark_dirty_from_single_upstream(
                     if upstream_node.last_updated > current_node.sources[upstream_id]
                     else Freshness.CLEAN
                 )
-    elif isinstance(upstream_node, ModelNode):
-        upstream_freshness = upstream_node.freshness
+    elif upstream_node.node_type == NodeType.MODEL:
+        model_node: ModelNode = cast(ModelNode, upstream_node)
+        upstream_freshness = model_node.freshness
     else:
         return True
 
@@ -146,11 +147,15 @@ def _process_node(
     Process a single node to determine if it should be marked dirty based on upstream dependencies.
     """
     node: Node = dag.nodes[current_id]
-    if not isinstance(node, ModelNode) or node.freshness == Freshness.DIRTY:
+    if node.node_type == NodeType.SOURCE:
         return
-    else:
-        if _should_mark_dirty(upstream_ids=parents[current_id], node=node, dag=dag):
-            node.freshness = Freshness.DIRTY
+
+    model_node: ModelNode = cast(ModelNode, node)
+    if model_node.freshness == Freshness.CLEAN:
+        if _should_mark_dirty(
+            upstream_ids=parents[current_id], node=model_node, dag=dag
+        ):
+            model_node.freshness = Freshness.DIRTY
 
 
 def _enqueue_children(

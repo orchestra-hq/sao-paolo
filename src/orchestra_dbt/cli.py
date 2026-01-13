@@ -2,6 +2,7 @@ import os
 import subprocess
 import sys
 from importlib.metadata import version
+from typing import cast
 
 import click
 
@@ -9,7 +10,7 @@ from .constants import SERVICE_NAME, VALID_ORCHESTRA_ENVS
 from .dag import construct_dag
 from .logger import log_debug, log_error, log_info, log_reused_models
 from .ls import get_model_paths_to_run
-from .models import ModelNode, SourceFreshness
+from .models import ModelNode, NodeType, SourceFreshness
 from .modify import modify_dbt_command
 from .orchestra import is_warn
 from .patcher import patch_sql_files, revert_patching
@@ -104,13 +105,14 @@ def main(args: tuple):
     models_to_reuse: dict[str, ModelNode] = {}
     models_count = 0
     for node_id, node in parsed_dag.nodes.items():
-        if not isinstance(node, ModelNode):
+        if node.node_type == NodeType.SOURCE:
             continue
-        if model_paths_to_run and node.model_path not in model_paths_to_run:
+        model_node: ModelNode = cast(ModelNode, node)
+        if model_paths_to_run and model_node.model_path not in model_paths_to_run:
             continue
         models_count += 1
-        if node.freshness == Freshness.CLEAN:
-            models_to_reuse[node_id] = node
+        if model_node.freshness == Freshness.CLEAN:
+            models_to_reuse[node_id] = model_node
 
     log_reused_models(models_to_reuse)
 
