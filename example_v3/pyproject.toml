@@ -1,0 +1,5 @@
+[project]
+name = "example_v3"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["dbt-core", "dbt-snowflake"]
