@@ -45,7 +45,7 @@ models:
       meta:
         owner: "eve@test.io"
         # team_owner: "!subteam^S0A6R0YDZKP"
-        channel: "does-not-exist"
+        channel: "alert-testing"
 
   - name: int_orders
     description: "Intermediate orders table for further aggregations"
