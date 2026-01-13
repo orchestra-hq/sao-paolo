@@ -1,0 +1,15 @@
+name: example_v3
+config-version: 2
+
+profile: default
+
+on-run-start: "SELECT 1 as status, 'start' as operation_name"
+on-run-end: "SELECT 1 as status, 'end' as operation_name"
+
+models:
+  example_v3:
+    +schema: test_ops
+    +materialized: view
+  +persist_docs:
+    relation: true
+    columns: true
