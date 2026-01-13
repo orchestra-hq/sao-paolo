@@ -8,7 +8,7 @@ from .models import (
     SourceNode,
     StateApiModel,
 )
-from .utils import load_json
+from .utils import get_integration_account_id_from_env, load_json
 
 
 def construct_dag(source_freshness: SourceFreshness, state: StateApiModel) -> ParsedDag:
@@ -30,6 +30,10 @@ def construct_dag(source_freshness: SourceFreshness, state: StateApiModel) -> Pa
             continue
 
         node_id = str(node_id)
+        asset_external_id = node_id
+        if integration_account_id := get_integration_account_id_from_env():
+            asset_external_id = f"{integration_account_id}.{node_id}"
+
         checksum = str(node["checksum"]["checksum"])
         model_path = str(node["original_file_path"])
         if node["package_name"] != project_name_from_manifest:
@@ -40,18 +44,24 @@ def construct_dag(source_freshness: SourceFreshness, state: StateApiModel) -> Pa
         nodes[node_id] = ModelNode(
             freshness=(
                 Freshness.DIRTY
-                if node_id not in state.state
+                if asset_external_id not in state.state
                 or not checksum
-                or checksum != state.state[node_id].checksum
+                or checksum != state.state[asset_external_id].checksum
                 else Freshness.CLEAN
             ),
             checksum=checksum,
             freshness_config=node.get("config", {}).get("freshness"),
             last_updated=(
-                state.state[node_id].last_updated if node_id in state.state else None
+                state.state[asset_external_id].last_updated
+                if asset_external_id in state.state
+                else None
             ),
             model_path=model_path,
-            sources=state.state[node_id].sources if node_id in state.state else {},
+            sources=(
+                state.state[asset_external_id].sources
+                if asset_external_id in state.state
+                else {}
+            ),
             sql_path=sql_path,
         )
 

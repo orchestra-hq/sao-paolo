@@ -6,8 +6,6 @@ from functools import lru_cache
 import httpx
 from pydantic import ValidationError
 
-from orchestra_dbt.utils import load_json
-
 from .logger import log_error, log_info, log_warn
 from .models import (
     ModelNode,
@@ -17,6 +15,7 @@ from .models import (
     StateApiModel,
     StateItem,
 )
+from .utils import get_integration_account_id_from_env, load_json
 
 
 def _get_base_api_url() -> str:
@@ -45,7 +44,13 @@ def load_state() -> StateApiModel:
 
     try:
         state = StateApiModel.model_validate(response.json())
-        log_info("State loaded")
+        if integration_account_id := get_integration_account_id_from_env():
+            for key in list(state.state):
+                if not key.startswith(integration_account_id):
+                    state.state.pop(key)
+        log_info(
+            f"State loaded. Retrieved {len(state.state)} models.",
+        )
         return state
     except (ValidationError, ValueError) as e:
         log_error(f"Failed to validate state: {e}")
@@ -93,7 +98,11 @@ def update_state(
                     ):
                         sources_dict[edge.from_] = source_freshness.sources[edge.from_]
 
-        state.state[node_id] = StateItem(
+        asset_external_id = node_id
+        if integration_account_id := get_integration_account_id_from_env():
+            asset_external_id = f"{integration_account_id}.{node_id}"
+
+        state.state[asset_external_id] = StateItem(
             checksum=node.checksum,
             last_updated=last_updated_from_run_results,
             sources=sources_dict,
