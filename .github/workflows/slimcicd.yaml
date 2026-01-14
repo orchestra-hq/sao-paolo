@@ -15,6 +15,7 @@ jobs:
               with:
                   api_key: ${{ secrets.ORCHESTRA_API_KEY }}
                   pipeline_id: 81490a95-0fa8-4337-9dba-831e6f3e9ec6
+                  branch: main
                   poll_interval: 20
                   run_inputs: |
                       {
