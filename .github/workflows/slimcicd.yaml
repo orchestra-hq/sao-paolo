@@ -11,7 +11,7 @@ jobs:
         environment: production
         steps:
             - name: Trigger Pipeline
-              uses: orchestra-hq/run-pipeline@v1
+              uses: orchestra-hq/run-pipeline@v1.4.1
               with:
                   api_key: ${{ secrets.ORCHESTRA_API_KEY }}
                   pipeline_id: 81490a95-0fa8-4337-9dba-831e6f3e9ec6
