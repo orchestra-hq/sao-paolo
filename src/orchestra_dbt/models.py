@@ -41,6 +41,7 @@ class ModelNode(Node):
     checksum: str
     freshness: Freshness
     model_path: str
+    reason: str
     sources: dict[str, datetime] = {}
     sql_path: str
     node_type: NodeType = NodeType.MODEL

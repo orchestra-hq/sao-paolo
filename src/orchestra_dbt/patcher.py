@@ -1,23 +1,33 @@
 import os
+import re
 from pathlib import Path
 
 from .constants import ORCHESTRA_REUSED_NODE
 from .logger import log_info, log_warn
+from .models import ModelNode
 
 
-def patch_file(file_path: Path) -> None:
+def patch_file(file_path: Path, reason: str) -> None:
+    # This file should add the following config to the top of the file:
+    # {{ config(tags=[{ORCHESTRA_REUSED_NODE}], meta={'orchestra_reused_reason': '{reason}'}) }}
     file_path.write_text(
-        "{{{{ config(tags=[{}]) }}}}\n\n".format(f'"{ORCHESTRA_REUSED_NODE}"')
+        f"{{{{ config(tags=[\"{ORCHESTRA_REUSED_NODE}\"], meta={{'orchestra_reused_reason': '{reason}'}}) }}}}\n\n"
         + file_path.read_text(encoding="utf-8"),
         encoding="utf-8",
     )
 
 
 def revert_patch_file(file_path: Path) -> None:
+    # This should remove the line added by patch_file.
     content = file_path.read_text(encoding="utf-8")
-    # Remove the entire config line that was added by patch_file
-    config_line = "{{{{ config(tags=[{}]) }}}}\n\n".format(f'"{ORCHESTRA_REUSED_NODE}"')
-    content = content.replace(config_line, "", 1)  # Remove only the first occurrence
+    pattern = (
+        re.escape('{{ config(tags=["')
+        + re.escape(ORCHESTRA_REUSED_NODE)
+        + re.escape("\"], meta={'orchestra_reused_reason': '")
+        + r".*?"
+        + re.escape("'}) }}\n\n")
+    )
+    content = re.sub(pattern, "", content, count=1)  # Remove only the first occurrence
     file_path.write_text(content, encoding="utf-8")
 
 
@@ -33,22 +43,27 @@ def _get_sql_files(cwd: Path) -> list[Path]:
     return sql_files
 
 
-def patch_sql_files(sql_paths_to_patch: list[str]) -> None:
+def patch_sql_files(models_to_reuse: dict[str, ModelNode]) -> None:
     cwd = Path(os.getcwd())
     sql_files = _get_sql_files(cwd)
 
     if not sql_files:
         log_warn("No SQL files found in project directory.")
         return
-    else:
-        log_info(msg=f"Found {len(sql_files)} SQL files in path.")
+
+    sql_paths_to_patch_with_reason: dict[str, str] = {
+        model.sql_path: model.reason for model in models_to_reuse.values()
+    }
 
     for sql_file in sql_files:
         relative_path = str(sql_file.relative_to(cwd))
-        if relative_path in sql_paths_to_patch:
+        if relative_path in sql_paths_to_patch_with_reason:
             try:
                 log_info(f"Patching {relative_path}...")
-                patch_file(file_path=sql_file)
+                patch_file(
+                    file_path=sql_file,
+                    reason=sql_paths_to_patch_with_reason[relative_path],
+                )
             except Exception as e:
                 log_warn(f"Failed to add tag to {sql_file}: {e}")
 

@@ -7,7 +7,6 @@ from src.orchestra_dbt.models import (
     Freshness,
     ModelNode,
     Node,
-    NodeType,
     ParsedDag,
     SourceNode,
 )
@@ -29,24 +28,28 @@ class TestBuildDependencyGraphs:
                         checksum="1",
                         model_path="models/model_a.sql",
                         sql_path="models/model_a.sql",
+                        reason="Node not seen before",
                     ),
                     "model.b": ModelNode(
                         freshness=Freshness.CLEAN,
                         checksum="2",
                         model_path="models/model_b.sql",
                         sql_path="models/model_b.sql",
+                        reason="Node not seen before",
                     ),
                     "model.c": ModelNode(
                         freshness=Freshness.CLEAN,
                         checksum="3",
                         model_path="models/model_c.sql",
                         sql_path="models/model_c.sql",
+                        reason="Node not seen before",
                     ),
                     "model.d": ModelNode(
                         freshness=Freshness.CLEAN,
                         checksum="4",
                         model_path="models/model_d.sql",
                         sql_path="models/model_d.sql",
+                        reason="Node not seen before",
                     ),
                 },
                 edges=[
@@ -101,26 +104,23 @@ class TestShouldMarkDirtyFromSingleUpstream:
             # Current source has no last updated at.
             (
                 "source.test",
-                SourceNode(
-                    type=NodeType.SOURCE,
-                ),
+                SourceNode(),
                 ModelNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
                     model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
-                    type=NodeType.MODEL,
                     sources={
                         "source.test": datetime.now(),
                     },
+                    reason="Node not seen before",
                 ),
-                True,
+                (True, None),
             ),
             # Clean Source -> Model no config
             (
                 "source.test",
                 SourceNode(
-                    type=NodeType.SOURCE,
                     last_updated=datetime.now() - timedelta(minutes=10),
                 ),
                 ModelNode(
@@ -132,16 +132,14 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     sources={
                         "source.test": datetime.now() - timedelta(minutes=10),
                     },
+                    reason="Node not seen before",
                 ),
-                False,
+                (False, "Source source.test has not been updated since last run."),
             ),
             # Dirty Source -> Model no config
             (
                 "source.test",
-                SourceNode(
-                    type=NodeType.SOURCE,
-                    last_updated=datetime.now(),
-                ),
+                SourceNode(last_updated=datetime.now()),
                 ModelNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
@@ -151,16 +149,14 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     sources={
                         "source.test": datetime.now() - timedelta(minutes=10),
                     },
+                    reason="Node not seen before",
                 ),
-                True,
+                (True, None),
             ),
             # Clean Source -> Model with invalid config
             (
                 "source.test",
-                SourceNode(
-                    type=NodeType.SOURCE,
-                    last_updated=datetime.now() - timedelta(minutes=10),
-                ),
+                SourceNode(last_updated=datetime.now() - timedelta(minutes=10)),
                 ModelNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
@@ -175,16 +171,14 @@ class TestShouldMarkDirtyFromSingleUpstream:
                             "foo": "bar",
                         }
                     },
+                    reason="Node not seen before",
                 ),
-                False,
+                (False, "Source source.test has not been updated since last run."),
             ),
             # Dirty Source -> Model should not be built yet
             (
                 "source.test",
-                SourceNode(
-                    type=NodeType.SOURCE,
-                    last_updated=datetime.now(),
-                ),
+                SourceNode(last_updated=datetime.now()),
                 ModelNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
@@ -200,16 +194,14 @@ class TestShouldMarkDirtyFromSingleUpstream:
                             "period": "minute",
                         }
                     },
+                    reason="Node not seen before",
                 ),
-                False,
+                (False, "Model still within build_after config of 15 minutes."),
             ),
             # Dirty Source -> Model should be built again
             (
                 "source.test",
-                SourceNode(
-                    type=NodeType.SOURCE,
-                    last_updated=datetime.now(),
-                ),
+                SourceNode(last_updated=datetime.now()),
                 ModelNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
@@ -225,8 +217,9 @@ class TestShouldMarkDirtyFromSingleUpstream:
                             "period": "minute",
                         }
                     },
+                    reason="Node not seen before",
                 ),
-                True,
+                (True, None),
             ),
             # Clean parent Model -> parent updated a while ago
             (
@@ -237,6 +230,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=60),
+                    reason="Node not seen before",
                 ),
                 ModelNode(
                     freshness=Freshness.CLEAN,
@@ -251,10 +245,32 @@ class TestShouldMarkDirtyFromSingleUpstream:
                             "period": "minute",
                         }
                     },
+                    reason="Node not seen before",
                 ),
-                False,
+                (False, "Upstream model model.a contains new data."),
             ),
-            # Clean parent Model -> parent updated recently
+            # Clean parent Model -> clean child
+            (
+                "model.a",
+                ModelNode(
+                    freshness=Freshness.CLEAN,
+                    checksum="1",
+                    model_path="models/model_a.sql",
+                    sql_path="models/model_a.sql",
+                    last_updated=datetime.now() - timedelta(minutes=20),
+                    reason="Same state as before",
+                ),
+                ModelNode(
+                    freshness=Freshness.CLEAN,
+                    checksum="1",
+                    model_path="models/model_b.sql",
+                    sql_path="models/model_b.sql",
+                    last_updated=datetime.now() - timedelta(minutes=20),
+                    reason="Same state as before",
+                ),
+                (False, "Upstream model model.a being reused."),
+            ),
+            # Clean parent Model -> parent updated more recently than the current node
             (
                 "model.a",
                 ModelNode(
@@ -263,6 +279,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=12),
+                    reason="Node not seen before",
                 ),
                 ModelNode(
                     freshness=Freshness.CLEAN,
@@ -277,8 +294,9 @@ class TestShouldMarkDirtyFromSingleUpstream:
                             "period": "minute",
                         }
                     },
+                    reason="Node not seen before",
                 ),
-                True,
+                (True, None),
             ),
         ],
     )
@@ -287,7 +305,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
         upstream_id: str,
         upstream_node: Node,
         current_node: ModelNode,
-        expected: bool,
+        expected: tuple[bool, str | None],
     ):
         assert (
             should_mark_dirty_from_single_upstream(
@@ -295,7 +313,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                 upstream_node=upstream_node,
                 current_node=current_node,
             )
-            is expected
+            == expected
         )
 
 
@@ -305,7 +323,6 @@ class TestCalculateModelsToRun:
         dag = ParsedDag(
             nodes={
                 "source.test": SourceNode(
-                    type=NodeType.SOURCE,
                     last_updated=datetime.now(),
                 ),
                 "model.a": ModelNode(
@@ -313,12 +330,14 @@ class TestCalculateModelsToRun:
                     checksum="1",
                     model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
+                    reason="Node not seen before",
                 ),
                 "model.b": ModelNode(
                     freshness=Freshness.CLEAN,
                     checksum="2",
                     model_path="models/model_b.sql",
                     sql_path="models/model_b.sql",
+                    reason="Node not seen before",
                 ),
             },
             edges=[
@@ -342,7 +361,6 @@ class TestCalculateModelsToRun:
         dag = ParsedDag(
             nodes={
                 "source.test": SourceNode(
-                    type=NodeType.SOURCE,
                     last_updated=datetime.now() - timedelta(minutes=10),
                 ),
                 "model.a": ModelNode(
@@ -354,6 +372,7 @@ class TestCalculateModelsToRun:
                     sources={
                         "source.test": datetime.now() - timedelta(minutes=10),
                     },
+                    reason="Node not seen before",
                 ),
             },
             edges=[Edge(from_="source.test", to_="model.a")],
@@ -370,7 +389,6 @@ class TestCalculateModelsToRun:
         dag = ParsedDag(
             nodes={
                 "source.test": SourceNode(
-                    type=NodeType.SOURCE,
                     last_updated=datetime.now(),
                 ),
                 "model.a": ModelNode(
@@ -380,6 +398,7 @@ class TestCalculateModelsToRun:
                     sql_path="models/model_a.sql",
                     freshness_config={"build_after": {"count": 1, "period": "hour"}},
                     last_updated=datetime.now() - timedelta(minutes=20),
+                    reason="Node not seen before",
                 ),
             },
             edges=[Edge(from_="source.test", to_="model.a")],
@@ -409,6 +428,7 @@ class TestCalculateModelsToRun:
                     model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     last_updated=now,
+                    reason="Node not seen before",
                 ),
                 "model.b": ModelNode(
                     freshness=Freshness.CLEAN,
@@ -416,6 +436,7 @@ class TestCalculateModelsToRun:
                     model_path="models/model_b.sql",
                     sql_path="models/model_b.sql",
                     last_updated=now - timedelta(hours=2),  # Old, shouldn't trigger
+                    reason="Node not seen before",
                 ),
                 "model.c": ModelNode(
                     freshness=Freshness.CLEAN,
@@ -430,6 +451,7 @@ class TestCalculateModelsToRun:
                         }
                     },
                     last_updated=now - timedelta(minutes=45),
+                    reason="Node not seen before",
                 ),
             },
             edges=[
@@ -450,11 +472,9 @@ class TestCalculateModelsToRun:
         dag = ParsedDag(
             nodes={
                 "source.src_orders": SourceNode(
-                    type=NodeType.SOURCE,
                     last_updated=now - timedelta(minutes=10),
                 ),
                 "source.src_customers": SourceNode(
-                    type=NodeType.SOURCE,
                     last_updated=now,
                 ),
                 "model.stg_orders": ModelNode(
@@ -466,6 +486,7 @@ class TestCalculateModelsToRun:
                     sources={
                         "source.src_orders": now - timedelta(minutes=10),
                     },
+                    reason="Node not seen before",
                 ),
                 "model.stg_customers": ModelNode(
                     freshness=Freshness.CLEAN,
@@ -476,6 +497,7 @@ class TestCalculateModelsToRun:
                     sources={
                         "source.src_customers": now - timedelta(minutes=10),
                     },
+                    reason="Node not seen before",
                 ),
                 "model.int_orders": ModelNode(
                     freshness=Freshness.CLEAN,
@@ -483,6 +505,7 @@ class TestCalculateModelsToRun:
                     model_path="models/model_int_orders.sql",
                     sql_path="models/model_int_orders.sql",
                     last_updated=now - timedelta(minutes=8),
+                    reason="Node not seen before",
                 ),
                 "model.dim_customers": ModelNode(
                     freshness=Freshness.CLEAN,
@@ -490,6 +513,7 @@ class TestCalculateModelsToRun:
                     model_path="models/model_dim_customers.sql",
                     sql_path="models/model_dim_customers.sql",
                     last_updated=now - timedelta(minutes=8),
+                    reason="Node not seen before",
                 ),
                 "model.cust_orders": ModelNode(
                     freshness=Freshness.CLEAN,
@@ -497,6 +521,7 @@ class TestCalculateModelsToRun:
                     model_path="models/model_cust_orders.sql",
                     sql_path="models/model_cust_orders.sql",
                     last_updated=now - timedelta(minutes=7),
+                    reason="Node not seen before",
                 ),
             },
             edges=[
@@ -541,11 +566,9 @@ class TestCalculateModelsToRun:
         dag = ParsedDag(
             nodes={
                 "source.src_orders": SourceNode(
-                    type=NodeType.SOURCE,
                     last_updated=now - timedelta(minutes=10),
                 ),
                 "source.src_customers": SourceNode(
-                    type=NodeType.SOURCE,
                     last_updated=now - timedelta(minutes=5),
                 ),
                 "model.stg_orders": ModelNode(
@@ -557,6 +580,7 @@ class TestCalculateModelsToRun:
                     sources={
                         "source.src_orders": now - timedelta(minutes=10),
                     },
+                    reason="Node not seen before",
                 ),
                 "model.stg_customers": ModelNode(
                     freshness=Freshness.CLEAN,
@@ -573,6 +597,7 @@ class TestCalculateModelsToRun:
                     sources={
                         "source.src_customers": now - timedelta(minutes=6),
                     },
+                    reason="Node not seen before",
                 ),
                 "model.int_orders": ModelNode(
                     freshness=Freshness.CLEAN,
@@ -580,6 +605,7 @@ class TestCalculateModelsToRun:
                     model_path="models/model_int_orders.sql",
                     sql_path="models/model_int_orders.sql",
                     last_updated=now - timedelta(minutes=3),
+                    reason="Node not seen before",
                 ),
                 "model.dim_customers": ModelNode(
                     freshness=Freshness.CLEAN,
@@ -587,10 +613,10 @@ class TestCalculateModelsToRun:
                     model_path="models/model_dim_customers.sql",
                     sql_path="models/model_dim_customers.sql",
                     last_updated=now - timedelta(minutes=3),
+                    reason="Node not seen before",
                 ),
                 "model.cust_orders": ModelNode(
                     freshness=Freshness.CLEAN,
-                    type=NodeType.MODEL,
                     model_path="models/model_cust_orders.sql",
                     sql_path="models/model_cust_orders.sql",
                     checksum="5",
@@ -602,6 +628,7 @@ class TestCalculateModelsToRun:
                             "updates_on": "all",
                         }
                     },
+                    reason="Node not seen before",
                 ),
             },
             edges=[
