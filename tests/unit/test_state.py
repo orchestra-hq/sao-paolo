@@ -23,7 +23,18 @@ from src.orchestra_dbt.state import (
 
 
 class TestLoadState:
-    def test_load_state_success(self, httpx_mock: HTTPXMock):
+    @patch("src.orchestra_dbt.state.get_integration_account_id_from_env")
+    @pytest.mark.parametrize(
+        "integration_account_id, expected_state_len",
+        [(None, 3), ("a", 1), ("b", 1)],
+    )
+    def test_load_state_success(
+        self,
+        mock_get_integration_account_id_from_env,
+        httpx_mock: HTTPXMock,
+        integration_account_id: str | None,
+        expected_state_len: int,
+    ):
         httpx_mock.add_response(
             url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
             match_headers={
@@ -32,26 +43,40 @@ class TestLoadState:
             },
             json={
                 "state": {
+                    "a.model.test": {
+                        "checksum": "123",
+                        "last_updated": "2024-01-01T12:00:00",
+                        "sources": {
+                            "source.test": "2024-01-01T11:00:00",
+                        },
+                    },
+                    "b.model.test": {
+                        "checksum": "123",
+                        "last_updated": "2024-01-01T12:00:00",
+                        "sources": {
+                            "source.test": "2024-01-01T11:00:00",
+                        },
+                    },
                     "model.test": {
                         "checksum": "123",
                         "last_updated": "2024-01-01T12:00:00",
                         "sources": {
                             "source.test": "2024-01-01T11:00:00",
                         },
-                    }
+                    },
                 }
             },
         )
-        assert load_state() == StateApiModel(
-            state={
-                "model.test": StateItem(
-                    last_updated=datetime(2024, 1, 1, 12, 0, 0),
-                    checksum="123",
-                    sources={
-                        "source.test": datetime(2024, 1, 1, 11, 0, 0),
-                    },
-                )
-            }
+
+        mock_get_integration_account_id_from_env.return_value = integration_account_id
+        loaded_state = load_state()
+        assert len(loaded_state.state) == expected_state_len
+        assert list(loaded_state.state.values())[0] == StateItem(
+            last_updated=datetime(2024, 1, 1, 12, 0, 0),
+            checksum="123",
+            sources={
+                "source.test": datetime(2024, 1, 1, 11, 0, 0),
+            },
         )
 
     def test_load_state_http_error(self, httpx_mock: HTTPXMock):

@@ -8,15 +8,15 @@ from .models import (
     SourceNode,
     StateApiModel,
 )
-from .utils import load_json
+from .utils import get_integration_account_id_from_env, load_json
 
 
 def calculate_freshness_on_model(
-    node_id: str, checksum: str, state: StateApiModel
+    asset_external_id: str, checksum: str, state: StateApiModel
 ) -> tuple[Freshness, str]:
-    if node_id not in state.state:
+    if asset_external_id not in state.state:
         return Freshness.DIRTY, "Node not previously seen in state."
-    if not checksum or checksum != state.state[node_id].checksum:
+    if not checksum or checksum != state.state[asset_external_id].checksum:
         return Freshness.DIRTY, "Checksum changed since last run."
     return Freshness.CLEAN, "Model in same state as last run."
 
@@ -40,6 +40,10 @@ def construct_dag(source_freshness: SourceFreshness, state: StateApiModel) -> Pa
             continue
 
         node_id = str(node_id)
+        asset_external_id = node_id
+        if integration_account_id := get_integration_account_id_from_env():
+            asset_external_id = f"{integration_account_id}.{node_id}"
+
         checksum = str(node["checksum"]["checksum"])
         model_path = str(node["original_file_path"])
         if node["package_name"] != project_name_from_manifest:
@@ -47,17 +51,25 @@ def construct_dag(source_freshness: SourceFreshness, state: StateApiModel) -> Pa
         else:
             sql_path = model_path
 
-        freshness, reason = calculate_freshness_on_model(node_id, checksum, state)
+        freshness, reason = calculate_freshness_on_model(
+            asset_external_id, checksum, state
+        )
 
         nodes[node_id] = ModelNode(
             freshness=freshness,
             checksum=checksum,
             freshness_config=node.get("config", {}).get("freshness"),
             last_updated=(
-                state.state[node_id].last_updated if node_id in state.state else None
+                state.state[asset_external_id].last_updated
+                if asset_external_id in state.state
+                else None
             ),
             model_path=model_path,
-            sources=state.state[node_id].sources if node_id in state.state else {},
+            sources=(
+                state.state[asset_external_id].sources
+                if asset_external_id in state.state
+                else {}
+            ),
             sql_path=sql_path,
             reason=reason,
         )

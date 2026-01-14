@@ -1,0 +1,24 @@
+name: dbt Core Slim CI/CD
+on:
+    pull_request:
+        branches:
+            - main
+        paths:
+            - "example_v3/models/**"
+jobs:
+    dbt-core-slimci-action:
+        runs-on: ubuntu-latest
+        environment: production
+        steps:
+            - name: Trigger Pipeline
+              uses: orchestra-hq/run-pipeline@v1.4.1
+              with:
+                  api_key: ${{ secrets.ORCHESTRA_API_KEY }}
+                  pipeline_id: 81490a95-0fa8-4337-9dba-831e6f3e9ec6
+                  branch: main
+                  poll_interval: 20
+                  run_inputs: |
+                      {
+                        "dbt_command": " build -s state:modified+ --defer --state latest_production",
+                        "dbt_branch": "${{ github.head_ref }}"
+                      }
