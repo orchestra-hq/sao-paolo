@@ -143,7 +143,10 @@ def _should_mark_dirty(
             current_node=node,
         )
         if updates_on == "all" and not should_be_dirty:
-            return False, f"{reason}. Model requires all upstream models to be updated."
+            return (
+                False,
+                f"{reason} (model requires all upstream models to be updated)",
+            )
         if updates_on == "any" and should_be_dirty:
             return True, None
     return should_be_dirty, reason
