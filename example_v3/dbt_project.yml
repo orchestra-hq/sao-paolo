@@ -13,3 +13,7 @@ models:
   +persist_docs:
     relation: true
     columns: true
+
+seeds:
+  example_v3:
+    +schema: test_ops

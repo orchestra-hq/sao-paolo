@@ -95,7 +95,7 @@ def should_mark_dirty_from_single_upstream(
         model_node: ModelNode = cast(ModelNode, upstream_node)
         upstream_freshness = model_node.freshness
         if upstream_freshness == Freshness.CLEAN:
-            reason = f"Upstream model {upstream_id} being reused."
+            reason = "Upstream model(s) being reused."
     else:
         return True, None
 
@@ -124,7 +124,7 @@ def should_mark_dirty_from_single_upstream(
                     upstream_node.last_updated
                     and upstream_node.last_updated > current_node.last_updated
                 )
-                else (False, f"Upstream model {upstream_id} contains new data.")
+                else (False, reason)
             )
 
 

@@ -1,0 +1,35 @@
+version: 2
+
+sources:
+  - name: external
+    description: External data source
+    freshness:
+      warn_after: {count: 12, period: hour}
+      error_after: {count: 24, period: hour}
+    tables:
+      - name: external_data
+        description: External data table
+        columns:
+          - name: id
+            description: ID column
+            tests:
+              - not_null
+          - name: amount
+            description: Amount column
+
+models:
+  - name: stg_base
+    description: Base staging model
+    columns:
+      - name: id
+        tests:
+          - not_null
+          - unique
+  - name: int_merge
+    description: Intermediate merge model
+    config:
+      tags: ['intermediate']
+  - name: mart_with_source
+    description: Mart model using source
+    config:
+      tags: ['mart', 'final']

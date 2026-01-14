@@ -1,0 +1,1 @@
+select 100 as id, 'isolated' as name

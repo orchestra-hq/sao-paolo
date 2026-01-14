@@ -247,7 +247,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     },
                     reason="Node not seen before",
                 ),
-                (False, "Upstream model model.a contains new data."),
+                (False, "Upstream model(s) being reused."),
             ),
             # Clean parent Model -> clean child
             (
@@ -268,7 +268,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     last_updated=datetime.now() - timedelta(minutes=20),
                     reason="Same state as before",
                 ),
-                (False, "Upstream model model.a being reused."),
+                (False, "Upstream model(s) being reused."),
             ),
             # Clean parent Model -> parent updated more recently than the current node
             (
