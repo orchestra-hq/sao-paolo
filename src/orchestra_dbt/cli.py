@@ -83,18 +83,17 @@ def main(args: tuple):
     _welcome()
     _validate_environment()
 
-    selected_target = find_target_in_args(list(args))
-
     try:
         model_paths_to_run: list[str] | None = get_model_paths_to_run(args[2:])
     except ImportError:
         sys.exit(1)
 
     source_freshness: SourceFreshness | None = get_source_freshness(
-        target=selected_target
+        target=find_target_in_args(list(args))
     )
     if not source_freshness:
         sys.exit(subprocess.run(args).returncode)
+    log_info(f"Collected {len(source_freshness.sources)} source(s) information.")
 
     state = load_state()
     parsed_dag = construct_dag(source_freshness, state)
@@ -117,9 +116,7 @@ def main(args: tuple):
     log_reused_models(models_to_reuse)
 
     if len(models_to_reuse) != 0:
-        patch_sql_files(
-            sql_paths_to_patch=[model.sql_path for model in models_to_reuse.values()]
-        )
+        patch_sql_files(models_to_reuse)
         result = subprocess.run(modify_dbt_command(cmd=list(args)))
         log_info(f"{len(models_to_reuse)}/{models_count} models reused.")
         if os.getenv("ORCHESTRA_LOCAL_RUN", "false").lower() == "true":

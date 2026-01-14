@@ -66,11 +66,13 @@ def _get_updates_on(freshness_config: dict | None) -> Literal["any", "all"]:
 
 def should_mark_dirty_from_single_upstream(
     upstream_id: str, upstream_node: Node, current_node: ModelNode
-) -> bool:
+) -> tuple[bool, str | None]:
     if not current_node.last_updated:
         # This scenario should not occur as the node will be dirty already.
         # But helps with typing.
-        return True
+        return True, None
+
+    reason = None
 
     # Based on if the upstream is a source or a node, calculate if it is dirty or not.
     if upstream_node.node_type == NodeType.SOURCE:
@@ -85,37 +87,44 @@ def should_mark_dirty_from_single_upstream(
                     if upstream_node.last_updated > current_node.sources[upstream_id]
                     else Freshness.CLEAN
                 )
+                if upstream_freshness == Freshness.CLEAN:
+                    reason = (
+                        f"Source {upstream_id} has not been updated since last run."
+                    )
     elif upstream_node.node_type == NodeType.MODEL:
         model_node: ModelNode = cast(ModelNode, upstream_node)
         upstream_freshness = model_node.freshness
+        if upstream_freshness == Freshness.CLEAN:
+            reason = f"Upstream model {upstream_id} being reused."
     else:
-        return True
+        return True, None
 
     if not current_node.freshness_config:
-        return upstream_freshness == Freshness.DIRTY
+        return upstream_freshness == Freshness.DIRTY, reason
 
     # Similar to above - build_after should always exist, so this is more for
     # type checking.
     build_after = current_node.freshness_config.get("build_after")
     if not build_after:
-        return upstream_freshness == Freshness.DIRTY
+        return upstream_freshness == Freshness.DIRTY, reason
 
+    minutes_sla = build_after_duration_minutes(build_after)
     if current_node.last_updated >= datetime.now(
         tz=current_node.last_updated.tzinfo
-    ) - timedelta(minutes=build_after_duration_minutes(build_after)):
-        return False
+    ) - timedelta(minutes=minutes_sla):
+        return False, f"Model still within build_after config of {minutes_sla} minutes."
 
     match upstream_freshness:
         case Freshness.DIRTY:
-            return True
+            return True, reason
         case Freshness.CLEAN:
             return (
-                True
+                (True, None)
                 if (
                     upstream_node.last_updated
                     and upstream_node.last_updated > current_node.last_updated
                 )
-                else False
+                else (False, f"Upstream model {upstream_id} contains new data.")
             )
 
 
@@ -123,21 +132,21 @@ def _should_mark_dirty(
     upstream_ids: list[str],
     node: ModelNode,
     dag: ParsedDag,
-) -> bool:
+) -> tuple[bool, str | None]:
     updates_on: Literal["any", "all"] = _get_updates_on(node.freshness_config)
-
+    should_be_dirty = False
+    reason = None
     for upstream_id in upstream_ids:
-        should_be_dirty: bool = should_mark_dirty_from_single_upstream(
+        should_be_dirty, reason = should_mark_dirty_from_single_upstream(
             upstream_id=upstream_id,
             upstream_node=dag.nodes[upstream_id],
             current_node=node,
         )
         if updates_on == "all" and not should_be_dirty:
-            return False
+            return False, f"{reason}. Model requires all upstream models to be updated."
         if updates_on == "any" and should_be_dirty:
-            return True
-
-    return False
+            return True, None
+    return should_be_dirty, reason
 
 
 def _process_node(
@@ -152,10 +161,14 @@ def _process_node(
 
     model_node: ModelNode = cast(ModelNode, node)
     if model_node.freshness == Freshness.CLEAN:
-        if _should_mark_dirty(
+        should_mark_dirty, reason = _should_mark_dirty(
             upstream_ids=parents[current_id], node=model_node, dag=dag
-        ):
+        )
+        if should_mark_dirty:
             model_node.freshness = Freshness.DIRTY
+        else:
+            if reason:
+                model_node.reason = reason
 
 
 def _enqueue_children(

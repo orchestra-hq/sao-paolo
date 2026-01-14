@@ -1,3 +1,14 @@
+{{
+    config(
+      freshness={
+        "build_after": {
+        "count": 2,
+        "period": "minute"
+        }
+      }
+    )
+}}
+
 with model_a as (
     select * from {{ ref('model_a') }}
 ),

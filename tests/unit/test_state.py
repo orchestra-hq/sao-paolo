@@ -172,6 +172,7 @@ class TestUpdateState:
                     freshness=Freshness.CLEAN,
                     model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
+                    reason="Node not seen before",
                 )
             },
             edges=[],
@@ -212,6 +213,7 @@ class TestUpdateState:
                     freshness=Freshness.CLEAN,
                     model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
+                    reason="Node not seen before",
                 ),
             },
             edges=[
@@ -247,6 +249,7 @@ class TestUpdateState:
                     freshness=Freshness.CLEAN,
                     model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
+                    reason="Node not seen before",
                 )
             },
             edges=[],
@@ -281,6 +284,7 @@ class TestUpdateState:
                     freshness=Freshness.CLEAN,
                     model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
+                    reason="Node not seen before",
                 )
             },
             edges=[],
@@ -352,12 +356,14 @@ class TestUpdateState:
                     freshness=Freshness.CLEAN,
                     model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
+                    reason="Node not seen before",
                 ),
                 "model.test_project.model_b": ModelNode(
                     checksum="def456",
                     freshness=Freshness.CLEAN,
                     model_path="models/model_b.sql",
                     sql_path="models/model_b.sql",
+                    reason="Node not seen before",
                 ),
             },
             edges=[],
@@ -398,6 +404,7 @@ class TestUpdateState:
                     freshness=Freshness.CLEAN,
                     model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
+                    reason="Node not seen before",
                 ),
             },
             edges=[
@@ -457,6 +464,7 @@ class TestUpdateState:
                     freshness=Freshness.CLEAN,
                     model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
+                    reason="Node not seen before",
                 ),
             },
             edges=[
@@ -524,6 +532,7 @@ class TestUpdateState:
                     freshness=Freshness.CLEAN,
                     model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
+                    reason="Node not seen before",
                 )
             },
             edges=[],
@@ -561,12 +570,14 @@ class TestUpdateState:
                     freshness=Freshness.CLEAN,
                     model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
+                    reason="Node not seen before",
                 ),
                 "model.test_project.model_b": ModelNode(
                     checksum="def456",
                     freshness=Freshness.CLEAN,
                     model_path="models/model_b.sql",
                     sql_path="models/model_b.sql",
+                    reason="Node not seen before",
                 ),
             },
             edges=[
@@ -605,6 +616,7 @@ class TestUpdateState:
                     freshness=Freshness.CLEAN,
                     model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
+                    reason="Node not seen before",
                 )
             },
             edges=[],
@@ -636,6 +648,7 @@ class TestUpdateState:
                     freshness=Freshness.CLEAN,
                     model_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
+                    reason="Node not seen before",
                 )
             },
             edges=[],

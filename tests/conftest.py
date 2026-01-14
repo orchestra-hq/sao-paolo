@@ -35,6 +35,16 @@ def sample_manifest():
                     "nodes": ["model.test_project.model_a"],
                 },
             },
+            "model.test_project.model_c": {
+                "resource_type": "model",
+                "checksum": {"checksum": "456"},
+                "config": {"freshness": None},
+                "package_name": "test_project",
+                "original_file_path": "models/model_c.sql",
+                "depends_on": {
+                    "nodes": [],
+                },
+            },
         },
         "child_map": {
             "source.test_db.test_schema.test_table": [

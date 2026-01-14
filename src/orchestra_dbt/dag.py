@@ -11,6 +11,16 @@ from .models import (
 from .utils import load_json
 
 
+def calculate_freshness_on_model(
+    node_id: str, checksum: str, state: StateApiModel
+) -> tuple[Freshness, str]:
+    if node_id not in state.state:
+        return Freshness.DIRTY, "Node not previously seen in state."
+    if not checksum or checksum != state.state[node_id].checksum:
+        return Freshness.DIRTY, "Checksum changed since last run."
+    return Freshness.CLEAN, "Model in same state as last run."
+
+
 def construct_dag(source_freshness: SourceFreshness, state: StateApiModel) -> ParsedDag:
     manifest = load_json("target/manifest.json")
 
@@ -37,14 +47,10 @@ def construct_dag(source_freshness: SourceFreshness, state: StateApiModel) -> Pa
         else:
             sql_path = model_path
 
+        freshness, reason = calculate_freshness_on_model(node_id, checksum, state)
+
         nodes[node_id] = ModelNode(
-            freshness=(
-                Freshness.DIRTY
-                if node_id not in state.state
-                or not checksum
-                or checksum != state.state[node_id].checksum
-                else Freshness.CLEAN
-            ),
+            freshness=freshness,
             checksum=checksum,
             freshness_config=node.get("config", {}).get("freshness"),
             last_updated=(
@@ -53,6 +59,7 @@ def construct_dag(source_freshness: SourceFreshness, state: StateApiModel) -> Pa
             model_path=model_path,
             sources=state.state[node_id].sources if node_id in state.state else {},
             sql_path=sql_path,
+            reason=reason,
         )
 
         for dep in node.get("depends_on", {}).get("nodes", []):

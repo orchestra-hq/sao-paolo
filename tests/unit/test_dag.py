@@ -34,7 +34,12 @@ class TestConstructDag:
                             2024, 1, 3, 12, 0, 0
                         ),
                     },
-                )
+                ),
+                "model.test_project.model_c": StateItem(
+                    last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                    checksum="123",
+                    sources={},
+                ),
             }
         )
 
@@ -54,12 +59,22 @@ class TestConstructDag:
                             2024, 1, 3, 12, 0, 0
                         ),
                     },
+                    reason="Model in same state as last run.",
                 ),
                 "model.test_project_2.model_b": ModelNode(
                     freshness=Freshness.DIRTY,
                     checksum="ghi789",
                     model_path="models/model_b.sql",
                     sql_path="dbt_packages/test_project_2/models/model_b.sql",
+                    reason="Node not previously seen in state.",
+                ),
+                "model.test_project.model_c": ModelNode(
+                    freshness=Freshness.DIRTY,
+                    last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                    checksum="456",
+                    model_path="models/model_c.sql",
+                    sql_path="models/model_c.sql",
+                    reason="Checksum changed since last run.",
                 ),
             },
             edges=[
