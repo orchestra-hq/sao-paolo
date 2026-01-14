@@ -8,14 +8,14 @@ on:
 jobs:
     dbt-core-slimci-action:
         runs-on: ubuntu-latest
+        environment: production
         steps:
-            - name: Run Custom Action
+            - name: Trigger Pipeline
               uses: orchestra-hq/run-pipeline@v1
               with:
                   api_key: ${{ secrets.ORCHESTRA_API_KEY }}
                   pipeline_id: 81490a95-0fa8-4337-9dba-831e6f3e9ec6
                   poll_interval: 20
-                  environment: production
                   run_inputs: |
                       {
                         "dbt_command": " build -s state:modified+ --defer --state latest_production",
