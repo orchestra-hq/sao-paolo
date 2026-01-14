@@ -1,1 +1,1 @@
-select 1 as id, 'A' as name, 150 as value
+select 1 as id, 'A' as name, 175 as value
