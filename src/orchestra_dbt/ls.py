@@ -17,7 +17,7 @@ def get_model_paths_to_run(args: tuple) -> list[str] | None:
 
     try:
         res: dbtRunnerResult = dbtRunner().invoke(
-            ["ls", "--resource-type", "model, snapshot"]
+            ["ls", "--resource-type", "model", "--resource-type", "snapshot"]
             + list(args)
             + ["--output", "path", "-q"]
         )
