@@ -212,3 +212,11 @@ data.duckdb
 profiles.yml
 logs/
 */dbt_packages
+
+# Local testing files
+dynamo_state.py
+local_manifest.json
+local_state.json
+ops_dag.html
+ops.json
+visualise.py

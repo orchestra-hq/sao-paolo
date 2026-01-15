@@ -21,8 +21,12 @@ def calculate_freshness_on_model(
     return Freshness.CLEAN, "Model in same state as last run."
 
 
-def construct_dag(source_freshness: SourceFreshness, state: StateApiModel) -> ParsedDag:
-    manifest = load_json("target/manifest.json")
+def construct_dag(
+    source_freshness: SourceFreshness,
+    state: StateApiModel,
+    manifest_override: str | None = None,
+) -> ParsedDag:
+    manifest = load_json(manifest_override or "target/manifest.json")
 
     nodes: dict[str, Node] = {}
     edges: list[Edge] = []
@@ -36,7 +40,7 @@ def construct_dag(source_freshness: SourceFreshness, state: StateApiModel) -> Pa
         nodes[node_id] = SourceNode(last_updated=source_freshness.sources.get(node_id))
 
     for node_id, node in manifest.get("nodes", {}).items():
-        if node.get("resource_type") != "model":
+        if node.get("resource_type") not in ["model", "snapshot"]:
             continue
 
         node_id = str(node_id)

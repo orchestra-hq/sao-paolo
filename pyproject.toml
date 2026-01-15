@@ -17,6 +17,12 @@ dev = [
     "ruff",
 ]
 
+debug = [
+    "awscrt",
+    "boto3",
+    "graphviz",
+]
+
 [project.scripts]
 orchestra-dbt = "orchestra_dbt.cli:main"
 
