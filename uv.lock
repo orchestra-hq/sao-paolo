@@ -61,6 +61,28 @@ wheels = [
 ]
 
 [[package]]
+name = "awscrt"
+version = "0.31.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/35/c9/8e397a679f43c53cb51b338bda2645e8a474c9a4dd5606d0ee365b7b5fbc/awscrt-0.31.1.tar.gz", hash = "sha256:abb64768d25bf563da8e2165d477a491cba18bc22c4ec8db7acbdae94e59ebc4", size = 38080944 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/19/98/b487f027ac4a40cda5f97fdc699779026ad53c7729af327b1b618b7178a8/awscrt-0.31.1-cp311-abi3-macosx_10_15_universal2.whl", hash = "sha256:bd9a96973fe85ff031a1b5fffa07ea5056aa77fedec1965bb001d3a540f90a03", size = 3429907 },
+    { url = "https://files.pythonhosted.org/packages/27/ce/36bbbae991fadc9b5be270ba1a53022eb945c492ffd3d084cd7e5c3fca92/awscrt-0.31.1-cp311-abi3-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:5f242521759d3fe9a8b672d98445ea241086e7804cd3bb1c8f92ac5d8b6d4715", size = 3843427 },
+    { url = "https://files.pythonhosted.org/packages/84/b8/728395a4859d2ea7a4e808e94e739af7e65b24a6be9479ddd57dcb7f93ad/awscrt-0.31.1-cp311-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:da699831647845751eb752fed0c75ed9a78a9198552241192bc3ec40e7091e88", size = 4113751 },
+    { url = "https://files.pythonhosted.org/packages/7e/5f/c1bb284e7ea47c19934b648f49416c98b1ea8a7d6f6c533c8290c61aff5b/awscrt-0.31.1-cp311-abi3-musllinux_1_1_aarch64.whl", hash = "sha256:0655ec232742506bd71b58f3cd270cf1a90607cc693b828d6815d7da7e8bddb3", size = 3746373 },
+    { url = "https://files.pythonhosted.org/packages/1f/f2/3e0058ca7f4156559b732bb833bbdc2ce19e055fe57020cd5e8288009d82/awscrt-0.31.1-cp311-abi3-musllinux_1_1_x86_64.whl", hash = "sha256:701fcd7c3e0f15750f888a85cb8589f249c5c0373973992976e6af0ac8dfd9fd", size = 3972798 },
+    { url = "https://files.pythonhosted.org/packages/05/cf/b0349a29ba0b9618702af2a734f67fbda48de72e3cfff863bab3c5b29b9c/awscrt-0.31.1-cp311-abi3-win32.whl", hash = "sha256:5f36793f14f45b191ff664058a499f6bf42280a7404aa572f556a1beeb973b5b", size = 3975033 },
+    { url = "https://files.pythonhosted.org/packages/0d/93/4154a5e00e49a129527dfb7e0a5130607cd4b2b99099fb29c8548d6fe529/awscrt-0.31.1-cp311-abi3-win_amd64.whl", hash = "sha256:c23c8d45e7c045a9e8903bd861d0aef488652081f2ff63c462ecfc67d327b394", size = 4104620 },
+    { url = "https://files.pythonhosted.org/packages/c2/22/9ff88901591d75015a5c042cc72c7b98d0fadee52812f2f20dc835f0c30c/awscrt-0.31.1-cp313-abi3-macosx_10_15_universal2.whl", hash = "sha256:3fffbdfd747ae7c975177300dc201193e7c678334016dd33b5b4a407cc572eb3", size = 3428026 },
+    { url = "https://files.pythonhosted.org/packages/d3/ea/d7f1f7a495497fbfb2f312a703b98ebd62a73e39b57b96b5b710901ae408/awscrt-0.31.1-cp313-abi3-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:bed5cc3a3aa3ced33b57516194813d931f78f78cb6d5d4e9e2f1de8aafd1a2dd", size = 3834972 },
+    { url = "https://files.pythonhosted.org/packages/a8/7b/55dbefae59e4240f04f0fb811c8ea7b7c89486cbb9356933866f459a6121/awscrt-0.31.1-cp313-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:1aa053334a6929bb346f15bab0fdf36d2d5bf4c8452cc833501a8b95efc69913", size = 4107951 },
+    { url = "https://files.pythonhosted.org/packages/ba/7e/014ba88e91083f29b7fdb9c1a97e4028f09be395dd82b5ccb2233d4563c5/awscrt-0.31.1-cp313-abi3-musllinux_1_1_aarch64.whl", hash = "sha256:9269062d0156d77863ecf4787a9d0e0c5bfc233fb8293191edf63c926145007e", size = 3737045 },
+    { url = "https://files.pythonhosted.org/packages/43/bd/a5ba0e297f3ebbe6855d73e7d271fa662075ce07ebdf4437ad184a87834a/awscrt-0.31.1-cp313-abi3-musllinux_1_1_x86_64.whl", hash = "sha256:1e18d875ef4ab0410a51e6fc8d845e1236a40553ca2d037b9c20337a81780c60", size = 3966434 },
+    { url = "https://files.pythonhosted.org/packages/c9/f2/0150adb95b2fe9b5aea36f60550949358e887a7347a40685d732bc7ed38c/awscrt-0.31.1-cp313-abi3-win32.whl", hash = "sha256:d03cf21d81c0b533b11b105a0f7fa6a78c064d999a5dac9ffa7eb0ca00dd37c0", size = 3971129 },
+    { url = "https://files.pythonhosted.org/packages/e3/ec/7d30699f97af9f91b72b5aa4465980bb583190b4d3dcf463f12a6999fa45/awscrt-0.31.1-cp313-abi3-win_amd64.whl", hash = "sha256:86bd07696233d84080a0432e3db043dd6eccd94753ebcfb4efd94c87564c5f28", size = 4098826 },
+]
+
+[[package]]
 name = "babel"
 version = "2.17.0"
 source = { registry = "https://pypi.org/simple" }
@@ -531,6 +553,15 @@ wheels = [
 ]
 
 [[package]]
+name = "graphviz"
+version = "0.21"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f8/b3/3ac91e9be6b761a4b30d66ff165e54439dcd48b83f4e20d644867215f6ca/graphviz-0.21.tar.gz", hash = "sha256:20743e7183be82aaaa8ad6c93f8893c923bd6658a04c32ee115edb3c8a835f78", size = 200434 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/91/4c/e0ce1ef95d4000ebc1c11801f9b944fa5910ecc15b5e351865763d8657f8/graphviz-0.21-py3-none-any.whl", hash = "sha256:54f33de9f4f911d7e84e4191749cac8cc5653f815b06738c54db9a15ab8b1e42", size = 47300 },
+]
+
+[[package]]
 name = "h11"
 version = "0.16.0"
 source = { registry = "https://pypi.org/simple" }
@@ -916,6 +947,11 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+debug = [
+    { name = "awscrt" },
+    { name = "boto3" },
+    { name = "graphviz" },
+]
 dev = [
     { name = "basedpyright" },
     { name = "dbt-core" },
@@ -927,10 +963,13 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "awscrt", marker = "extra == 'debug'" },
     { name = "basedpyright", marker = "extra == 'dev'" },
+    { name = "boto3", marker = "extra == 'debug'" },
     { name = "click" },
     { name = "dbt-core", marker = "extra == 'dev'" },
     { name = "dbt-snowflake", marker = "extra == 'dev'" },
+    { name = "graphviz", marker = "extra == 'debug'" },
     { name = "httpx" },
     { name = "pydantic" },
     { name = "pytest", marker = "extra == 'dev'" },
@@ -938,7 +977,7 @@ requires-dist = [
     { name = "pyyaml" },
     { name = "ruff", marker = "extra == 'dev'" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["dev", "debug"]
 
 [[package]]
 name = "orderly-set"
