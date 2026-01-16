@@ -114,17 +114,18 @@ class TestPropagateFreshnessConfig:
         propagate_freshness_config(dag)
 
         # C should remain unchanged (already has config)
-        assert (
-            cast(MaterialisationNode, dag.nodes["C"]).freshness_config.minutes_sla == 30
-        )
+        updated_node_c = cast(MaterialisationNode, dag.nodes["C"])
+        assert updated_node_c.freshness_config.minutes_sla == 30
+
         # B should inherit from C
-        assert (
-            cast(MaterialisationNode, dag.nodes["B"]).freshness_config.minutes_sla == 30
-        )
+        updated_node_b = cast(MaterialisationNode, dag.nodes["B"])
+        assert updated_node_b.freshness_config.minutes_sla == 30
+        assert updated_node_b.freshness_config.inherited_from == "C"
+
         # A should inherit from B (which now has C's config)
-        assert (
-            cast(MaterialisationNode, dag.nodes["A"]).freshness_config.minutes_sla == 30
-        )
+        updated_node_a = cast(MaterialisationNode, dag.nodes["A"])
+        assert updated_node_a.freshness_config.minutes_sla == 30
+        assert updated_node_a.freshness_config.inherited_from == "B"
 
     def test_branching_dag_propagation(self):
         # A -> B -> C, B -> D
@@ -179,22 +180,24 @@ class TestPropagateFreshnessConfig:
         propagate_freshness_config(dag)
 
         # A should remain unchanged (already has config)
-        assert (
-            cast(MaterialisationNode, dag.nodes["A"]).freshness_config.minutes_sla == 5
-        )
+        updated_node_a = cast(MaterialisationNode, dag.nodes["A"])
+        assert updated_node_a.freshness_config.minutes_sla == 5
+        assert updated_node_a.freshness_config.inherited_from is None
+
         # D should remain unchanged (already has config)
-        assert (
-            cast(MaterialisationNode, dag.nodes["D"]).freshness_config.minutes_sla == 3
-        )
+        updated_node_d = cast(MaterialisationNode, dag.nodes["D"])
+        assert updated_node_d.freshness_config.minutes_sla == 3
+        assert updated_node_d.freshness_config.inherited_from is None
+
         # C should continue to not have config (no children with config)
-        assert (
-            cast(MaterialisationNode, dag.nodes["C"]).freshness_config.minutes_sla
-            is None
-        )
+        updated_node_c = cast(MaterialisationNode, dag.nodes["C"])
+        assert updated_node_c.freshness_config.minutes_sla is None
+        assert updated_node_c.freshness_config.inherited_from is None
+
         # B should inherit from D (smallest of children's configs)
-        assert (
-            cast(MaterialisationNode, dag.nodes["B"]).freshness_config.minutes_sla == 3
-        )
+        updated_node_b = cast(MaterialisationNode, dag.nodes["B"])
+        assert updated_node_b.freshness_config.minutes_sla == 3
+        assert updated_node_b.freshness_config.inherited_from == "D"
 
     def test_multiple_children_minimum_selection(self):
         # A -> B, A -> C, where B has config 10 and C has config 5
@@ -237,9 +240,9 @@ class TestPropagateFreshnessConfig:
         propagate_freshness_config(dag)
 
         # A should get the minimum of B and C's configs
-        assert (
-            cast(MaterialisationNode, dag.nodes["A"]).freshness_config.minutes_sla == 5
-        )
+        updated_node_a = cast(MaterialisationNode, dag.nodes["A"])
+        assert updated_node_a.freshness_config.minutes_sla == 5
+        assert updated_node_a.freshness_config.inherited_from == "C"
 
     def test_existing_config_not_overwritten(self):
         """Test that nodes with existing configs are not modified."""

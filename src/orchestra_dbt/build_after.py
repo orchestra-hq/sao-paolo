@@ -87,7 +87,9 @@ def _propagate_config_to_node(
         return
 
     # Look at children nodes and collect their minutes_sla values
-    child_minutes_sla: list[int] = []
+    min_child_minutes_sla: int | None = None
+    inherited_from: str | None = None
+
     for child_id in children[node_id]:
         child_node = dag.nodes[child_id]
         if child_node.node_type == NodeType.MATERIALISATION:
@@ -95,14 +97,19 @@ def _propagate_config_to_node(
                 MaterialisationNode, child_node
             )
             if child_materialisation.freshness_config.minutes_sla is not None:
-                child_minutes_sla.append(
-                    child_materialisation.freshness_config.minutes_sla
-                )
+                if (
+                    min_child_minutes_sla is None
+                    or child_materialisation.freshness_config.minutes_sla
+                    < min_child_minutes_sla
+                ):
+                    min_child_minutes_sla = (
+                        child_materialisation.freshness_config.minutes_sla
+                    )
+                    inherited_from = child_id
 
-    # If we found any child with a config, set this node's config to the minimum
-    if child_minutes_sla:
-        materialisation_node.freshness_config.minutes_sla = min(child_minutes_sla)
-        # Note: updates_on is left alone (already set to default "any" if not specified)
+    if min_child_minutes_sla:
+        materialisation_node.freshness_config.minutes_sla = min_child_minutes_sla
+        materialisation_node.freshness_config.inherited_from = inherited_from
 
 
 def _enqueue_parents(

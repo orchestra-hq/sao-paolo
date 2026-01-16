@@ -177,10 +177,15 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     sources={
                         "source.test": datetime.now() - timedelta(minutes=10),
                     },
-                    freshness_config=FreshnessConfig(minutes_sla=15),
+                    freshness_config=FreshnessConfig(
+                        minutes_sla=15, inherited_from="model.c"
+                    ),
                     reason="Node not seen before",
                 ),
-                (False, "Model still within build_after config of 15 minutes."),
+                (
+                    False,
+                    "Model still within build_after config of 15 minutes. Inherited from model.c.",
+                ),
             ),
             # Dirty Source -> Model should be built again
             (
