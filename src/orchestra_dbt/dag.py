@@ -72,18 +72,12 @@ def construct_dag(
                 else:
                     sql_path = node_path
 
-                track_state = True
-                if resource_type == "seed" and "track_state" not in node.get(
-                    "tags", []
-                ):
-                    track_state = False
-
                 freshness, reason = calculate_freshness_on_node(
                     asset_external_id,
                     checksum,
                     state,
                     resource_type,
-                    track_state,
+                    track_state=False if resource_type == "seed" else True,
                 )
 
                 nodes[node_id] = MaterialisationNode(
