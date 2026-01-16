@@ -83,10 +83,10 @@ def should_mark_dirty_from_single_upstream(
     if current_node.last_updated >= datetime.now(
         tz=current_node.last_updated.tzinfo
     ) - timedelta(minutes=current_node.freshness_config.minutes_sla):
-        return (
-            False,
-            f"Model still within build_after config of {current_node.freshness_config.minutes_sla} minutes.",
-        )
+        reason = f"Model still within build_after config of {current_node.freshness_config.minutes_sla} minutes."
+        if current_node.freshness_config.inherited_from:
+            reason += f" Inherited from {current_node.freshness_config.inherited_from}."
+        return (False, reason)
 
     match upstream_freshness:
         case Freshness.DIRTY:

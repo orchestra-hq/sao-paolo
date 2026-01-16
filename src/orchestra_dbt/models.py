@@ -30,6 +30,7 @@ class SourceFreshness(BaseModel):
 
 
 class FreshnessConfig(BaseModel):
+    inherited_from: str | None = None
     minutes_sla: int | None = None
     updates_on: Literal["any", "all"] = "any"
 
