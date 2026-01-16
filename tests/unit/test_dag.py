@@ -5,6 +5,7 @@ from src.orchestra_dbt.dag import calculate_freshness_on_node, construct_dag
 from src.orchestra_dbt.models import (
     Edge,
     Freshness,
+    FreshnessConfig,
     MaterialisationNode,
     ParsedDag,
     SourceFreshness,
@@ -132,6 +133,7 @@ class TestConstructDag:
                         ),
                     },
                     reason="Model in same state as last run.",
+                    freshness_config=FreshnessConfig(),
                 ),
                 "model.test_project_2.model_b": MaterialisationNode(
                     freshness=Freshness.DIRTY,
@@ -140,6 +142,7 @@ class TestConstructDag:
                     sql_path="dbt_packages/test_project_2/models/model_b.sql",
                     reason="Model not previously seen in state.",
                     sources={},
+                    freshness_config=FreshnessConfig(),
                 ),
                 "model.test_project.model_c": MaterialisationNode(
                     freshness=Freshness.DIRTY,
@@ -149,6 +152,7 @@ class TestConstructDag:
                     sql_path="models/model_c.sql",
                     reason="Checksum changed since last run.",
                     sources={},
+                    freshness_config=FreshnessConfig(),
                 ),
             },
             edges=[

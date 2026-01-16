@@ -1,3 +1,4 @@
+from .build_after import parse_freshness_config
 from .models import (
     Edge,
     Freshness,
@@ -81,22 +82,24 @@ def construct_dag(
                 )
 
                 nodes[node_id] = MaterialisationNode(
-                    freshness=freshness,
                     checksum=checksum,
-                    freshness_config=node.get("config", {}).get("freshness"),
-                    last_updated=(
-                        state.state[asset_external_id].last_updated
-                        if asset_external_id in state.state
-                        else None
+                    freshness_config=parse_freshness_config(
+                        config_on_node=node.get("config", {}).get("freshness")
                     ),
+                    freshness=freshness,
                     node_path=node_path,
+                    reason=reason,
                     sources=(
                         state.state[asset_external_id].sources
                         if asset_external_id in state.state
                         else {}
                     ),
                     sql_path=sql_path,
-                    reason=reason,
+                    last_updated=(
+                        state.state[asset_external_id].last_updated
+                        if asset_external_id in state.state
+                        else None
+                    ),
                 )
 
                 for dep in node.get("depends_on", {}).get("nodes", []):

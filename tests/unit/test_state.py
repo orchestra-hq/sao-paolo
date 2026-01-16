@@ -7,6 +7,7 @@ from pytest_httpx import HTTPXMock
 from src.orchestra_dbt.models import (
     Edge,
     Freshness,
+    FreshnessConfig,
     MaterialisationNode,
     ParsedDag,
     SourceFreshness,
@@ -199,6 +200,7 @@ class TestUpdateState:
                     sql_path="models/model_a.sql",
                     reason="Node not seen before",
                     sources={},
+                    freshness_config=FreshnessConfig(),
                 )
             },
             edges=[],
@@ -241,6 +243,7 @@ class TestUpdateState:
                     sql_path="models/model_a.sql",
                     reason="Node not seen before",
                     sources={},
+                    freshness_config=FreshnessConfig(),
                 ),
             },
             edges=[
@@ -278,6 +281,7 @@ class TestUpdateState:
                     sql_path="models/model_a.sql",
                     reason="Node not seen before",
                     sources={},
+                    freshness_config=FreshnessConfig(),
                 )
             },
             edges=[],
@@ -314,6 +318,7 @@ class TestUpdateState:
                     sql_path="models/model_a.sql",
                     reason="Node not seen before",
                     sources={},
+                    freshness_config=FreshnessConfig(),
                 )
             },
             edges=[],
@@ -387,6 +392,7 @@ class TestUpdateState:
                     sql_path="models/model_a.sql",
                     reason="Node not seen before",
                     sources={},
+                    freshness_config=FreshnessConfig(),
                 ),
                 "model.test_project.model_b": MaterialisationNode(
                     checksum="def456",
@@ -395,6 +401,7 @@ class TestUpdateState:
                     sql_path="models/model_b.sql",
                     sources={},
                     reason="Node not seen before",
+                    freshness_config=FreshnessConfig(),
                 ),
             },
             edges=[],
@@ -437,6 +444,7 @@ class TestUpdateState:
                     sql_path="models/model_a.sql",
                     reason="Node not seen before",
                     sources={},
+                    freshness_config=FreshnessConfig(),
                 ),
             },
             edges=[
@@ -498,6 +506,7 @@ class TestUpdateState:
                     sql_path="models/model_a.sql",
                     reason="Node not seen before",
                     sources={},
+                    freshness_config=FreshnessConfig(),
                 ),
             },
             edges=[
@@ -567,6 +576,7 @@ class TestUpdateState:
                     sql_path="models/model_a.sql",
                     reason="Node not seen before",
                     sources={},
+                    freshness_config=FreshnessConfig(),
                 )
             },
             edges=[],
@@ -606,6 +616,7 @@ class TestUpdateState:
                     sql_path="models/model_a.sql",
                     reason="Node not seen before",
                     sources={},
+                    freshness_config=FreshnessConfig(),
                 ),
                 "model.test_project.model_b": MaterialisationNode(
                     checksum="def456",
@@ -614,6 +625,7 @@ class TestUpdateState:
                     sql_path="models/model_b.sql",
                     reason="Node not seen before",
                     sources={},
+                    freshness_config=FreshnessConfig(),
                 ),
             },
             edges=[
@@ -654,6 +666,7 @@ class TestUpdateState:
                     sql_path="models/model_a.sql",
                     reason="Node not seen before",
                     sources={},
+                    freshness_config=FreshnessConfig(),
                 )
             },
             edges=[],
@@ -687,6 +700,7 @@ class TestUpdateState:
                     sql_path="models/model_a.sql",
                     reason="Node not seen before",
                     sources={},
+                    freshness_config=FreshnessConfig(),
                 )
             },
             edges=[],

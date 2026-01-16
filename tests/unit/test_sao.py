@@ -1,17 +1,18 @@
 from datetime import datetime, timedelta
+from typing import Literal
 
 import pytest
 
 from src.orchestra_dbt.models import (
     Edge,
     Freshness,
+    FreshnessConfig,
     MaterialisationNode,
     Node,
     ParsedDag,
     SourceNode,
 )
 from src.orchestra_dbt.sao import (
-    build_after_duration_minutes,
     build_dependency_graphs,
     calculate_nodes_to_run,
     should_mark_dirty_from_single_upstream,
@@ -30,6 +31,7 @@ class TestBuildDependencyGraphs:
                         sql_path="models/model_a.sql",
                         reason="Node not seen before",
                         sources={},
+                        freshness_config=FreshnessConfig(),
                     ),
                     "model.b": MaterialisationNode(
                         freshness=Freshness.CLEAN,
@@ -38,6 +40,7 @@ class TestBuildDependencyGraphs:
                         sql_path="models/model_b.sql",
                         reason="Node not seen before",
                         sources={},
+                        freshness_config=FreshnessConfig(),
                     ),
                     "model.c": MaterialisationNode(
                         freshness=Freshness.CLEAN,
@@ -46,6 +49,7 @@ class TestBuildDependencyGraphs:
                         sql_path="models/model_c.sql",
                         reason="Node not seen before",
                         sources={},
+                        freshness_config=FreshnessConfig(),
                     ),
                     "model.d": MaterialisationNode(
                         freshness=Freshness.CLEAN,
@@ -54,6 +58,7 @@ class TestBuildDependencyGraphs:
                         sql_path="models/model_d.sql",
                         reason="Node not seen before",
                         sources={},
+                        freshness_config=FreshnessConfig(),
                     ),
                 },
                 edges=[
@@ -82,25 +87,6 @@ class TestBuildDependencyGraphs:
         )
 
 
-class TestBuildAfterDurationMinutes:
-    @pytest.mark.parametrize(
-        "period, count, expected",
-        [("minute", 30, 30), ("hour", 2, 120), ("day", 1, 1440), ("minute", 0, 0)],
-    )
-    def test_build_after_duration_minutes(self, period: str, count: int, expected: int):
-        assert (
-            build_after_duration_minutes({"period": period, "count": count}) == expected
-        )
-
-    def test_build_after_duration_minutes_invalid_period(self):
-        with pytest.raises(ValueError, match="Invalid period"):
-            build_after_duration_minutes({"period": "invalid", "count": 1})
-
-    def test_build_after_duration_minutes_invalid_count(self):
-        with pytest.raises(ValueError, match="Invalid count"):
-            build_after_duration_minutes({"period": "minute", "count": "invalid"})
-
-
 class TestShouldMarkDirtyFromSingleUpstream:
     @pytest.mark.parametrize(
         "upstream_id, upstream_node, current_node, expected",
@@ -118,6 +104,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                         "source.test": datetime.now(),
                     },
                     reason="Node not seen before",
+                    freshness_config=FreshnessConfig(),
                 ),
                 (True, None),
             ),
@@ -137,6 +124,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                         "source.test": datetime.now() - timedelta(minutes=10),
                     },
                     reason="Node not seen before",
+                    freshness_config=FreshnessConfig(),
                 ),
                 (False, "Source source.test has not been updated since last run."),
             ),
@@ -154,6 +142,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                         "source.test": datetime.now() - timedelta(minutes=10),
                     },
                     reason="Node not seen before",
+                    freshness_config=FreshnessConfig(),
                 ),
                 (True, None),
             ),
@@ -170,11 +159,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     sources={
                         "source.test": datetime.now() - timedelta(minutes=10),
                     },
-                    freshness_config={
-                        "erm": {
-                            "foo": "bar",
-                        }
-                    },
+                    freshness_config=FreshnessConfig(),
                     reason="Node not seen before",
                 ),
                 (False, "Source source.test has not been updated since last run."),
@@ -192,12 +177,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     sources={
                         "source.test": datetime.now() - timedelta(minutes=10),
                     },
-                    freshness_config={
-                        "build_after": {
-                            "count": 15,
-                            "period": "minute",
-                        }
-                    },
+                    freshness_config=FreshnessConfig(minutes_sla=15),
                     reason="Node not seen before",
                 ),
                 (False, "Model still within build_after config of 15 minutes."),
@@ -215,12 +195,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     sources={
                         "source.test": datetime.now() - timedelta(minutes=20),
                     },
-                    freshness_config={
-                        "build_after": {
-                            "count": 15,
-                            "period": "minute",
-                        }
-                    },
+                    freshness_config=FreshnessConfig(minutes_sla=15),
                     reason="Node not seen before",
                 ),
                 (True, None),
@@ -236,6 +211,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     last_updated=datetime.now() - timedelta(minutes=60),
                     reason="Node not seen before",
                     sources={},
+                    freshness_config=FreshnessConfig(),
                 ),
                 MaterialisationNode(
                     freshness=Freshness.CLEAN,
@@ -244,12 +220,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     sql_path="models/model_b.sql",
                     last_updated=datetime.now() - timedelta(minutes=20),
                     sources={},
-                    freshness_config={
-                        "build_after": {
-                            "count": 15,
-                            "period": "minute",
-                        }
-                    },
+                    freshness_config=FreshnessConfig(minutes_sla=15),
                     reason="Node not seen before",
                 ),
                 (False, "Upstream node(s) being reused."),
@@ -265,6 +236,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     last_updated=datetime.now() - timedelta(minutes=20),
                     reason="Same state as before",
                     sources={},
+                    freshness_config=FreshnessConfig(),
                 ),
                 MaterialisationNode(
                     freshness=Freshness.CLEAN,
@@ -274,6 +246,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     last_updated=datetime.now() - timedelta(minutes=20),
                     reason="Same state as before",
                     sources={},
+                    freshness_config=FreshnessConfig(),
                 ),
                 (False, "Upstream node(s) being reused."),
             ),
@@ -288,6 +261,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     last_updated=datetime.now() - timedelta(minutes=12),
                     reason="Node not seen before",
                     sources={},
+                    freshness_config=FreshnessConfig(),
                 ),
                 MaterialisationNode(
                     freshness=Freshness.CLEAN,
@@ -296,12 +270,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     sql_path="models/model_b.sql",
                     last_updated=datetime.now() - timedelta(minutes=20),
                     sources={},
-                    freshness_config={
-                        "build_after": {
-                            "count": 15,
-                            "period": "minute",
-                        }
-                    },
+                    freshness_config=FreshnessConfig(minutes_sla=15),
                     reason="Node not seen before",
                 ),
                 (True, None),
@@ -340,6 +309,7 @@ class TestCalculateModelsToRun:
                     sql_path="models/model_a.sql",
                     reason="Node not seen before",
                     sources={},
+                    freshness_config=FreshnessConfig(),
                 ),
                 "model.b": MaterialisationNode(
                     freshness=Freshness.CLEAN,
@@ -348,6 +318,7 @@ class TestCalculateModelsToRun:
                     sql_path="models/model_b.sql",
                     reason="Node not seen before",
                     sources={},
+                    freshness_config=FreshnessConfig(),
                 ),
             },
             edges=[
@@ -383,6 +354,7 @@ class TestCalculateModelsToRun:
                         "source.test": datetime.now() - timedelta(minutes=10),
                     },
                     reason="Node not seen before",
+                    freshness_config=FreshnessConfig(),
                 ),
             },
             edges=[Edge(from_="source.test", to_="model.a")],
@@ -406,7 +378,7 @@ class TestCalculateModelsToRun:
                     checksum="1",
                     node_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
-                    freshness_config={"build_after": {"count": 1, "period": "hour"}},
+                    freshness_config=FreshnessConfig(minutes_sla=60),
                     last_updated=datetime.now() - timedelta(minutes=20),
                     reason="Node not seen before",
                     sources={},
@@ -427,7 +399,7 @@ class TestCalculateModelsToRun:
         [("any", Freshness.DIRTY), ("all", Freshness.CLEAN)],
     )
     def test_calculate_nodes_to_run_with_updates_on_any_or_all(
-        self, updates_on: str, result_freshness: Freshness
+        self, updates_on: Literal["any", "all"], result_freshness: Freshness
     ):
         now = datetime.now()
 
@@ -441,6 +413,7 @@ class TestCalculateModelsToRun:
                     last_updated=now,
                     reason="Node not seen before",
                     sources={},
+                    freshness_config=FreshnessConfig(),
                 ),
                 "model.b": MaterialisationNode(
                     freshness=Freshness.CLEAN,
@@ -450,19 +423,16 @@ class TestCalculateModelsToRun:
                     last_updated=now - timedelta(hours=2),  # Old, shouldn't trigger
                     reason="Node not seen before",
                     sources={},
+                    freshness_config=FreshnessConfig(),
                 ),
                 "model.c": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="3",
                     node_path="models/model_c.sql",
                     sql_path="models/model_c.sql",
-                    freshness_config={
-                        "build_after": {
-                            "count": 30,
-                            "period": "minute",
-                            "updates_on": updates_on,
-                        }
-                    },
+                    freshness_config=FreshnessConfig(
+                        minutes_sla=30, updates_on=updates_on
+                    ),
                     last_updated=now - timedelta(minutes=45),
                     reason="Node not seen before",
                     sources={},
@@ -501,6 +471,7 @@ class TestCalculateModelsToRun:
                         "source.src_orders": now - timedelta(minutes=10),
                     },
                     reason="Node not seen before",
+                    freshness_config=FreshnessConfig(),
                 ),
                 "model.stg_customers": MaterialisationNode(
                     freshness=Freshness.CLEAN,
@@ -512,6 +483,7 @@ class TestCalculateModelsToRun:
                         "source.src_customers": now - timedelta(minutes=10),
                     },
                     reason="Node not seen before",
+                    freshness_config=FreshnessConfig(),
                 ),
                 "model.int_orders": MaterialisationNode(
                     freshness=Freshness.CLEAN,
@@ -521,6 +493,7 @@ class TestCalculateModelsToRun:
                     last_updated=now - timedelta(minutes=8),
                     reason="Node not seen before",
                     sources={},
+                    freshness_config=FreshnessConfig(),
                 ),
                 "model.dim_customers": MaterialisationNode(
                     freshness=Freshness.CLEAN,
@@ -530,6 +503,7 @@ class TestCalculateModelsToRun:
                     last_updated=now - timedelta(minutes=8),
                     reason="Node not seen before",
                     sources={},
+                    freshness_config=FreshnessConfig(),
                 ),
                 "model.cust_orders": MaterialisationNode(
                     freshness=Freshness.CLEAN,
@@ -539,6 +513,7 @@ class TestCalculateModelsToRun:
                     last_updated=now - timedelta(minutes=7),
                     reason="Node not seen before",
                     sources={},
+                    freshness_config=FreshnessConfig(),
                 ),
             },
             edges=[
@@ -598,6 +573,7 @@ class TestCalculateModelsToRun:
                         "source.src_orders": now - timedelta(minutes=10),
                     },
                     reason="Node not seen before",
+                    freshness_config=FreshnessConfig(),
                 ),
                 "model.stg_customers": MaterialisationNode(
                     freshness=Freshness.CLEAN,
@@ -605,12 +581,7 @@ class TestCalculateModelsToRun:
                     node_path="models/model_stg_customers.sql",
                     sql_path="models/model_stg_customers.sql",
                     last_updated=now - timedelta(minutes=4),
-                    freshness_config={
-                        "build_after": {
-                            "count": 7,
-                            "period": "minute",
-                        }
-                    },
+                    freshness_config=FreshnessConfig(minutes_sla=7),
                     sources={
                         "source.src_customers": now - timedelta(minutes=6),
                     },
@@ -624,6 +595,7 @@ class TestCalculateModelsToRun:
                     last_updated=now - timedelta(minutes=3),
                     reason="Node not seen before",
                     sources={},
+                    freshness_config=FreshnessConfig(),
                 ),
                 "model.dim_customers": MaterialisationNode(
                     freshness=Freshness.CLEAN,
@@ -633,6 +605,7 @@ class TestCalculateModelsToRun:
                     last_updated=now - timedelta(minutes=3),
                     reason="Node not seen before",
                     sources={},
+                    freshness_config=FreshnessConfig(),
                 ),
                 "model.cust_orders": MaterialisationNode(
                     freshness=Freshness.CLEAN,
@@ -640,13 +613,7 @@ class TestCalculateModelsToRun:
                     sql_path="models/model_cust_orders.sql",
                     checksum="5",
                     last_updated=now - timedelta(minutes=2),
-                    freshness_config={
-                        "build_after": {
-                            "count": 7,
-                            "period": "minute",
-                            "updates_on": "all",
-                        }
-                    },
+                    freshness_config=FreshnessConfig(minutes_sla=7, updates_on="all"),
                     reason="Node not seen before",
                     sources={},
                 ),

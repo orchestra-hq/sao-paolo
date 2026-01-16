@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -28,6 +29,11 @@ class SourceFreshness(BaseModel):
     sources: dict[str, datetime]
 
 
+class FreshnessConfig(BaseModel):
+    minutes_sla: int | None = None
+    updates_on: Literal["any", "all"] = "any"
+
+
 class Node(BaseModel):
     last_updated: datetime | None = None
     node_type: NodeType
@@ -41,13 +47,12 @@ class MaterialisationNode(Node):
     node_type: NodeType = NodeType.MATERIALISATION
 
     checksum: str
+    freshness_config: FreshnessConfig
     freshness: Freshness
     node_path: str
     reason: str
     sources: dict[str, datetime]
     sql_path: str
-
-    freshness_config: dict | None = None
 
 
 class Edge(BaseModel):

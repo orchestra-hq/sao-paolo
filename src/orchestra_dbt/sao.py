@@ -1,6 +1,6 @@
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
-from typing import Literal, cast
+from typing import cast
 
 from .models import (
     Freshness,
@@ -41,36 +41,6 @@ def build_dependency_graphs(
     return children, parents, in_degree
 
 
-def build_after_duration_minutes(build_after: dict[str, str | int]) -> int:
-    period = build_after["period"]  # minute | hour | day
-    match period:
-        case "minute":
-            mins_multiplier = 1
-        case "hour":
-            mins_multiplier = 60
-        case "day":
-            mins_multiplier = 1440
-        case _:
-            raise ValueError(f"Invalid period: {period}")
-
-    count = build_after["count"]
-    if not isinstance(count, int):
-        raise ValueError(f"Invalid count: {count}")
-
-    return count * mins_multiplier
-
-
-def _get_updates_on(freshness_config: dict | None) -> Literal["any", "all"]:
-    if not freshness_config:
-        return "any"
-
-    build_after = freshness_config.get("build_after")
-    if not build_after:
-        return "any"
-
-    return build_after.get("updates_on", "any")
-
-
 def should_mark_dirty_from_single_upstream(
     upstream_id: str, upstream_node: Node, current_node: MaterialisationNode
 ) -> tuple[bool, str | None]:
@@ -107,20 +77,16 @@ def should_mark_dirty_from_single_upstream(
             if upstream_freshness == Freshness.CLEAN:
                 reason = "Upstream node(s) being reused."
 
-    if not current_node.freshness_config:
+    if not current_node.freshness_config.minutes_sla:
         return upstream_freshness == Freshness.DIRTY, reason
 
-    # Similar to above - build_after should always exist, so this is more for
-    # type checking.
-    build_after = current_node.freshness_config.get("build_after")
-    if not build_after:
-        return upstream_freshness == Freshness.DIRTY, reason
-
-    minutes_sla = build_after_duration_minutes(build_after)
     if current_node.last_updated >= datetime.now(
         tz=current_node.last_updated.tzinfo
-    ) - timedelta(minutes=minutes_sla):
-        return False, f"Model still within build_after config of {minutes_sla} minutes."
+    ) - timedelta(minutes=current_node.freshness_config.minutes_sla):
+        return (
+            False,
+            f"Model still within build_after config of {current_node.freshness_config.minutes_sla} minutes.",
+        )
 
     match upstream_freshness:
         case Freshness.DIRTY:
@@ -141,7 +107,6 @@ def _should_mark_dirty(
     node: MaterialisationNode,
     dag: ParsedDag,
 ) -> tuple[bool, str | None]:
-    updates_on: Literal["any", "all"] = _get_updates_on(node.freshness_config)
     should_be_dirty = False
     reason = None
     for upstream_id in upstream_ids:
@@ -150,12 +115,12 @@ def _should_mark_dirty(
             upstream_node=dag.nodes[upstream_id],
             current_node=node,
         )
-        if updates_on == "all" and not should_be_dirty:
+        if node.freshness_config.updates_on == "all" and not should_be_dirty:
             return (
                 False,
                 f"{reason} (nodes requires all upstreams to be updated)",
             )
-        if updates_on == "any" and should_be_dirty:
+        if node.freshness_config.updates_on == "any" and should_be_dirty:
             return True, None
     return should_be_dirty, reason
 
