@@ -7,7 +7,7 @@ from typing import cast
 import click
 
 from .build_after import propagate_freshness_config
-from .constants import SERVICE_NAME, VALID_ORCHESTRA_ENVS
+from .constants import PROPAGATE_FRESHNESS_UPSTREAM, SERVICE_NAME, VALID_ORCHESTRA_ENVS
 from .dag import construct_dag
 from .logger import log_debug, log_error, log_info, log_reused_nodes
 from .ls import get_paths_to_run
@@ -100,7 +100,8 @@ def main(args: tuple):
     parsed_dag = construct_dag(source_freshness, state)
 
     # Propagate freshness config to upstream nodes
-    propagate_freshness_config(parsed_dag)
+    if PROPAGATE_FRESHNESS_UPSTREAM:
+        propagate_freshness_config(parsed_dag)
 
     # Edit the DAG inline.
     calculate_nodes_to_run(parsed_dag)
