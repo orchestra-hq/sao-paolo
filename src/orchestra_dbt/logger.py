@@ -4,7 +4,7 @@ from datetime import datetime
 import click
 
 from .constants import SERVICE_NAME
-from .models import ModelNode
+from .models import MaterialisationNode
 
 
 def _log(msg: str, fg: str | None, error: bool = False) -> None:
@@ -15,24 +15,24 @@ def _log(msg: str, fg: str | None, error: bool = False) -> None:
     click.echo(message=click.style(text=text, fg=fg), color=True)
 
 
-def log_debug(msg):
+def log_debug(msg) -> None:
     if os.getenv("ORCHESTRA_DBT_DEBUG"):
         _log(msg, None)
 
 
-def log_info(msg):
+def log_info(msg) -> None:
     _log(msg, None)
 
 
-def log_warn(msg):
+def log_warn(msg) -> None:
     _log(msg, "yellow")
 
 
-def log_error(msg):
+def log_error(msg) -> None:
     _log(msg, "red", error=True)
 
 
-def log_reused_models(models_to_reuse: dict[str, ModelNode]):
-    log_info(f"{len(models_to_reuse)} models to be reused.")
-    for node_id in models_to_reuse.keys():
+def log_reused_nodes(nodes_to_reuse: dict[str, MaterialisationNode]) -> None:
+    log_info(f"{len(nodes_to_reuse)} nodes to be reused.")
+    for node_id in nodes_to_reuse.keys():
         log_debug(f" - {node_id}")

@@ -10,7 +10,7 @@ class Freshness(str, Enum):
 
 
 class NodeType(str, Enum):
-    MODEL = "MODEL"
+    MATERIALISATION = "MATERIALISATION"
     SOURCE = "SOURCE"
 
 
@@ -37,14 +37,15 @@ class SourceNode(Node):
     node_type: NodeType = NodeType.SOURCE
 
 
-class ModelNode(Node):
+class MaterialisationNode(Node):
+    node_type: NodeType = NodeType.MATERIALISATION
+
     checksum: str
     freshness: Freshness
-    model_path: str
+    node_path: str
     reason: str
-    sources: dict[str, datetime] = {}
+    sources: dict[str, datetime]
     sql_path: str
-    node_type: NodeType = NodeType.MODEL
 
     freshness_config: dict | None = None
 

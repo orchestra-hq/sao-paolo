@@ -2,7 +2,14 @@ from collections import defaultdict, deque
 from datetime import datetime, timedelta
 from typing import Literal, cast
 
-from .models import Freshness, ModelNode, Node, NodeType, ParsedDag
+from .models import (
+    Freshness,
+    MaterialisationNode,
+    Node,
+    NodeType,
+    ParsedDag,
+    SourceNode,
+)
 
 
 def build_dependency_graphs(
@@ -65,7 +72,7 @@ def _get_updates_on(freshness_config: dict | None) -> Literal["any", "all"]:
 
 
 def should_mark_dirty_from_single_upstream(
-    upstream_id: str, upstream_node: Node, current_node: ModelNode
+    upstream_id: str, upstream_node: Node, current_node: MaterialisationNode
 ) -> tuple[bool, str | None]:
     if not current_node.last_updated:
         # This scenario should not occur as the node will be dirty already.
@@ -74,30 +81,31 @@ def should_mark_dirty_from_single_upstream(
 
     reason = None
 
-    # Based on if the upstream is a source or a node, calculate if it is dirty or not.
-    if upstream_node.node_type == NodeType.SOURCE:
-        if upstream_id not in current_node.sources:
-            upstream_freshness = Freshness.DIRTY
-        else:
-            if not upstream_node.last_updated:
+    match upstream_node.node_type:
+        case NodeType.SOURCE:
+            source_node: SourceNode = cast(SourceNode, upstream_node)
+            if upstream_id not in current_node.sources:
                 upstream_freshness = Freshness.DIRTY
             else:
-                upstream_freshness = (
-                    Freshness.DIRTY
-                    if upstream_node.last_updated > current_node.sources[upstream_id]
-                    else Freshness.CLEAN
-                )
-                if upstream_freshness == Freshness.CLEAN:
-                    reason = (
-                        f"Source {upstream_id} has not been updated since last run."
+                if not source_node.last_updated:
+                    upstream_freshness = Freshness.DIRTY
+                else:
+                    upstream_freshness = (
+                        Freshness.DIRTY
+                        if source_node.last_updated > current_node.sources[upstream_id]
+                        else Freshness.CLEAN
                     )
-    elif upstream_node.node_type == NodeType.MODEL:
-        model_node: ModelNode = cast(ModelNode, upstream_node)
-        upstream_freshness = model_node.freshness
-        if upstream_freshness == Freshness.CLEAN:
-            reason = "Upstream model(s) being reused."
-    else:
-        return True, None
+                    if upstream_freshness == Freshness.CLEAN:
+                        reason = (
+                            f"Source {upstream_id} has not been updated since last run."
+                        )
+        case NodeType.MATERIALISATION:
+            materialisation_node: MaterialisationNode = cast(
+                MaterialisationNode, upstream_node
+            )
+            upstream_freshness = materialisation_node.freshness
+            if upstream_freshness == Freshness.CLEAN:
+                reason = "Upstream node(s) being reused."
 
     if not current_node.freshness_config:
         return upstream_freshness == Freshness.DIRTY, reason
@@ -130,7 +138,7 @@ def should_mark_dirty_from_single_upstream(
 
 def _should_mark_dirty(
     upstream_ids: list[str],
-    node: ModelNode,
+    node: MaterialisationNode,
     dag: ParsedDag,
 ) -> tuple[bool, str | None]:
     updates_on: Literal["any", "all"] = _get_updates_on(node.freshness_config)
@@ -145,7 +153,7 @@ def _should_mark_dirty(
         if updates_on == "all" and not should_be_dirty:
             return (
                 False,
-                f"{reason} (model requires all upstream models to be updated)",
+                f"{reason} (nodes requires all upstreams to be updated)",
             )
         if updates_on == "any" and should_be_dirty:
             return True, None
@@ -159,19 +167,19 @@ def _process_node(
     Process a single node to determine if it should be marked dirty based on upstream dependencies.
     """
     node: Node = dag.nodes[current_id]
-    if node.node_type == NodeType.SOURCE:
+    if node.node_type != NodeType.MATERIALISATION:
         return
 
-    model_node: ModelNode = cast(ModelNode, node)
-    if model_node.freshness == Freshness.CLEAN:
+    materialisation_node: MaterialisationNode = cast(MaterialisationNode, node)
+    if materialisation_node.freshness == Freshness.CLEAN:
         should_mark_dirty, reason = _should_mark_dirty(
-            upstream_ids=parents[current_id], node=model_node, dag=dag
+            upstream_ids=parents[current_id], node=materialisation_node, dag=dag
         )
         if should_mark_dirty:
-            model_node.freshness = Freshness.DIRTY
+            materialisation_node.freshness = Freshness.DIRTY
         else:
             if reason:
-                model_node.reason = reason
+                materialisation_node.reason = reason
 
 
 def _enqueue_children(
@@ -186,7 +194,7 @@ def _enqueue_children(
             queue.append(child)
 
 
-def calculate_models_to_run(dag: ParsedDag):
+def calculate_nodes_to_run(dag: ParsedDag):
     children, parents, in_degree = build_dependency_graphs(dag)
 
     # Queue for nodes with no upstream dependencies (in_degree 0)
