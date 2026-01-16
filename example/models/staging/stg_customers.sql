@@ -4,6 +4,5 @@ with source as (
 select
     customer_id,
     customer_email,
-    customer_name,
-    foobar
+    customer_name
 from source
