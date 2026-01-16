@@ -36,10 +36,6 @@ models:
   - name: stg_customers
     description: "Cleaned and standardized customers data"
     config:
-      freshness:
-        build_after:
-          count: 1
-          period: minute
       tags:
         - b
       meta:
@@ -66,7 +62,7 @@ models:
     config:
       freshness:
         build_after:
-          count: 3
+          count: 5
           period: minute
           updates_on: all
       tags:
@@ -76,5 +72,9 @@ models:
   - name: dim_customers
     description: "Dimension table for customers"
     config:
+      freshness:
+        build_after:
+          count: 3
+          period: minute
       tags:
         - b
