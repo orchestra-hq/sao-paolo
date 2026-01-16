@@ -62,7 +62,7 @@ models:
     config:
       freshness:
         build_after:
-          count: 5
+          count: 10
           period: minute
           updates_on: all
       tags:
@@ -74,7 +74,7 @@ models:
     config:
       freshness:
         build_after:
-          count: 3
+          count: 6
           period: minute
       tags:
         - b
