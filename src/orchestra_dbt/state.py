@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from .logger import log_error, log_info, log_warn
 from .models import (
-    ModelNode,
+    MaterialisationNode,
     NodeType,
     ParsedDag,
     SourceFreshness,
@@ -50,7 +50,7 @@ def load_state() -> StateApiModel:
                 if not key.startswith(integration_account_id):
                     state.state.pop(key)
         log_info(
-            f"State loaded. Retrieved {len(state.state)} models.",
+            f"State loaded. Retrieved {len(state.state)} items.",
         )
         return state
     except (ValidationError, ValueError) as e:
@@ -83,7 +83,7 @@ def update_state(
         if node.node_type == NodeType.SOURCE:
             continue
 
-        model_node: ModelNode = cast(ModelNode, node)
+        materialisation_node: MaterialisationNode = cast(MaterialisationNode, node)
         last_updated_from_run_results = get_last_updated_from_run_results(node_id)
         if not last_updated_from_run_results:
             continue
@@ -105,7 +105,7 @@ def update_state(
             asset_external_id = f"{integration_account_id}.{node_id}"
 
         state.state[asset_external_id] = StateItem(
-            checksum=model_node.checksum,
+            checksum=materialisation_node.checksum,
             last_updated=last_updated_from_run_results,
             sources=sources_dict,
         )

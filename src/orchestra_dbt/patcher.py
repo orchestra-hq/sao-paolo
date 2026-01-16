@@ -4,7 +4,7 @@ from pathlib import Path
 
 from .constants import ORCHESTRA_REUSED_NODE
 from .logger import log_info, log_warn
-from .models import ModelNode
+from .models import MaterialisationNode
 
 
 def patch_file(file_path: Path, reason: str) -> None:
@@ -43,7 +43,7 @@ def _get_sql_files(cwd: Path) -> list[Path]:
     return sql_files
 
 
-def patch_sql_files(models_to_reuse: dict[str, ModelNode]) -> None:
+def patch_sql_files(nodes_to_reuse: dict[str, MaterialisationNode]) -> None:
     cwd = Path(os.getcwd())
     sql_files = _get_sql_files(cwd)
 
@@ -52,7 +52,7 @@ def patch_sql_files(models_to_reuse: dict[str, ModelNode]) -> None:
         return
 
     sql_paths_to_patch_with_reason: dict[str, str] = {
-        model.sql_path: model.reason for model in models_to_reuse.values()
+        node.sql_path: node.reason for node in nodes_to_reuse.values()
     }
 
     for sql_file in sql_files:

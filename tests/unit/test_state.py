@@ -7,7 +7,7 @@ from pytest_httpx import HTTPXMock
 from src.orchestra_dbt.models import (
     Edge,
     Freshness,
-    ModelNode,
+    MaterialisationNode,
     ParsedDag,
     SourceFreshness,
     SourceNode,
@@ -192,12 +192,13 @@ class TestUpdateState:
         state = StateApiModel(state={})
         parsed_dag = ParsedDag(
             nodes={
-                "model.test_project.model_a": ModelNode(
+                "model.test_project.model_a": MaterialisationNode(
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
-                    model_path="models/model_a.sql",
+                    node_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     reason="Node not seen before",
+                    sources={},
                 )
             },
             edges=[],
@@ -233,12 +234,13 @@ class TestUpdateState:
         parsed_dag = ParsedDag(
             nodes={
                 "source.test_db.test_schema.test_table": SourceNode(),
-                "model.test_project.model_a": ModelNode(
+                "model.test_project.model_a": MaterialisationNode(
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
-                    model_path="models/model_a.sql",
+                    node_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     reason="Node not seen before",
+                    sources={},
                 ),
             },
             edges=[
@@ -269,12 +271,13 @@ class TestUpdateState:
         state = StateApiModel(state={})
         parsed_dag = ParsedDag(
             nodes={
-                "model.test_project.model_a": ModelNode(
+                "model.test_project.model_a": MaterialisationNode(
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
-                    model_path="models/model_a.sql",
+                    node_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     reason="Node not seen before",
+                    sources={},
                 )
             },
             edges=[],
@@ -304,12 +307,13 @@ class TestUpdateState:
         state = StateApiModel(state={})
         parsed_dag = ParsedDag(
             nodes={
-                "model.test_project.model_a": ModelNode(
+                "model.test_project.model_a": MaterialisationNode(
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
-                    model_path="models/model_a.sql",
+                    node_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     reason="Node not seen before",
+                    sources={},
                 )
             },
             edges=[],
@@ -376,18 +380,20 @@ class TestUpdateState:
         state = StateApiModel(state={})
         parsed_dag = ParsedDag(
             nodes={
-                "model.test_project.model_a": ModelNode(
+                "model.test_project.model_a": MaterialisationNode(
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
-                    model_path="models/model_a.sql",
+                    node_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     reason="Node not seen before",
+                    sources={},
                 ),
-                "model.test_project.model_b": ModelNode(
+                "model.test_project.model_b": MaterialisationNode(
                     checksum="def456",
                     freshness=Freshness.CLEAN,
-                    model_path="models/model_b.sql",
+                    node_path="models/model_b.sql",
                     sql_path="models/model_b.sql",
+                    sources={},
                     reason="Node not seen before",
                 ),
             },
@@ -424,12 +430,13 @@ class TestUpdateState:
             nodes={
                 "source.test_db.test_schema.table1": SourceNode(),
                 "source.test_db.test_schema.table2": SourceNode(),
-                "model.test_project.model_a": ModelNode(
+                "model.test_project.model_a": MaterialisationNode(
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
-                    model_path="models/model_a.sql",
+                    node_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     reason="Node not seen before",
+                    sources={},
                 ),
             },
             edges=[
@@ -484,12 +491,13 @@ class TestUpdateState:
             nodes={
                 "source.test_db.test_schema.table1": SourceNode(),
                 "source.test_db.test_schema.table2": SourceNode(),
-                "model.test_project.model_a": ModelNode(
+                "model.test_project.model_a": MaterialisationNode(
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
-                    model_path="models/model_a.sql",
+                    node_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     reason="Node not seen before",
+                    sources={},
                 ),
             },
             edges=[
@@ -552,12 +560,13 @@ class TestUpdateState:
         )
         parsed_dag = ParsedDag(
             nodes={
-                "model.test_project.model_a": ModelNode(
+                "model.test_project.model_a": MaterialisationNode(
                     checksum="new_checksum",
                     freshness=Freshness.CLEAN,
-                    model_path="models/model_a.sql",
+                    node_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     reason="Node not seen before",
+                    sources={},
                 )
             },
             edges=[],
@@ -590,19 +599,21 @@ class TestUpdateState:
         state = StateApiModel(state={})
         parsed_dag = ParsedDag(
             nodes={
-                "model.test_project.model_a": ModelNode(
+                "model.test_project.model_a": MaterialisationNode(
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
-                    model_path="models/model_a.sql",
+                    node_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     reason="Node not seen before",
+                    sources={},
                 ),
-                "model.test_project.model_b": ModelNode(
+                "model.test_project.model_b": MaterialisationNode(
                     checksum="def456",
                     freshness=Freshness.CLEAN,
-                    model_path="models/model_b.sql",
+                    node_path="models/model_b.sql",
                     sql_path="models/model_b.sql",
                     reason="Node not seen before",
+                    sources={},
                 ),
             },
             edges=[
@@ -636,12 +647,13 @@ class TestUpdateState:
         state = StateApiModel(state={})
         parsed_dag = ParsedDag(
             nodes={
-                "model.test_project.model_a": ModelNode(
+                "model.test_project.model_a": MaterialisationNode(
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
-                    model_path="models/model_a.sql",
+                    node_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     reason="Node not seen before",
+                    sources={},
                 )
             },
             edges=[],
@@ -668,12 +680,13 @@ class TestUpdateState:
         state = StateApiModel(state={})
         parsed_dag = ParsedDag(
             nodes={
-                "model.test_project.model_a": ModelNode(
+                "model.test_project.model_a": MaterialisationNode(
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
-                    model_path="models/model_a.sql",
+                    node_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     reason="Node not seen before",
+                    sources={},
                 )
             },
             edges=[],

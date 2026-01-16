@@ -1,17 +1,80 @@
 from datetime import datetime
 from unittest.mock import patch
 
-from src.orchestra_dbt.dag import construct_dag
+from src.orchestra_dbt.dag import calculate_freshness_on_node, construct_dag
 from src.orchestra_dbt.models import (
     Edge,
     Freshness,
-    ModelNode,
+    MaterialisationNode,
     ParsedDag,
     SourceFreshness,
     SourceNode,
     StateApiModel,
     StateItem,
 )
+
+
+class TestCalculateFreshnessOnNode:
+    def test_calculate_freshness_on_node_snapshot(self):
+        assert calculate_freshness_on_node(
+            asset_external_id="test.snapshot.a.b",
+            checksum="123",
+            state=StateApiModel(state={}),
+            resource_type="snapshot",
+            track_state=True,
+        ) == (Freshness.DIRTY, "Snapshot is always dirty.")
+
+    def test_calculate_freshness_on_node_not_tracking_state(self):
+        assert calculate_freshness_on_node(
+            asset_external_id="test.seed.a.b",
+            checksum="123",
+            state=StateApiModel(state={}),
+            resource_type="seed",
+            track_state=False,
+        ) == (Freshness.DIRTY, "State orchestration for this node is disabled.")
+
+    def test_calculate_freshness_on_node_not_in_state(self):
+        assert calculate_freshness_on_node(
+            asset_external_id="test.model.a.b",
+            checksum="123",
+            state=StateApiModel(state={}),
+            resource_type="model",
+            track_state=True,
+        ) == (Freshness.DIRTY, "Model not previously seen in state.")
+
+    def test_calculate_freshness_on_node_checksum_changed(self):
+        assert calculate_freshness_on_node(
+            asset_external_id="test.model.a.b",
+            checksum="123",
+            state=StateApiModel(
+                state={
+                    "test.model.a.b": StateItem(
+                        last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                        checksum="456",
+                        sources={},
+                    )
+                }
+            ),
+            resource_type="model",
+            track_state=True,
+        ) == (Freshness.DIRTY, "Checksum changed since last run.")
+
+    def test_calculate_freshness_on_node_checksum_matches(self):
+        assert calculate_freshness_on_node(
+            asset_external_id="test.model.a.b",
+            checksum="123",
+            state=StateApiModel(
+                state={
+                    "test.model.a.b": StateItem(
+                        last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                        checksum="123",
+                        sources={},
+                    ),
+                }
+            ),
+            resource_type="model",
+            track_state=True,
+        ) == (Freshness.CLEAN, "Model in same state as last run.")
 
 
 class TestConstructDag:
@@ -57,11 +120,11 @@ class TestConstructDag:
                 "source.test_db.test_schema.test_table": SourceNode(
                     last_updated=datetime(2024, 1, 3, 12, 0, 0),
                 ),
-                "model.test_project.model_a": ModelNode(
+                "model.test_project.model_a": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     last_updated=datetime(2024, 1, 1, 12, 0, 0),
                     checksum="def456",
-                    model_path="models/model_a.sql",
+                    node_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     sources={
                         "source.test_db.test_schema.test_table": datetime(
@@ -70,20 +133,22 @@ class TestConstructDag:
                     },
                     reason="Model in same state as last run.",
                 ),
-                "model.test_project_2.model_b": ModelNode(
+                "model.test_project_2.model_b": MaterialisationNode(
                     freshness=Freshness.DIRTY,
                     checksum="ghi789",
-                    model_path="models/model_b.sql",
+                    node_path="models/model_b.sql",
                     sql_path="dbt_packages/test_project_2/models/model_b.sql",
-                    reason="Node not previously seen in state.",
+                    reason="Model not previously seen in state.",
+                    sources={},
                 ),
-                "model.test_project.model_c": ModelNode(
+                "model.test_project.model_c": MaterialisationNode(
                     freshness=Freshness.DIRTY,
                     last_updated=datetime(2024, 1, 1, 12, 0, 0),
                     checksum="456",
-                    model_path="models/model_c.sql",
+                    node_path="models/model_c.sql",
                     sql_path="models/model_c.sql",
                     reason="Checksum changed since last run.",
+                    sources={},
                 ),
             },
             edges=[
@@ -125,5 +190,5 @@ class TestConstructDag:
 
         assert "model.test_project.model_a" in dag.nodes
         # Model should be DIRTY since checksum doesn't match
-        assert isinstance(dag.nodes["model.test_project.model_a"], ModelNode)
+        assert isinstance(dag.nodes["model.test_project.model_a"], MaterialisationNode)
         assert dag.nodes["model.test_project.model_a"].freshness == Freshness.DIRTY

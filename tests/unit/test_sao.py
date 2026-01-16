@@ -5,7 +5,7 @@ import pytest
 from src.orchestra_dbt.models import (
     Edge,
     Freshness,
-    ModelNode,
+    MaterialisationNode,
     Node,
     ParsedDag,
     SourceNode,
@@ -13,7 +13,7 @@ from src.orchestra_dbt.models import (
 from src.orchestra_dbt.sao import (
     build_after_duration_minutes,
     build_dependency_graphs,
-    calculate_models_to_run,
+    calculate_nodes_to_run,
     should_mark_dirty_from_single_upstream,
 )
 
@@ -23,33 +23,37 @@ class TestBuildDependencyGraphs:
         assert build_dependency_graphs(
             dag=ParsedDag(
                 nodes={
-                    "model.a": ModelNode(
+                    "model.a": MaterialisationNode(
                         freshness=Freshness.CLEAN,
                         checksum="1",
-                        model_path="models/model_a.sql",
+                        node_path="models/model_a.sql",
                         sql_path="models/model_a.sql",
                         reason="Node not seen before",
+                        sources={},
                     ),
-                    "model.b": ModelNode(
+                    "model.b": MaterialisationNode(
                         freshness=Freshness.CLEAN,
                         checksum="2",
-                        model_path="models/model_b.sql",
+                        node_path="models/model_b.sql",
                         sql_path="models/model_b.sql",
                         reason="Node not seen before",
+                        sources={},
                     ),
-                    "model.c": ModelNode(
+                    "model.c": MaterialisationNode(
                         freshness=Freshness.CLEAN,
                         checksum="3",
-                        model_path="models/model_c.sql",
+                        node_path="models/model_c.sql",
                         sql_path="models/model_c.sql",
                         reason="Node not seen before",
+                        sources={},
                     ),
-                    "model.d": ModelNode(
+                    "model.d": MaterialisationNode(
                         freshness=Freshness.CLEAN,
                         checksum="4",
-                        model_path="models/model_d.sql",
+                        node_path="models/model_d.sql",
                         sql_path="models/model_d.sql",
                         reason="Node not seen before",
+                        sources={},
                     ),
                 },
                 edges=[
@@ -105,10 +109,10 @@ class TestShouldMarkDirtyFromSingleUpstream:
             (
                 "source.test",
                 SourceNode(),
-                ModelNode(
+                MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    model_path="models/model_a.sql",
+                    node_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     sources={
                         "source.test": datetime.now(),
@@ -123,10 +127,10 @@ class TestShouldMarkDirtyFromSingleUpstream:
                 SourceNode(
                     last_updated=datetime.now() - timedelta(minutes=10),
                 ),
-                ModelNode(
+                MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    model_path="models/model_a.sql",
+                    node_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=10),
                     sources={
@@ -140,10 +144,10 @@ class TestShouldMarkDirtyFromSingleUpstream:
             (
                 "source.test",
                 SourceNode(last_updated=datetime.now()),
-                ModelNode(
+                MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    model_path="models/model_a.sql",
+                    node_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=10),
                     sources={
@@ -157,10 +161,10 @@ class TestShouldMarkDirtyFromSingleUpstream:
             (
                 "source.test",
                 SourceNode(last_updated=datetime.now() - timedelta(minutes=10)),
-                ModelNode(
+                MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    model_path="models/model_a.sql",
+                    node_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=10),
                     sources={
@@ -179,10 +183,10 @@ class TestShouldMarkDirtyFromSingleUpstream:
             (
                 "source.test",
                 SourceNode(last_updated=datetime.now()),
-                ModelNode(
+                MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    model_path="models/model_a.sql",
+                    node_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=10),
                     sources={
@@ -202,10 +206,10 @@ class TestShouldMarkDirtyFromSingleUpstream:
             (
                 "source.test",
                 SourceNode(last_updated=datetime.now()),
-                ModelNode(
+                MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    model_path="models/model_a.sql",
+                    node_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=20),
                     sources={
@@ -224,18 +228,19 @@ class TestShouldMarkDirtyFromSingleUpstream:
             # Clean parent Model -> parent updated a while ago
             (
                 "model.a",
-                ModelNode(
+                MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    model_path="models/model_a.sql",
+                    node_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=60),
                     reason="Node not seen before",
+                    sources={},
                 ),
-                ModelNode(
+                MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    model_path="models/model_b.sql",
+                    node_path="models/model_b.sql",
                     sql_path="models/model_b.sql",
                     last_updated=datetime.now() - timedelta(minutes=20),
                     sources={},
@@ -247,44 +252,47 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     },
                     reason="Node not seen before",
                 ),
-                (False, "Upstream model(s) being reused."),
+                (False, "Upstream node(s) being reused."),
             ),
             # Clean parent Model -> clean child
             (
                 "model.a",
-                ModelNode(
+                MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    model_path="models/model_a.sql",
+                    node_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=20),
                     reason="Same state as before",
+                    sources={},
                 ),
-                ModelNode(
+                MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    model_path="models/model_b.sql",
+                    node_path="models/model_b.sql",
                     sql_path="models/model_b.sql",
                     last_updated=datetime.now() - timedelta(minutes=20),
                     reason="Same state as before",
+                    sources={},
                 ),
-                (False, "Upstream model(s) being reused."),
+                (False, "Upstream node(s) being reused."),
             ),
             # Clean parent Model -> parent updated more recently than the current node
             (
                 "model.a",
-                ModelNode(
+                MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    model_path="models/model_a.sql",
+                    node_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=12),
                     reason="Node not seen before",
+                    sources={},
                 ),
-                ModelNode(
+                MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    model_path="models/model_b.sql",
+                    node_path="models/model_b.sql",
                     sql_path="models/model_b.sql",
                     last_updated=datetime.now() - timedelta(minutes=20),
                     sources={},
@@ -304,7 +312,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
         self,
         upstream_id: str,
         upstream_node: Node,
-        current_node: ModelNode,
+        current_node: MaterialisationNode,
         expected: tuple[bool, str | None],
     ):
         assert (
@@ -318,26 +326,28 @@ class TestShouldMarkDirtyFromSingleUpstream:
 
 
 class TestCalculateModelsToRun:
-    def test_calculate_models_to_run_propagates_dirty(self):
+    def test_calculate_nodes_to_run_propagates_dirty(self):
         # Create a simple DAG: source -> model_a -> model_b
         dag = ParsedDag(
             nodes={
                 "source.test": SourceNode(
                     last_updated=datetime.now(),
                 ),
-                "model.a": ModelNode(
+                "model.a": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    model_path="models/model_a.sql",
+                    node_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     reason="Node not seen before",
+                    sources={},
                 ),
-                "model.b": ModelNode(
+                "model.b": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="2",
-                    model_path="models/model_b.sql",
+                    node_path="models/model_b.sql",
                     sql_path="models/model_b.sql",
                     reason="Node not seen before",
+                    sources={},
                 ),
             },
             edges=[
@@ -345,28 +355,28 @@ class TestCalculateModelsToRun:
                 Edge(from_="model.a", to_="model.b"),
             ],
         )
-        calculate_models_to_run(dag=dag)
+        calculate_nodes_to_run(dag=dag)
 
         # Both models should be dirty now
         assert (
-            isinstance(dag.nodes["model.a"], ModelNode)
+            isinstance(dag.nodes["model.a"], MaterialisationNode)
             and dag.nodes["model.a"].freshness == Freshness.DIRTY
         )
         assert (
-            isinstance(dag.nodes["model.b"], ModelNode)
+            isinstance(dag.nodes["model.b"], MaterialisationNode)
             and dag.nodes["model.b"].freshness == Freshness.DIRTY
         )
 
-    def test_calculate_models_to_run_preserves_clean(self):
+    def test_calculate_nodes_to_run_preserves_clean(self):
         dag = ParsedDag(
             nodes={
                 "source.test": SourceNode(
                     last_updated=datetime.now() - timedelta(minutes=10),
                 ),
-                "model.a": ModelNode(
+                "model.a": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    model_path="models/model_a.sql",
+                    node_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=5),
                     sources={
@@ -377,37 +387,38 @@ class TestCalculateModelsToRun:
             },
             edges=[Edge(from_="source.test", to_="model.a")],
         )
-        calculate_models_to_run(dag=dag)
+        calculate_nodes_to_run(dag=dag)
 
         # Model should remain clean
         assert (
-            isinstance(dag.nodes["model.a"], ModelNode)
+            isinstance(dag.nodes["model.a"], MaterialisationNode)
             and dag.nodes["model.a"].freshness == Freshness.CLEAN
         )
 
-    def test_calculate_models_to_run_respects_build_after(self):
+    def test_calculate_nodes_to_run_respects_build_after(self):
         dag = ParsedDag(
             nodes={
                 "source.test": SourceNode(
                     last_updated=datetime.now(),
                 ),
-                "model.a": ModelNode(
+                "model.a": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    model_path="models/model_a.sql",
+                    node_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     freshness_config={"build_after": {"count": 1, "period": "hour"}},
                     last_updated=datetime.now() - timedelta(minutes=20),
                     reason="Node not seen before",
+                    sources={},
                 ),
             },
             edges=[Edge(from_="source.test", to_="model.a")],
         )
-        calculate_models_to_run(dag=dag)
+        calculate_nodes_to_run(dag=dag)
 
         # Model should remain clean due to build_after config
         assert (
-            isinstance(dag.nodes["model.a"], ModelNode)
+            isinstance(dag.nodes["model.a"], MaterialisationNode)
             and dag.nodes["model.a"].freshness == Freshness.CLEAN
         )
 
@@ -415,33 +426,35 @@ class TestCalculateModelsToRun:
         "updates_on, result_freshness",
         [("any", Freshness.DIRTY), ("all", Freshness.CLEAN)],
     )
-    def test_calculate_models_to_run_with_updates_on_any_or_all(
+    def test_calculate_nodes_to_run_with_updates_on_any_or_all(
         self, updates_on: str, result_freshness: Freshness
     ):
         now = datetime.now()
 
         dag = ParsedDag(
             nodes={
-                "model.a": ModelNode(
+                "model.a": MaterialisationNode(
                     freshness=Freshness.DIRTY,
                     checksum="1",
-                    model_path="models/model_a.sql",
+                    node_path="models/model_a.sql",
                     sql_path="models/model_a.sql",
                     last_updated=now,
                     reason="Node not seen before",
+                    sources={},
                 ),
-                "model.b": ModelNode(
+                "model.b": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="2",
-                    model_path="models/model_b.sql",
+                    node_path="models/model_b.sql",
                     sql_path="models/model_b.sql",
                     last_updated=now - timedelta(hours=2),  # Old, shouldn't trigger
                     reason="Node not seen before",
+                    sources={},
                 ),
-                "model.c": ModelNode(
+                "model.c": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="3",
-                    model_path="models/model_c.sql",
+                    node_path="models/model_c.sql",
                     sql_path="models/model_c.sql",
                     freshness_config={
                         "build_after": {
@@ -452,6 +465,7 @@ class TestCalculateModelsToRun:
                     },
                     last_updated=now - timedelta(minutes=45),
                     reason="Node not seen before",
+                    sources={},
                 ),
             },
             edges=[
@@ -460,13 +474,13 @@ class TestCalculateModelsToRun:
             ],
         )
 
-        calculate_models_to_run(dag=dag)
+        calculate_nodes_to_run(dag=dag)
         assert (
-            isinstance(dag.nodes["model.c"], ModelNode)
+            isinstance(dag.nodes["model.c"], MaterialisationNode)
             and dag.nodes["model.c"].freshness == result_freshness
         )
 
-    def test_calculate_models_to_run_sample_1(self):
+    def test_calculate_nodes_to_run_sample_1(self):
         now = datetime.now()
 
         dag = ParsedDag(
@@ -477,10 +491,10 @@ class TestCalculateModelsToRun:
                 "source.src_customers": SourceNode(
                     last_updated=now,
                 ),
-                "model.stg_orders": ModelNode(
+                "model.stg_orders": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    model_path="models/model_stg_orders.sql",
+                    node_path="models/model_stg_orders.sql",
                     sql_path="models/model_stg_orders.sql",
                     last_updated=now - timedelta(minutes=9),
                     sources={
@@ -488,10 +502,10 @@ class TestCalculateModelsToRun:
                     },
                     reason="Node not seen before",
                 ),
-                "model.stg_customers": ModelNode(
+                "model.stg_customers": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="2",
-                    model_path="models/model_stg_customers.sql",
+                    node_path="models/model_stg_customers.sql",
                     sql_path="models/model_stg_customers.sql",
                     last_updated=now - timedelta(minutes=9),
                     sources={
@@ -499,29 +513,32 @@ class TestCalculateModelsToRun:
                     },
                     reason="Node not seen before",
                 ),
-                "model.int_orders": ModelNode(
+                "model.int_orders": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="3",
-                    model_path="models/model_int_orders.sql",
+                    node_path="models/model_int_orders.sql",
                     sql_path="models/model_int_orders.sql",
                     last_updated=now - timedelta(minutes=8),
                     reason="Node not seen before",
+                    sources={},
                 ),
-                "model.dim_customers": ModelNode(
+                "model.dim_customers": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="4",
-                    model_path="models/model_dim_customers.sql",
+                    node_path="models/model_dim_customers.sql",
                     sql_path="models/model_dim_customers.sql",
                     last_updated=now - timedelta(minutes=8),
                     reason="Node not seen before",
+                    sources={},
                 ),
-                "model.cust_orders": ModelNode(
+                "model.cust_orders": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="5",
-                    model_path="models/model_cust_orders.sql",
+                    node_path="models/model_cust_orders.sql",
                     sql_path="models/model_cust_orders.sql",
                     last_updated=now - timedelta(minutes=7),
                     reason="Node not seen before",
+                    sources={},
                 ),
             },
             edges=[
@@ -534,33 +551,33 @@ class TestCalculateModelsToRun:
             ],
         )
 
-        calculate_models_to_run(dag=dag)
+        calculate_nodes_to_run(dag=dag)
 
         # Reused
         assert (
-            isinstance(dag.nodes["model.stg_orders"], ModelNode)
+            isinstance(dag.nodes["model.stg_orders"], MaterialisationNode)
             and dag.nodes["model.stg_orders"].freshness == Freshness.CLEAN
         )
         assert (
-            isinstance(dag.nodes["model.int_orders"], ModelNode)
+            isinstance(dag.nodes["model.int_orders"], MaterialisationNode)
             and dag.nodes["model.int_orders"].freshness == Freshness.CLEAN
         )
 
         # Rebuilt
         assert (
-            isinstance(dag.nodes["model.stg_customers"], ModelNode)
+            isinstance(dag.nodes["model.stg_customers"], MaterialisationNode)
             and dag.nodes["model.stg_customers"].freshness == Freshness.DIRTY
         )
         assert (
-            isinstance(dag.nodes["model.cust_orders"], ModelNode)
+            isinstance(dag.nodes["model.cust_orders"], MaterialisationNode)
             and dag.nodes["model.cust_orders"].freshness == Freshness.DIRTY
         )
         assert (
-            isinstance(dag.nodes["model.dim_customers"], ModelNode)
+            isinstance(dag.nodes["model.dim_customers"], MaterialisationNode)
             and dag.nodes["model.dim_customers"].freshness == Freshness.DIRTY
         )
 
-    def test_calculate_models_to_run_sample_2(self):
+    def test_calculate_nodes_to_run_sample_2(self):
         now = datetime.now()
 
         dag = ParsedDag(
@@ -571,10 +588,10 @@ class TestCalculateModelsToRun:
                 "source.src_customers": SourceNode(
                     last_updated=now - timedelta(minutes=5),
                 ),
-                "model.stg_orders": ModelNode(
+                "model.stg_orders": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    model_path="models/model_stg_orders.sql",
+                    node_path="models/model_stg_orders.sql",
                     sql_path="models/model_stg_orders.sql",
                     last_updated=now - timedelta(minutes=4),
                     sources={
@@ -582,10 +599,10 @@ class TestCalculateModelsToRun:
                     },
                     reason="Node not seen before",
                 ),
-                "model.stg_customers": ModelNode(
+                "model.stg_customers": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="2",
-                    model_path="models/model_stg_customers.sql",
+                    node_path="models/model_stg_customers.sql",
                     sql_path="models/model_stg_customers.sql",
                     last_updated=now - timedelta(minutes=4),
                     freshness_config={
@@ -599,25 +616,27 @@ class TestCalculateModelsToRun:
                     },
                     reason="Node not seen before",
                 ),
-                "model.int_orders": ModelNode(
+                "model.int_orders": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="3",
-                    model_path="models/model_int_orders.sql",
+                    node_path="models/model_int_orders.sql",
                     sql_path="models/model_int_orders.sql",
                     last_updated=now - timedelta(minutes=3),
                     reason="Node not seen before",
+                    sources={},
                 ),
-                "model.dim_customers": ModelNode(
+                "model.dim_customers": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="4",
-                    model_path="models/model_dim_customers.sql",
+                    node_path="models/model_dim_customers.sql",
                     sql_path="models/model_dim_customers.sql",
                     last_updated=now - timedelta(minutes=3),
                     reason="Node not seen before",
+                    sources={},
                 ),
-                "model.cust_orders": ModelNode(
+                "model.cust_orders": MaterialisationNode(
                     freshness=Freshness.CLEAN,
-                    model_path="models/model_cust_orders.sql",
+                    node_path="models/model_cust_orders.sql",
                     sql_path="models/model_cust_orders.sql",
                     checksum="5",
                     last_updated=now - timedelta(minutes=2),
@@ -629,6 +648,7 @@ class TestCalculateModelsToRun:
                         }
                     },
                     reason="Node not seen before",
+                    sources={},
                 ),
             },
             edges=[
@@ -641,26 +661,26 @@ class TestCalculateModelsToRun:
             ],
         )
 
-        calculate_models_to_run(dag=dag)
+        calculate_nodes_to_run(dag=dag)
 
         # All reused
         assert (
-            isinstance(dag.nodes["model.stg_orders"], ModelNode)
+            isinstance(dag.nodes["model.stg_orders"], MaterialisationNode)
             and dag.nodes["model.stg_orders"].freshness == Freshness.CLEAN
         )
         assert (
-            isinstance(dag.nodes["model.int_orders"], ModelNode)
+            isinstance(dag.nodes["model.int_orders"], MaterialisationNode)
             and dag.nodes["model.int_orders"].freshness == Freshness.CLEAN
         )
         assert (
-            isinstance(dag.nodes["model.stg_customers"], ModelNode)
+            isinstance(dag.nodes["model.stg_customers"], MaterialisationNode)
             and dag.nodes["model.stg_customers"].freshness == Freshness.CLEAN
         )
         assert (
-            isinstance(dag.nodes["model.cust_orders"], ModelNode)
+            isinstance(dag.nodes["model.cust_orders"], MaterialisationNode)
             and dag.nodes["model.cust_orders"].freshness == Freshness.CLEAN
         )
         assert (
-            isinstance(dag.nodes["model.dim_customers"], ModelNode)
+            isinstance(dag.nodes["model.dim_customers"], MaterialisationNode)
             and dag.nodes["model.dim_customers"].freshness == Freshness.CLEAN
         )
