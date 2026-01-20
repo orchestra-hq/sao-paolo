@@ -135,13 +135,15 @@ def patch_seed_properties(
         seeds_properties = load_yaml(seed_properties_file_path)
         if "seeds" not in seeds_properties:
             raise ValueError("Missing 'seeds' key. Skipping patching of seeds.")
+        if not isinstance(seeds_properties["seeds"], list):
+            raise ValueError("'seeds' key must be a list. Skipping patching of seeds.")
     except FileNotFoundError:
         log_info(
             f"No {seed_properties_file_path} file found in project directory. Creating one."
         )
         seeds_properties: dict = {"seeds": []}
-    except ValueError as value_error:
-        log_error(f"Error loading {seed_properties_file_path}: {value_error}")
+    except Exception as e:
+        log_error(f"Error loading {seed_properties_file_path}: {e}")
         return
 
     for seed_properties in seeds_properties.get("seeds", []):
