@@ -126,7 +126,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     reason="Node not seen before",
                     freshness_config=FreshnessConfig(),
                 ),
-                (False, "Source source.test has not been updated since last run."),
+                (False, "Source source.test has no new data since last run."),
             ),
             # Dirty Source -> Model no config
             (
@@ -162,7 +162,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     freshness_config=FreshnessConfig(),
                     reason="Node not seen before",
                 ),
-                (False, "Source source.test has not been updated since last run."),
+                (False, "Source source.test has no new data since last run."),
             ),
             # Dirty Source -> Model should not be built yet
             (
@@ -184,7 +184,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                 ),
                 (
                     False,
-                    "Model still within build_after config of 15 minutes. Inherited from model.c.",
+                    "Model still within freshness config of 15 minutes. Last updated 10 minutes ago. Config inherited from model.c.",
                 ),
             ),
             # Dirty Source -> Model should be built again

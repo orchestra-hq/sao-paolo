@@ -1,7 +1,7 @@
 [project]
 name = "orchestra-dbt"
-version = "0.1.1"
-description = "To be announced!"
+version = "0.2.0"
+description = "Stateful orchestration for dbt Core projects in Orchestra."
 authors = [{ name = "Oliver Crawford" }]
 readme = "README.md"
 requires-python = ">=3.11"

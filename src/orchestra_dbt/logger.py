@@ -33,6 +33,11 @@ def log_error(msg) -> None:
 
 
 def log_reused_nodes(nodes_to_reuse: dict[str, MaterialisationNode]) -> None:
-    log_info(f"{len(nodes_to_reuse)} nodes to be reused.")
-    for node_id in nodes_to_reuse.keys():
-        log_debug(f" - {node_id}")
+    total_nodes: int = len(nodes_to_reuse)
+    log_info(f"{total_nodes} node(s) to be reused:")
+    counter = 1
+    for node_id, node in nodes_to_reuse.items():
+        log_info(
+            f"{counter} of {total_nodes} REUSED {node_id} - {node.reason}. Last updated: {node.last_updated or 'none'}"
+        )
+        counter += 1

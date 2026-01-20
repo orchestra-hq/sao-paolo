@@ -3,7 +3,7 @@ import re
 from pathlib import Path
 
 from .constants import ORCHESTRA_REUSED_NODE
-from .logger import log_info, log_warn
+from .logger import log_debug, log_warn
 from .models import MaterialisationNode
 
 
@@ -59,7 +59,7 @@ def patch_sql_files(nodes_to_reuse: dict[str, MaterialisationNode]) -> None:
         relative_path = str(sql_file.relative_to(cwd))
         if relative_path in sql_paths_to_patch_with_reason:
             try:
-                log_info(f"Patching {relative_path}...")
+                log_debug(f"Patching {relative_path}...")
                 patch_file(
                     file_path=sql_file,
                     reason=sql_paths_to_patch_with_reason[relative_path],
