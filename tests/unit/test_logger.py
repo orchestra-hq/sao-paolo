@@ -40,6 +40,6 @@ class TestLogReusedNodes:
         log_lines = [line[26:-4] for line in log_lines]
         assert log_lines == [
             "2 node(s) to be reused:",
-            "1 of 2 REUSED node_1 - reason_1. Last updated: 2026-01-01 00:00:00",
-            "2 of 2 REUSED node_2 - Brand new node. Last updated: none",
+            "1 of 2 REUSED node_1 - reason_1 (last updated: 2026-01-01 00:00:00)",
+            "2 of 2 REUSED node_2 - Brand new node (last updated: none)",
         ]

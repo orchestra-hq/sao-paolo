@@ -38,6 +38,6 @@ def log_reused_nodes(nodes_to_reuse: dict[str, MaterialisationNode]) -> None:
     counter = 1
     for node_id, node in nodes_to_reuse.items():
         log_info(
-            f"{counter} of {total_nodes} REUSED {node_id} - {node.reason}. Last updated: {node.last_updated or 'none'}"
+            f"{counter} of {total_nodes} REUSED {node_id} - {node.reason} (last updated: {node.last_updated or 'none'})"
         )
         counter += 1
