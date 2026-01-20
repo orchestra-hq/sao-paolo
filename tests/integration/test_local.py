@@ -2,9 +2,10 @@ import json
 from typing import cast
 from unittest.mock import patch
 
-from orchestra_dbt.logger import log_reused_nodes
-from orchestra_dbt.sao import calculate_nodes_to_run
+import pytest
+
 from src.orchestra_dbt.dag import construct_dag
+from src.orchestra_dbt.logger import log_reused_nodes
 from src.orchestra_dbt.models import (
     Freshness,
     MaterialisationNode,
@@ -12,13 +13,23 @@ from src.orchestra_dbt.models import (
     SourceFreshness,
     StateApiModel,
 )
+from src.orchestra_dbt.sao import calculate_nodes_to_run
 
 
 @patch("src.orchestra_dbt.dag.get_integration_account_id_from_env")
 def test_e2e(mock_get_integration_account_id_from_env):
+    try:
+        local_state = open("local_state.json", "r").read()
+    except FileNotFoundError:
+        pytest.skip("local_state.json not found")
+
+    try:
+        open("local_manifest.json", "r").read()
+    except FileNotFoundError:
+        pytest.skip("local_manifest.json not found")
+
     mock_get_integration_account_id_from_env.return_value = "TO_BE_COMPLETED"
 
-    local_state = open("local_state.json", "r").read()
     parsed_dag = construct_dag(
         source_freshness=SourceFreshness(sources={}),
         state=StateApiModel.model_validate(json.loads(local_state)),
