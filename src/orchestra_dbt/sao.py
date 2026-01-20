@@ -1,5 +1,5 @@
 from collections import defaultdict, deque
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import cast
 
 from .models import (
@@ -66,9 +66,7 @@ def should_mark_dirty_from_single_upstream(
                         else Freshness.CLEAN
                     )
                     if upstream_freshness == Freshness.CLEAN:
-                        reason = (
-                            f"Source {upstream_id} has not been updated since last run."
-                        )
+                        reason = f"Source {upstream_id} has no new data since last run."
         case NodeType.MATERIALISATION:
             materialisation_node: MaterialisationNode = cast(
                 MaterialisationNode, upstream_node
@@ -80,12 +78,18 @@ def should_mark_dirty_from_single_upstream(
     if not current_node.freshness_config.minutes_sla:
         return upstream_freshness == Freshness.DIRTY, reason
 
-    if current_node.last_updated >= datetime.now(
-        tz=current_node.last_updated.tzinfo
-    ) - timedelta(minutes=current_node.freshness_config.minutes_sla):
-        reason = f"Model still within build_after config of {current_node.freshness_config.minutes_sla} minutes."
+    minutes_since_last_updated: int = int(
+        (
+            datetime.now(tz=current_node.last_updated.tzinfo)
+            - current_node.last_updated
+        ).total_seconds()
+        / 60
+    )
+
+    if minutes_since_last_updated < current_node.freshness_config.minutes_sla:
+        reason = f"Model still within freshness config of {current_node.freshness_config.minutes_sla} minutes. Last updated {minutes_since_last_updated} minutes ago."
         if current_node.freshness_config.inherited_from:
-            reason += f" Inherited from {current_node.freshness_config.inherited_from}."
+            reason += f" Config inherited from {current_node.freshness_config.inherited_from}."
         return (False, reason)
 
     match upstream_freshness:
@@ -118,7 +122,7 @@ def _should_mark_dirty(
         if node.freshness_config.updates_on == "all" and not should_be_dirty:
             return (
                 False,
-                f"{reason} (nodes requires all upstreams to be updated)",
+                f"{reason} (node requires all upstream dependents to have new data).",
             )
         if node.freshness_config.updates_on == "any" and should_be_dirty:
             return True, None
