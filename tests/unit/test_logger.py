@@ -1,11 +1,10 @@
 from datetime import datetime
 
-from orchestra_dbt.logger import log_reused_nodes
-from orchestra_dbt.models import (
+from src.orchestra_dbt.logger import log_reused_nodes
+from src.orchestra_dbt.models import (
     Freshness,
     FreshnessConfig,
     MaterialisationNode,
-    NodeType,
 )
 
 
@@ -14,25 +13,23 @@ class TestLogReusedNodes:
         nodes_to_reuse = {
             "node_1": MaterialisationNode(
                 last_updated=datetime(2026, 1, 1),
-                node_type=NodeType.MATERIALISATION,
                 checksum="checksum_1",
                 freshness_config=FreshnessConfig(),
                 freshness=Freshness.CLEAN,
-                node_path="node_path_1",
+                dbt_path="dbt_path_1",
                 reason="reason_1",
                 sources={},
-                sql_path="sql_path_1",
+                file_path="file_path_1",
             ),
             "node_2": MaterialisationNode(
                 last_updated=None,
-                node_type=NodeType.MATERIALISATION,
                 checksum="checksum_1",
                 freshness_config=FreshnessConfig(),
                 freshness=Freshness.CLEAN,
-                node_path="node_path_1",
+                dbt_path="dbt_path_1",
                 reason="Brand new node",
                 sources={},
-                sql_path="sql_path_1",
+                file_path="file_path_1",
             ),
         }
         log_reused_nodes(nodes_to_reuse)

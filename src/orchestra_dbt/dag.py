@@ -1,4 +1,5 @@
 from .build_after import parse_freshness_config
+from .checksum import calculate_checksum
 from .models import (
     Edge,
     Freshness,
@@ -65,20 +66,28 @@ def construct_dag(
                 if integration_account_id := get_integration_account_id_from_env():
                     asset_external_id = f"{integration_account_id}.{node_id}"
 
-                checksum = str(node["checksum"]["checksum"])
-                node_path = str(node["original_file_path"])
-
+                dbt_path = str(node["original_file_path"])
                 if node["package_name"] != project_name_from_manifest:
-                    sql_path = f"dbt_packages/{node['package_name']}/{node_path}"
+                    file_path = f"dbt_packages/{node['package_name']}/{dbt_path}"
                 else:
-                    sql_path = node_path
+                    file_path = dbt_path
+
+                track_state = True
+                checksum: str | None = calculate_checksum(
+                    resource_type,
+                    node_checksum=str(node["checksum"]["checksum"]),
+                    file_path=file_path,
+                )
+                if not checksum:
+                    track_state = False
+                    checksum = str(node["checksum"]["checksum"])
 
                 freshness, reason = calculate_freshness_on_node(
                     asset_external_id,
                     checksum,
                     state,
                     resource_type,
-                    track_state=False if resource_type == "seed" else True,
+                    track_state,
                 )
 
                 nodes[node_id] = MaterialisationNode(
@@ -87,14 +96,14 @@ def construct_dag(
                         config_on_node=node.get("config", {}).get("freshness")
                     ),
                     freshness=freshness,
-                    node_path=node_path,
+                    dbt_path=dbt_path,
                     reason=reason,
                     sources=(
                         state.state[asset_external_id].sources
                         if asset_external_id in state.state
                         else {}
                     ),
-                    sql_path=sql_path,
+                    file_path=file_path,
                     last_updated=(
                         state.state[asset_external_id].last_updated
                         if asset_external_id in state.state

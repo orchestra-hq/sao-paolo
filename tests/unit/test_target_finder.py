@@ -1,4 +1,4 @@
-from orchestra_dbt.target_finder import find_target_in_args
+from src.orchestra_dbt.target_finder import find_target_in_args
 
 
 class TestFindTargetInArgs:

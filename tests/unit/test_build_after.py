@@ -2,12 +2,12 @@ from typing import cast
 
 import pytest
 
-from orchestra_dbt.build_after import (
+from src.orchestra_dbt.build_after import (
     parse_build_after_duration_minutes,
     parse_freshness_config,
     propagate_freshness_config,
 )
-from orchestra_dbt.models import (
+from src.orchestra_dbt.models import (
     Edge,
     Freshness,
     FreshnessConfig,
@@ -80,8 +80,8 @@ class TestPropagateFreshnessConfig:
                 "A": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    node_path="models/a.sql",
-                    sql_path="models/a.sql",
+                    dbt_path="models/a.sql",
+                    file_path="models/a.sql",
                     reason="test",
                     sources={},
                     freshness_config=FreshnessConfig(),  # No config
@@ -89,8 +89,8 @@ class TestPropagateFreshnessConfig:
                 "B": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="2",
-                    node_path="models/b.sql",
-                    sql_path="models/b.sql",
+                    dbt_path="models/b.sql",
+                    file_path="models/b.sql",
                     reason="test",
                     sources={},
                     freshness_config=FreshnessConfig(),  # No config
@@ -98,8 +98,8 @@ class TestPropagateFreshnessConfig:
                 "C": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="3",
-                    node_path="models/c.sql",
-                    sql_path="models/c.sql",
+                    dbt_path="models/c.sql",
+                    file_path="models/c.sql",
                     reason="test",
                     sources={},
                     freshness_config=FreshnessConfig(minutes_sla=30),  # Has config
@@ -134,8 +134,8 @@ class TestPropagateFreshnessConfig:
                 "A": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    node_path="models/a.sql",
-                    sql_path="models/a.sql",
+                    dbt_path="models/a.sql",
+                    file_path="models/a.sql",
                     reason="test",
                     sources={},
                     freshness_config=FreshnessConfig(
@@ -145,8 +145,8 @@ class TestPropagateFreshnessConfig:
                 "B": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="2",
-                    node_path="models/b.sql",
-                    sql_path="models/b.sql",
+                    dbt_path="models/b.sql",
+                    file_path="models/b.sql",
                     reason="test",
                     sources={},
                     freshness_config=FreshnessConfig(),  # No config
@@ -154,8 +154,8 @@ class TestPropagateFreshnessConfig:
                 "C": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="3",
-                    node_path="models/c.sql",
-                    sql_path="models/c.sql",
+                    dbt_path="models/c.sql",
+                    file_path="models/c.sql",
                     reason="test",
                     sources={},
                     freshness_config=FreshnessConfig(),  # No config
@@ -163,8 +163,8 @@ class TestPropagateFreshnessConfig:
                 "D": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="4",
-                    node_path="models/d.sql",
-                    sql_path="models/d.sql",
+                    dbt_path="models/d.sql",
+                    file_path="models/d.sql",
                     reason="test",
                     sources={},
                     freshness_config=FreshnessConfig(minutes_sla=3),  # Has config
@@ -206,8 +206,8 @@ class TestPropagateFreshnessConfig:
                 "A": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    node_path="models/a.sql",
-                    sql_path="models/a.sql",
+                    dbt_path="models/a.sql",
+                    file_path="models/a.sql",
                     reason="test",
                     sources={},
                     freshness_config=FreshnessConfig(),  # No config
@@ -215,8 +215,8 @@ class TestPropagateFreshnessConfig:
                 "B": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="2",
-                    node_path="models/b.sql",
-                    sql_path="models/b.sql",
+                    dbt_path="models/b.sql",
+                    file_path="models/b.sql",
                     reason="test",
                     sources={},
                     freshness_config=FreshnessConfig(minutes_sla=10),
@@ -224,8 +224,8 @@ class TestPropagateFreshnessConfig:
                 "C": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="3",
-                    node_path="models/c.sql",
-                    sql_path="models/c.sql",
+                    dbt_path="models/c.sql",
+                    file_path="models/c.sql",
                     reason="test",
                     sources={},
                     freshness_config=FreshnessConfig(minutes_sla=5),
@@ -251,8 +251,8 @@ class TestPropagateFreshnessConfig:
                 "A": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    node_path="models/a.sql",
-                    sql_path="models/a.sql",
+                    dbt_path="models/a.sql",
+                    file_path="models/a.sql",
                     reason="test",
                     sources={},
                     freshness_config=FreshnessConfig(minutes_sla=20),  # Has config
@@ -260,8 +260,8 @@ class TestPropagateFreshnessConfig:
                 "B": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="2",
-                    node_path="models/b.sql",
-                    sql_path="models/b.sql",
+                    dbt_path="models/b.sql",
+                    file_path="models/b.sql",
                     reason="test",
                     sources={},
                     freshness_config=FreshnessConfig(minutes_sla=10),  # Has config
@@ -289,8 +289,8 @@ class TestPropagateFreshnessConfig:
                 "A": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    node_path="models/a.sql",
-                    sql_path="models/a.sql",
+                    dbt_path="models/a.sql",
+                    file_path="models/a.sql",
                     reason="test",
                     sources={},
                     freshness_config=FreshnessConfig(),  # No config
@@ -298,8 +298,8 @@ class TestPropagateFreshnessConfig:
                 "B": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="2",
-                    node_path="models/b.sql",
-                    sql_path="models/b.sql",
+                    dbt_path="models/b.sql",
+                    file_path="models/b.sql",
                     reason="test",
                     sources={},
                     freshness_config=FreshnessConfig(),  # No config
@@ -329,8 +329,8 @@ class TestPropagateFreshnessConfig:
                 "A": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    node_path="models/a.sql",
-                    sql_path="models/a.sql",
+                    dbt_path="models/a.sql",
+                    file_path="models/a.sql",
                     reason="test",
                     sources={},
                     freshness_config=FreshnessConfig(
@@ -340,8 +340,8 @@ class TestPropagateFreshnessConfig:
                 "B": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="2",
-                    node_path="models/b.sql",
-                    sql_path="models/b.sql",
+                    dbt_path="models/b.sql",
+                    file_path="models/b.sql",
                     reason="test",
                     sources={},
                     freshness_config=FreshnessConfig(minutes_sla=30),

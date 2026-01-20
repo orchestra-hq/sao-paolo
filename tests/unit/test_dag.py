@@ -125,8 +125,8 @@ class TestConstructDag:
                     freshness=Freshness.CLEAN,
                     last_updated=datetime(2024, 1, 1, 12, 0, 0),
                     checksum="def456",
-                    node_path="models/model_a.sql",
-                    sql_path="models/model_a.sql",
+                    dbt_path="models/model_a.sql",
+                    file_path="models/model_a.sql",
                     sources={
                         "source.test_db.test_schema.test_table": datetime(
                             2024, 1, 3, 12, 0, 0
@@ -138,8 +138,8 @@ class TestConstructDag:
                 "model.test_project_2.model_b": MaterialisationNode(
                     freshness=Freshness.DIRTY,
                     checksum="ghi789",
-                    node_path="models/model_b.sql",
-                    sql_path="dbt_packages/test_project_2/models/model_b.sql",
+                    dbt_path="models/model_b.sql",
+                    file_path="dbt_packages/test_project_2/models/model_b.sql",
                     reason="Model not previously seen in state.",
                     sources={},
                     freshness_config=FreshnessConfig(),
@@ -148,8 +148,8 @@ class TestConstructDag:
                     freshness=Freshness.DIRTY,
                     last_updated=datetime(2024, 1, 1, 12, 0, 0),
                     checksum="456",
-                    node_path="models/model_c.sql",
-                    sql_path="models/model_c.sql",
+                    dbt_path="models/model_c.sql",
+                    file_path="models/model_c.sql",
                     reason="Checksum changed since last run.",
                     sources={},
                     freshness_config=FreshnessConfig(),
