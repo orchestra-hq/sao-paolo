@@ -48,12 +48,12 @@ class MaterialisationNode(Node):
     node_type: NodeType = NodeType.MATERIALISATION
 
     checksum: str
+    dbt_path: str
+    file_path: str
     freshness_config: FreshnessConfig
     freshness: Freshness
-    node_path: str
     reason: str
     sources: dict[str, datetime]
-    sql_path: str
 
 
 class Edge(BaseModel):

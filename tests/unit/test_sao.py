@@ -27,8 +27,8 @@ class TestBuildDependencyGraphs:
                     "model.a": MaterialisationNode(
                         freshness=Freshness.CLEAN,
                         checksum="1",
-                        node_path="models/model_a.sql",
-                        sql_path="models/model_a.sql",
+                        dbt_path="models/model_a.sql",
+                        file_path="models/model_a.sql",
                         reason="Node not seen before",
                         sources={},
                         freshness_config=FreshnessConfig(),
@@ -36,8 +36,8 @@ class TestBuildDependencyGraphs:
                     "model.b": MaterialisationNode(
                         freshness=Freshness.CLEAN,
                         checksum="2",
-                        node_path="models/model_b.sql",
-                        sql_path="models/model_b.sql",
+                        dbt_path="models/model_b.sql",
+                        file_path="models/model_b.sql",
                         reason="Node not seen before",
                         sources={},
                         freshness_config=FreshnessConfig(),
@@ -45,8 +45,8 @@ class TestBuildDependencyGraphs:
                     "model.c": MaterialisationNode(
                         freshness=Freshness.CLEAN,
                         checksum="3",
-                        node_path="models/model_c.sql",
-                        sql_path="models/model_c.sql",
+                        dbt_path="models/model_c.sql",
+                        file_path="models/model_c.sql",
                         reason="Node not seen before",
                         sources={},
                         freshness_config=FreshnessConfig(),
@@ -54,8 +54,8 @@ class TestBuildDependencyGraphs:
                     "model.d": MaterialisationNode(
                         freshness=Freshness.CLEAN,
                         checksum="4",
-                        node_path="models/model_d.sql",
-                        sql_path="models/model_d.sql",
+                        dbt_path="models/model_d.sql",
+                        file_path="models/model_d.sql",
                         reason="Node not seen before",
                         sources={},
                         freshness_config=FreshnessConfig(),
@@ -98,8 +98,8 @@ class TestShouldMarkDirtyFromSingleUpstream:
                 MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    node_path="models/model_a.sql",
-                    sql_path="models/model_a.sql",
+                    dbt_path="models/model_a.sql",
+                    file_path="models/model_a.sql",
                     sources={
                         "source.test": datetime.now(),
                     },
@@ -117,8 +117,8 @@ class TestShouldMarkDirtyFromSingleUpstream:
                 MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    node_path="models/model_a.sql",
-                    sql_path="models/model_a.sql",
+                    dbt_path="models/model_a.sql",
+                    file_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=10),
                     sources={
                         "source.test": datetime.now() - timedelta(minutes=10),
@@ -135,8 +135,8 @@ class TestShouldMarkDirtyFromSingleUpstream:
                 MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    node_path="models/model_a.sql",
-                    sql_path="models/model_a.sql",
+                    dbt_path="models/model_a.sql",
+                    file_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=10),
                     sources={
                         "source.test": datetime.now() - timedelta(minutes=10),
@@ -153,8 +153,8 @@ class TestShouldMarkDirtyFromSingleUpstream:
                 MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    node_path="models/model_a.sql",
-                    sql_path="models/model_a.sql",
+                    dbt_path="models/model_a.sql",
+                    file_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=10),
                     sources={
                         "source.test": datetime.now() - timedelta(minutes=10),
@@ -171,8 +171,8 @@ class TestShouldMarkDirtyFromSingleUpstream:
                 MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    node_path="models/model_a.sql",
-                    sql_path="models/model_a.sql",
+                    dbt_path="models/model_a.sql",
+                    file_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=10),
                     sources={
                         "source.test": datetime.now() - timedelta(minutes=10),
@@ -194,8 +194,8 @@ class TestShouldMarkDirtyFromSingleUpstream:
                 MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    node_path="models/model_a.sql",
-                    sql_path="models/model_a.sql",
+                    dbt_path="models/model_a.sql",
+                    file_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=20),
                     sources={
                         "source.test": datetime.now() - timedelta(minutes=20),
@@ -211,8 +211,8 @@ class TestShouldMarkDirtyFromSingleUpstream:
                 MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    node_path="models/model_a.sql",
-                    sql_path="models/model_a.sql",
+                    dbt_path="models/model_a.sql",
+                    file_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=60),
                     reason="Node not seen before",
                     sources={},
@@ -221,8 +221,8 @@ class TestShouldMarkDirtyFromSingleUpstream:
                 MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    node_path="models/model_b.sql",
-                    sql_path="models/model_b.sql",
+                    dbt_path="models/model_b.sql",
+                    file_path="models/model_b.sql",
                     last_updated=datetime.now() - timedelta(minutes=20),
                     sources={},
                     freshness_config=FreshnessConfig(minutes_sla=15),
@@ -236,8 +236,8 @@ class TestShouldMarkDirtyFromSingleUpstream:
                 MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    node_path="models/model_a.sql",
-                    sql_path="models/model_a.sql",
+                    dbt_path="models/model_a.sql",
+                    file_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=20),
                     reason="Same state as before",
                     sources={},
@@ -246,8 +246,8 @@ class TestShouldMarkDirtyFromSingleUpstream:
                 MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    node_path="models/model_b.sql",
-                    sql_path="models/model_b.sql",
+                    dbt_path="models/model_b.sql",
+                    file_path="models/model_b.sql",
                     last_updated=datetime.now() - timedelta(minutes=20),
                     reason="Same state as before",
                     sources={},
@@ -261,8 +261,8 @@ class TestShouldMarkDirtyFromSingleUpstream:
                 MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    node_path="models/model_a.sql",
-                    sql_path="models/model_a.sql",
+                    dbt_path="models/model_a.sql",
+                    file_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=12),
                     reason="Node not seen before",
                     sources={},
@@ -271,8 +271,8 @@ class TestShouldMarkDirtyFromSingleUpstream:
                 MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    node_path="models/model_b.sql",
-                    sql_path="models/model_b.sql",
+                    dbt_path="models/model_b.sql",
+                    file_path="models/model_b.sql",
                     last_updated=datetime.now() - timedelta(minutes=20),
                     sources={},
                     freshness_config=FreshnessConfig(minutes_sla=15),
@@ -310,8 +310,8 @@ class TestCalculateModelsToRun:
                 "model.a": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    node_path="models/model_a.sql",
-                    sql_path="models/model_a.sql",
+                    dbt_path="models/model_a.sql",
+                    file_path="models/model_a.sql",
                     reason="Node not seen before",
                     sources={},
                     freshness_config=FreshnessConfig(),
@@ -319,8 +319,8 @@ class TestCalculateModelsToRun:
                 "model.b": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="2",
-                    node_path="models/model_b.sql",
-                    sql_path="models/model_b.sql",
+                    dbt_path="models/model_b.sql",
+                    file_path="models/model_b.sql",
                     reason="Node not seen before",
                     sources={},
                     freshness_config=FreshnessConfig(),
@@ -352,8 +352,8 @@ class TestCalculateModelsToRun:
                 "model.a": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    node_path="models/model_a.sql",
-                    sql_path="models/model_a.sql",
+                    dbt_path="models/model_a.sql",
+                    file_path="models/model_a.sql",
                     last_updated=datetime.now() - timedelta(minutes=5),
                     sources={
                         "source.test": datetime.now() - timedelta(minutes=10),
@@ -381,8 +381,8 @@ class TestCalculateModelsToRun:
                 "model.a": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    node_path="models/model_a.sql",
-                    sql_path="models/model_a.sql",
+                    dbt_path="models/model_a.sql",
+                    file_path="models/model_a.sql",
                     freshness_config=FreshnessConfig(minutes_sla=60),
                     last_updated=datetime.now() - timedelta(minutes=20),
                     reason="Node not seen before",
@@ -413,8 +413,8 @@ class TestCalculateModelsToRun:
                 "model.a": MaterialisationNode(
                     freshness=Freshness.DIRTY,
                     checksum="1",
-                    node_path="models/model_a.sql",
-                    sql_path="models/model_a.sql",
+                    dbt_path="models/model_a.sql",
+                    file_path="models/model_a.sql",
                     last_updated=now,
                     reason="Node not seen before",
                     sources={},
@@ -423,8 +423,8 @@ class TestCalculateModelsToRun:
                 "model.b": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="2",
-                    node_path="models/model_b.sql",
-                    sql_path="models/model_b.sql",
+                    dbt_path="models/model_b.sql",
+                    file_path="models/model_b.sql",
                     last_updated=now - timedelta(hours=2),  # Old, shouldn't trigger
                     reason="Node not seen before",
                     sources={},
@@ -433,8 +433,8 @@ class TestCalculateModelsToRun:
                 "model.c": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="3",
-                    node_path="models/model_c.sql",
-                    sql_path="models/model_c.sql",
+                    dbt_path="models/model_c.sql",
+                    file_path="models/model_c.sql",
                     freshness_config=FreshnessConfig(
                         minutes_sla=30, updates_on=updates_on
                     ),
@@ -469,8 +469,8 @@ class TestCalculateModelsToRun:
                 "model.stg_orders": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    node_path="models/model_stg_orders.sql",
-                    sql_path="models/model_stg_orders.sql",
+                    dbt_path="models/model_stg_orders.sql",
+                    file_path="models/model_stg_orders.sql",
                     last_updated=now - timedelta(minutes=9),
                     sources={
                         "source.src_orders": now - timedelta(minutes=10),
@@ -481,8 +481,8 @@ class TestCalculateModelsToRun:
                 "model.stg_customers": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="2",
-                    node_path="models/model_stg_customers.sql",
-                    sql_path="models/model_stg_customers.sql",
+                    dbt_path="models/model_stg_customers.sql",
+                    file_path="models/model_stg_customers.sql",
                     last_updated=now - timedelta(minutes=9),
                     sources={
                         "source.src_customers": now - timedelta(minutes=10),
@@ -493,8 +493,8 @@ class TestCalculateModelsToRun:
                 "model.int_orders": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="3",
-                    node_path="models/model_int_orders.sql",
-                    sql_path="models/model_int_orders.sql",
+                    dbt_path="models/model_int_orders.sql",
+                    file_path="models/model_int_orders.sql",
                     last_updated=now - timedelta(minutes=8),
                     reason="Node not seen before",
                     sources={},
@@ -503,8 +503,8 @@ class TestCalculateModelsToRun:
                 "model.dim_customers": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="4",
-                    node_path="models/model_dim_customers.sql",
-                    sql_path="models/model_dim_customers.sql",
+                    dbt_path="models/model_dim_customers.sql",
+                    file_path="models/model_dim_customers.sql",
                     last_updated=now - timedelta(minutes=8),
                     reason="Node not seen before",
                     sources={},
@@ -513,8 +513,8 @@ class TestCalculateModelsToRun:
                 "model.cust_orders": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="5",
-                    node_path="models/model_cust_orders.sql",
-                    sql_path="models/model_cust_orders.sql",
+                    dbt_path="models/model_cust_orders.sql",
+                    file_path="models/model_cust_orders.sql",
                     last_updated=now - timedelta(minutes=7),
                     reason="Node not seen before",
                     sources={},
@@ -571,8 +571,8 @@ class TestCalculateModelsToRun:
                 "model.stg_orders": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="1",
-                    node_path="models/model_stg_orders.sql",
-                    sql_path="models/model_stg_orders.sql",
+                    dbt_path="models/model_stg_orders.sql",
+                    file_path="models/model_stg_orders.sql",
                     last_updated=now - timedelta(minutes=4),
                     sources={
                         "source.src_orders": now - timedelta(minutes=10),
@@ -583,8 +583,8 @@ class TestCalculateModelsToRun:
                 "model.stg_customers": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="2",
-                    node_path="models/model_stg_customers.sql",
-                    sql_path="models/model_stg_customers.sql",
+                    dbt_path="models/model_stg_customers.sql",
+                    file_path="models/model_stg_customers.sql",
                     last_updated=now - timedelta(minutes=4),
                     freshness_config=FreshnessConfig(minutes_sla=7),
                     sources={
@@ -595,8 +595,8 @@ class TestCalculateModelsToRun:
                 "model.int_orders": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="3",
-                    node_path="models/model_int_orders.sql",
-                    sql_path="models/model_int_orders.sql",
+                    dbt_path="models/model_int_orders.sql",
+                    file_path="models/model_int_orders.sql",
                     last_updated=now - timedelta(minutes=3),
                     reason="Node not seen before",
                     sources={},
@@ -605,8 +605,8 @@ class TestCalculateModelsToRun:
                 "model.dim_customers": MaterialisationNode(
                     freshness=Freshness.CLEAN,
                     checksum="4",
-                    node_path="models/model_dim_customers.sql",
-                    sql_path="models/model_dim_customers.sql",
+                    dbt_path="models/model_dim_customers.sql",
+                    file_path="models/model_dim_customers.sql",
                     last_updated=now - timedelta(minutes=3),
                     reason="Node not seen before",
                     sources={},
@@ -614,8 +614,8 @@ class TestCalculateModelsToRun:
                 ),
                 "model.cust_orders": MaterialisationNode(
                     freshness=Freshness.CLEAN,
-                    node_path="models/model_cust_orders.sql",
-                    sql_path="models/model_cust_orders.sql",
+                    dbt_path="models/model_cust_orders.sql",
+                    file_path="models/model_cust_orders.sql",
                     checksum="5",
                     last_updated=now - timedelta(minutes=2),
                     freshness_config=FreshnessConfig(minutes_sla=7, updates_on="all"),

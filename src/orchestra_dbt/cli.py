@@ -7,14 +7,14 @@ from typing import cast
 import click
 
 from .build_after import propagate_freshness_config
-from .constants import PROPAGATE_FRESHNESS_UPSTREAM, SERVICE_NAME, VALID_ORCHESTRA_ENVS
+from .constants import SERVICE_NAME, VALID_ORCHESTRA_ENVS
 from .dag import construct_dag
 from .logger import log_debug, log_error, log_info, log_reused_nodes
 from .ls import get_paths_to_run
 from .models import MaterialisationNode, NodeType, SourceFreshness
 from .modify import modify_dbt_command
 from .orchestra import is_warn
-from .patcher import patch_sql_files, revert_patching
+from .patcher import patch_seed_properties, patch_sql_files, revert_patching
 from .sao import Freshness, calculate_nodes_to_run
 from .source_freshness import get_source_freshness
 from .state import load_state, save_state, update_state
@@ -100,8 +100,7 @@ def main(args: tuple):
     parsed_dag = construct_dag(source_freshness, state)
 
     # Propagate freshness config to upstream nodes
-    if PROPAGATE_FRESHNESS_UPSTREAM:
-        propagate_freshness_config(parsed_dag)
+    propagate_freshness_config(parsed_dag)
 
     # Edit the DAG inline.
     calculate_nodes_to_run(parsed_dag)
@@ -112,7 +111,7 @@ def main(args: tuple):
         if node.node_type != NodeType.MATERIALISATION:
             continue
         materialisation_node: MaterialisationNode = cast(MaterialisationNode, node)
-        if paths_to_run and materialisation_node.node_path not in paths_to_run:
+        if paths_to_run and materialisation_node.dbt_path not in paths_to_run:
             continue
         node_count += 1
         if materialisation_node.freshness == Freshness.CLEAN:
@@ -122,11 +121,16 @@ def main(args: tuple):
 
     if len(nodes_to_reuse) != 0:
         patch_sql_files(nodes_to_reuse)
+        patch_seed_properties(nodes_to_reuse)
+
         result = subprocess.run(modify_dbt_command(cmd=list(args)))
+
         log_info(f"{len(nodes_to_reuse)}/{node_count} nodes reused.")
         if os.getenv("ORCHESTRA_LOCAL_RUN", "false").lower() == "true":
             revert_patching(
-                sql_paths_to_revert=[node.sql_path for node in nodes_to_reuse.values()]
+                file_paths_to_revert=[
+                    node.file_path for node in nodes_to_reuse.values()
+                ]
             )
     else:
         result = subprocess.run(list(args))
