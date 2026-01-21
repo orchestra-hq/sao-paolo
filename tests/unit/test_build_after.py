@@ -194,10 +194,10 @@ class TestPropagateFreshnessConfig:
         assert updated_node_c.freshness_config.minutes_sla is None
         assert updated_node_c.freshness_config.inherited_from is None
 
-        # B should inherit from D (smallest of children's configs)
+        # B should NOT get a config: one child (C) has no config, so parent stays null
         updated_node_b = cast(MaterialisationNode, dag.nodes["B"])
-        assert updated_node_b.freshness_config.minutes_sla == 3
-        assert updated_node_b.freshness_config.inherited_from == "D"
+        assert updated_node_b.freshness_config.minutes_sla is None
+        assert updated_node_b.freshness_config.inherited_from is None
 
     def test_multiple_children_minimum_selection(self):
         # A -> B, A -> C, where B has config 10 and C has config 5

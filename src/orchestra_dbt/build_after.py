@@ -74,7 +74,9 @@ def _propagate_config_to_node(
 ) -> None:
     """
     Propagate freshness config from children to the current node.
-    Only updates nodes that don't already have a config.
+    A parent only inherits the minimum config of its children if ALL children
+    have a defined config; if any child is undefined or has no config, the
+    parent remains null.
     """
     node: Node = dag.nodes[node_id]
     if node.node_type != NodeType.MATERIALISATION:
@@ -86,30 +88,33 @@ def _propagate_config_to_node(
     if materialisation_node.freshness_config.minutes_sla is not None:
         return
 
-    # Look at children nodes and collect their minutes_sla values
-    min_child_minutes_sla: int | None = None
-    inherited_from: str | None = None
+    child_ids = children.get(node_id, [])
+    if not child_ids:
+        return
 
-    for child_id in children[node_id]:
-        child_node = dag.nodes[child_id]
-        if child_node.node_type == NodeType.MATERIALISATION:
-            child_materialisation: MaterialisationNode = cast(
-                MaterialisationNode, child_node
-            )
-            if child_materialisation.freshness_config.minutes_sla is not None:
-                if (
-                    min_child_minutes_sla is None
-                    or child_materialisation.freshness_config.minutes_sla
-                    < min_child_minutes_sla
-                ):
-                    min_child_minutes_sla = (
-                        child_materialisation.freshness_config.minutes_sla
-                    )
-                    inherited_from = child_id
+    # Collect minutes_sla from children; if any child has no config, do not propagate
+    child_minutes: list[int] = []
+    for child_id in child_ids:
+        child_node = dag.nodes.get(child_id)
+        if child_node is None or child_node.node_type != NodeType.MATERIALISATION:
+            return  # undefined or non-materialisation child: parent stays null
+        child_materialisation: MaterialisationNode = cast(
+            MaterialisationNode, child_node
+        )
+        if child_materialisation.freshness_config.minutes_sla is None:
+            return  # child has no config: parent stays null
+        child_minutes.append(child_materialisation.freshness_config.minutes_sla)
 
-    if min_child_minutes_sla:
-        materialisation_node.freshness_config.minutes_sla = min_child_minutes_sla
-        materialisation_node.freshness_config.inherited_from = inherited_from
+    # All children have a defined config: inherit the minimum
+    min_sla = min(child_minutes)
+    materialisation_node.freshness_config.minutes_sla = min_sla
+    for cid in child_ids:
+        if (
+            cast(MaterialisationNode, dag.nodes[cid]).freshness_config.minutes_sla
+            == min_sla
+        ):
+            materialisation_node.freshness_config.inherited_from = cid
+            break
 
 
 def _enqueue_parents(
