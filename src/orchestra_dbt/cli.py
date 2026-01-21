@@ -121,7 +121,7 @@ def main(args: tuple):
         propagate_freshness_config(parsed_dag)
 
     if "--full-refresh" in args:
-        log_info("Full refresh - skipping state update.")
+        log_info("Full refresh detected. Stateful orchestration disabled.")
         _complete_run(
             state,
             parsed_dag,
