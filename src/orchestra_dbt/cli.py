@@ -11,7 +11,13 @@ from .constants import PROPAGATE_FRESHNESS_UPSTREAM, SERVICE_NAME, VALID_ORCHEST
 from .dag import construct_dag
 from .logger import log_debug, log_error, log_info, log_reused_nodes
 from .ls import get_paths_to_run
-from .models import MaterialisationNode, NodeType, SourceFreshness
+from .models import (
+    MaterialisationNode,
+    NodeType,
+    ParsedDag,
+    SourceFreshness,
+    StateApiModel,
+)
 from .modify import modify_dbt_command
 from .orchestra import is_warn
 from .patcher import patch_sql_files, revert_patching
@@ -41,6 +47,17 @@ def _validate_environment() -> None:
         sys.exit(1)
 
     log_debug("Environment validated.")
+
+
+def _complete_run(
+    state: StateApiModel,
+    parsed_dag: ParsedDag,
+    source_freshness: SourceFreshness,
+    dbt_exit_code: int,
+) -> None:
+    update_state(state=state, parsed_dag=parsed_dag, source_freshness=source_freshness)
+    save_state(state=state)
+    sys.exit(dbt_exit_code)
 
 
 @click.command(
@@ -103,6 +120,15 @@ def main(args: tuple):
     if PROPAGATE_FRESHNESS_UPSTREAM:
         propagate_freshness_config(parsed_dag)
 
+    if "--full-refresh" in args:
+        log_info("Full refresh detected. Stateful orchestration disabled.")
+        _complete_run(
+            state,
+            parsed_dag,
+            source_freshness,
+            dbt_exit_code=subprocess.run(args).returncode,
+        )
+
     # Edit the DAG inline.
     calculate_nodes_to_run(parsed_dag)
 
@@ -131,6 +157,4 @@ def main(args: tuple):
     else:
         result = subprocess.run(list(args))
 
-    update_state(state=state, parsed_dag=parsed_dag, source_freshness=source_freshness)
-    save_state(state=state)
-    sys.exit(result.returncode)
+    _complete_run(state, parsed_dag, source_freshness, dbt_exit_code=result.returncode)
