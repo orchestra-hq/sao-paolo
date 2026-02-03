@@ -32,7 +32,7 @@ The branch of this project that is run in Orchestra can be set by the environmen
 }
 ```
 
-##  Debugging
+## Debugging
 
 To debug pipelines, there are some local files and scripts.
 
@@ -42,13 +42,18 @@ To install the required dependencies, run:
 uv sync --extra dev --extra debug
 ```
 
-Ask @ojc-orchestra for access to the scripts.
+Ask @ojc-orchestra for access to the scripts:
+
+- `dynamo_state.py`: loads state from DynamoDB into a local JSON file `local_state.json`
+- `visualise.py`: loads ops from `ops.json` and visualises them in a DAG structure. This can be loaded in a browser by opening the resulting HTML file, `ops_dag.html`.
 
 ## Testing
 
 ```bash
 pytest
 ```
+
+To run an integration test, you will require both `local_state.json` and `local_manifest.json` in the root directory. `local_state.json` can be created by running `dynamo_state.py` (see above), and `local_manifest.json` can be created by downloading a relevant dbt manifest.json file.
 
 ## Linting
 
