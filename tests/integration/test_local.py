@@ -52,7 +52,7 @@ def test_e2e(mock_get_integration_account_id_from_env):
         if node.node_type == NodeType.SOURCE:
             continue
         model_node: MaterialisationNode = cast(MaterialisationNode, node)
-        if paths_to_run and model_node.sql_path not in paths_to_run:
+        if paths_to_run and model_node.file_path not in paths_to_run:
             continue
         node_count += 1
         if model_node.freshness == Freshness.CLEAN:
