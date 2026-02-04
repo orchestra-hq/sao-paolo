@@ -123,7 +123,7 @@ def patch_seed_properties(
     seed_properties_file_path: str = "seeds/properties.yml",
 ) -> None:
     seeds_to_reuse: dict[str, MaterialisationNode] = {
-        node.file_path.split("/")[-1].rstrip(".csv"): node
+        node.file_path.split("/")[-1].removesuffix(".csv"): node
         for node in nodes_to_reuse.values()
         if node.file_path.endswith(".csv")
     }
@@ -141,6 +141,8 @@ def patch_seed_properties(
         log_info(
             f"No {seed_properties_file_path} file found in project directory. Creating one."
         )
+        # If there is no 'seeds' directory, create one.
+        os.makedirs("seeds", exist_ok=True)
         seeds_properties: dict = {"seeds": []}
     except Exception as e:
         log_error(f"Error loading {seed_properties_file_path}: {e}")

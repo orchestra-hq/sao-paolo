@@ -2,6 +2,10 @@ name: my_utils
 version: 1.0.0
 config-version: 2
 
+seeds:
+  my_utils:
+    +schema: raw
+
 models:
   my_utils:
     +materialized: view
