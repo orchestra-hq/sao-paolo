@@ -28,6 +28,9 @@ def calculate_freshness_on_node(
     if not track_state:
         return Freshness.DIRTY, "State orchestration for this node is disabled."
 
+    if resource_type == "seed":
+        return Freshness.DIRTY, "State orchestration for seeds currently disabled."
+
     if asset_external_id not in state.state:
         return (
             Freshness.DIRTY,
