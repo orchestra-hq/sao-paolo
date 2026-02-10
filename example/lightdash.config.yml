@@ -19,28 +19,3 @@ parameters:
       - "APAC"
     default: ["EMEA", "AMER"]
     multiple: true
-  
-  # Parameter with number type
-  min_revenue:
-    label: "Minimum Revenue"
-    description: "Filter for minimum revenue threshold"
-    type: "number"
-    options:
-      - 1000
-      - 5000
-      - 10000
-    default: 5000
-
-  # Parameter with date type
-  min_date:
-    label: "Minimum date"
-    description: "Filter to only show data after this date"
-    type: "date"
-
-  # Parameter with options from a dimension
-  department:
-    label: "Department"
-    description: "Filter data by department"
-    options_from_dimension:
-      model: "employees"
-      dimension: "department"
