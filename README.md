@@ -1,5 +1,7 @@
 # sao-paolo
 
+For Lightdash.
+
 ## Installing
 
 ```bash
