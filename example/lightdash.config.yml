@@ -1,15 +1,4 @@
 parameters:
-  # Parameter with simple options list
-  team:
-    label: "Team"
-    description: "Filter data by team"
-    options:
-      - "Sales"
-      - "Marketing"
-      - "Finance"
-    default: "Sales"
-  
-  # Parameter with multiple selection enabled
   region:
     label: "Region"
     description: "Filter data by region"
@@ -17,5 +6,4 @@ parameters:
       - "EMEA"
       - "AMER"
       - "APAC"
-    default: ["EMEA", "AMER"]
-    multiple: true
+    default: "EMEA"

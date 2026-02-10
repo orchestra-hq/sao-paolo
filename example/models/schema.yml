@@ -59,6 +59,25 @@ models:
 
   - name: cust_orders
     description: "Final mart combining customers and their orders"
+    columns:
+      - name: total_customer_spend
+        description: "Total customer spend"
+        tests:
+          - not_null
+      - name: tax_by_region
+        config:
+          meta:
+            dimension:
+              type: number
+              sql: |
+                case
+                  when ${lightdash.parameters.region} = 'EMEA'
+                    then ${TABLE}.total_customer_spend * 0.2
+                  when ${lightdash.parameters.region} = 'APAC'
+                    then ${TABLE}.total_customer_spend * 0.1
+                  when ${lightdash.parameters.region} = 'AMER'
+                    then ${TABLE}.total_customer_spend * 0.15
+                end
     config:
       freshness:
         build_after:
