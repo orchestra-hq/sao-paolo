@@ -91,7 +91,9 @@ def main(args: tuple):
     if args[1] not in ["build", "run", "test"]:
         log_debug(f"dbt command {args[1]} not supported for stateful orchestration.")
         try:
-            return subprocess.run(args).returncode
+            a = subprocess.run(args).returncode
+            print(a)
+            return a
         except FileNotFoundError as file_not_found_error:
             log_error(
                 f"dbt-core is not installed. Please install it. Issue: {file_not_found_error}"
