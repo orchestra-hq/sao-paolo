@@ -81,7 +81,7 @@ def main(args: tuple):
     if not os.getenv("ORCHESTRA_USE_STATEFUL", "false").lower() == "true":
         log_debug("Stateful orchestration is disabled. Running dbt command directly.")
         try:
-            return subprocess.run(args).returncode
+            sys.exit(subprocess.run(args).returncode)
         except FileNotFoundError as file_not_found_error:
             log_error(
                 f"dbt-core is not installed. Please install it. Issue: {file_not_found_error}"
@@ -91,7 +91,7 @@ def main(args: tuple):
     if args[1] not in ["build", "run", "test"]:
         log_debug(f"dbt command {args[1]} not supported for stateful orchestration.")
         try:
-            return subprocess.run(args).returncode
+            sys.exit(subprocess.run(args).returncode)
         except FileNotFoundError as file_not_found_error:
             log_error(
                 f"dbt-core is not installed. Please install it. Issue: {file_not_found_error}"
