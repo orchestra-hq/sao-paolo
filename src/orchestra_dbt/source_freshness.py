@@ -1,5 +1,8 @@
 import threading
 from datetime import datetime
+from importlib.metadata import version
+
+from packaging.version import Version
 
 from .logger import log_error, log_info, log_warn
 from .models import SourceFreshness
@@ -8,20 +11,19 @@ from .utils import load_json
 
 def get_source_freshness(target: str | None) -> SourceFreshness | None:
     try:
-        from dbt.artifacts.schemas.freshness.v3.freshness import (  # pyright: ignore[reportMissingImports]
-            SourceFreshnessResult,
-        )
-        from dbt.artifacts.schemas.results import (  # pyright: ignore[reportMissingImports]
-            FreshnessStatus,
-        )
-        from dbt.cli.main import dbtRunner  # pyright: ignore[reportMissingImports]
-        from dbt.task.freshness import (  # pyright: ignore[reportMissingImports]
-            FreshnessRunner,
-            FreshnessTask,
-        )
-        from dbt_common.exceptions import (  # pyright: ignore[reportMissingImports]
-            DbtRuntimeError,
-        )
+        dbt_version = Version(version("dbt-core"))
+        if dbt_version < Version("1.8.0"):
+            from dbt.contracts.results import SourceFreshnessResult
+            from dbt.exceptions import DbtRuntimeError
+            from dbt.task.freshness import FreshnessRunner, FreshnessTask
+        else:
+            from dbt.artifacts.schemas.freshness.v3.freshness import (  # pyright: ignore[reportMissingImports]
+                SourceFreshnessResult,
+            )
+            from dbt.artifacts.schemas.results import (  # pyright: ignore[reportMissingImports]
+                FreshnessStatus,
+            )
+        from dbt.cli.main import dbtRunner
     except ImportError as missing_dbt_core_error:
         log_error(
             f"dbt-core is not installed. Please install it. Issue: {missing_dbt_core_error}"

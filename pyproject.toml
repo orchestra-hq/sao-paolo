@@ -5,12 +5,12 @@ description = "Stateful orchestration for dbt Core projects in Orchestra."
 authors = [{ name = "Oliver Crawford" }]
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["click", "httpx", "pydantic", "pyyaml"]
+dependencies = ["click", "httpx", "protobuf", "pydantic", "pyyaml"]
 
 [project.optional-dependencies]
 dev = [
     "basedpyright",
-    "dbt-core",
+    "dbt-core==1.7.5",
     "dbt-snowflake", # Change/add adapters for local development requirements.
     "pytest-httpx",
     "pytest",
