@@ -115,7 +115,10 @@ def construct_dag(
                 )
 
                 for dep in node.get("depends_on", {}).get("nodes", []):
-                    edges.append(Edge(from_=str(dep), to_=node_id))
+                    dep = str(dep)
+                    if dep.startswith("function."):
+                        continue
+                    edges.append(Edge(from_=dep, to_=node_id))
             case _:
                 continue
 
