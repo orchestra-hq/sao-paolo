@@ -19,6 +19,8 @@ def calculate_freshness_on_node(
     state: StateApiModel,
     resource_type: str,
     track_state: bool,
+    from_external_package: bool,
+    depends_on_nodes: list[str] | None,
 ) -> tuple[Freshness, str]:
     if resource_type == "snapshot":
         # Note: currently, we always run snapshots. Need to configure how to propagate
@@ -27,6 +29,12 @@ def calculate_freshness_on_node(
 
     if not track_state:
         return Freshness.DIRTY, "State orchestration for this node is disabled."
+
+    if from_external_package and not depends_on_nodes:
+        return (
+            Freshness.DIRTY,
+            "Model from external package without parent dependencies - skipping state orchestration.",
+        )
 
     if resource_type == "seed":
         return Freshness.DIRTY, "State orchestration for seeds currently disabled."
@@ -70,7 +78,11 @@ def construct_dag(
                     asset_external_id = f"{integration_account_id}.{node_id}"
 
                 dbt_path = str(node["original_file_path"])
-                if node["package_name"] != project_name_from_manifest:
+                from_external_package = (
+                    node["package_name"] != project_name_from_manifest
+                )
+                depends_on_nodes = node.get("depends_on", {}).get("nodes", [])
+                if from_external_package:
                     file_path = f"dbt_packages/{node['package_name']}/{dbt_path}"
                 else:
                     file_path = dbt_path
@@ -91,6 +103,8 @@ def construct_dag(
                     state,
                     resource_type,
                     track_state,
+                    from_external_package,
+                    depends_on_nodes,
                 )
 
                 nodes[node_id] = MaterialisationNode(
@@ -114,7 +128,7 @@ def construct_dag(
                     ),
                 )
 
-                for dep in node.get("depends_on", {}).get("nodes", []):
+                for dep in depends_on_nodes:
                     edges.append(Edge(from_=str(dep), to_=node_id))
             case _:
                 continue

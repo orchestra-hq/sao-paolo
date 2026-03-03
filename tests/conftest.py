@@ -28,7 +28,7 @@ def sample_manifest():
             "model.test_project_2.model_b": {
                 "resource_type": "model",
                 "checksum": {"checksum": "ghi789"},
-                "config": {"freshness": None},
+                "config": {"freshness": None, "materialized": "incremental"},
                 "package_name": "test_project_2",
                 "original_file_path": "models/model_b.sql",
                 "depends_on": {

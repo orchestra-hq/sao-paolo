@@ -23,6 +23,8 @@ class TestCalculateFreshnessOnNode:
             state=StateApiModel(state={}),
             resource_type="snapshot",
             track_state=True,
+            from_external_package=False,
+            depends_on_nodes=[],
         ) == (Freshness.DIRTY, "Snapshot is always dirty.")
 
     def test_calculate_freshness_on_node_not_tracking_state(self):
@@ -32,6 +34,8 @@ class TestCalculateFreshnessOnNode:
             state=StateApiModel(state={}),
             resource_type="seed",
             track_state=False,
+            from_external_package=False,
+            depends_on_nodes=[],
         ) == (Freshness.DIRTY, "State orchestration for this node is disabled.")
 
     def test_calculate_freshness_on_node_not_in_state(self):
@@ -41,6 +45,8 @@ class TestCalculateFreshnessOnNode:
             state=StateApiModel(state={}),
             resource_type="model",
             track_state=True,
+            from_external_package=False,
+            depends_on_nodes=[],
         ) == (Freshness.DIRTY, "Model not previously seen in state.")
 
     def test_calculate_freshness_on_node_checksum_changed(self):
@@ -58,6 +64,8 @@ class TestCalculateFreshnessOnNode:
             ),
             resource_type="model",
             track_state=True,
+            from_external_package=False,
+            depends_on_nodes=[],
         ) == (Freshness.DIRTY, "Checksum changed since last run.")
 
     def test_calculate_freshness_on_node_checksum_matches(self):
@@ -75,7 +83,33 @@ class TestCalculateFreshnessOnNode:
             ),
             resource_type="model",
             track_state=True,
+            from_external_package=False,
+            depends_on_nodes=[],
         ) == (Freshness.CLEAN, "Model in same state as last run.")
+
+    def test_calculate_freshness_on_model_from_external_package_without_dependencies(
+        self,
+    ):
+        assert calculate_freshness_on_node(
+            asset_external_id="test.model.a.b",
+            checksum="123",
+            state=StateApiModel(
+                state={
+                    "test.model.a.b": StateItem(
+                        last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                        checksum="123",
+                        sources={},
+                    ),
+                }
+            ),
+            resource_type="model",
+            track_state=True,
+            from_external_package=True,
+            depends_on_nodes=[],
+        ) == (
+            Freshness.DIRTY,
+            "Model from external package without parent dependencies - skipping state orchestration.",
+        )
 
 
 class TestConstructDag:
