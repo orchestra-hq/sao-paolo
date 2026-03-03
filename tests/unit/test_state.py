@@ -1,6 +1,7 @@
 from datetime import datetime
 from unittest.mock import patch
 
+import httpx
 import pytest
 from pytest_httpx import HTTPXMock
 
@@ -164,6 +165,18 @@ class TestSaveState:
                 "Authorization": "Bearer test-api-key",
             },
             status_code=500,
+        )
+        assert save_state(state=StateApiModel(state={})) is None
+
+    def test_save_state_timeout(self, httpx_mock: HTTPXMock):
+        httpx_mock.add_exception(
+            httpx.TimeoutException("Request timed out"),
+            method="PATCH",
+            url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
+            match_headers={
+                "Content-Type": "application/json",
+                "Authorization": "Bearer test-api-key",
+            },
         )
         assert save_state(state=StateApiModel(state={})) is None
 

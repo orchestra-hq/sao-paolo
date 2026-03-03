@@ -120,8 +120,11 @@ def save_state(state: StateApiModel) -> None:
             },
             json=json.loads(state.model_dump_json(exclude_none=True)),
             url=f"{_get_base_api_url()}/state/DBT_CORE",
+            timeout=httpx.Timeout(timeout=30),
         )
         response.raise_for_status()
         log_info("State saved")
     except httpx.HTTPStatusError as e:
         log_warn(f"Failed to save state ({e.response.status_code}): {e.response.text}")
+    except httpx.TimeoutException as e:
+        log_warn(f"Failed to save state due to timeout: {e}")
