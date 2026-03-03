@@ -20,7 +20,6 @@ def calculate_freshness_on_node(
     resource_type: str,
     track_state: bool,
     from_external_package: bool,
-    materialized_config: str | None,
     depends_on_nodes: list[str] | None,
 ) -> tuple[Freshness, str]:
     if resource_type == "snapshot":
@@ -31,14 +30,10 @@ def calculate_freshness_on_node(
     if not track_state:
         return Freshness.DIRTY, "State orchestration for this node is disabled."
 
-    if (
-        from_external_package
-        and materialized_config == "incremental"
-        and not depends_on_nodes
-    ):
+    if from_external_package and not depends_on_nodes:
         return (
             Freshness.DIRTY,
-            "Incremental model from external package without parent dependencies - skipping state orchestration.",
+            "Model from external package without parent dependencies - skipping state orchestration.",
         )
 
     if resource_type == "seed":
@@ -87,7 +82,6 @@ def construct_dag(
                     node["package_name"] != project_name_from_manifest
                 )
                 depends_on_nodes = node.get("depends_on", {}).get("nodes", [])
-                materialized_config = node.get("config", {}).get("materialized")
                 if from_external_package:
                     file_path = f"dbt_packages/{node['package_name']}/{dbt_path}"
                 else:
@@ -110,7 +104,6 @@ def construct_dag(
                     resource_type,
                     track_state,
                     from_external_package,
-                    materialized_config,
                     depends_on_nodes,
                 )
 

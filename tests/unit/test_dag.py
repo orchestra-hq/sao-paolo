@@ -24,7 +24,6 @@ class TestCalculateFreshnessOnNode:
             resource_type="snapshot",
             track_state=True,
             from_external_package=False,
-            materialized_config="table",
             depends_on_nodes=[],
         ) == (Freshness.DIRTY, "Snapshot is always dirty.")
 
@@ -36,7 +35,6 @@ class TestCalculateFreshnessOnNode:
             resource_type="seed",
             track_state=False,
             from_external_package=False,
-            materialized_config="table",
             depends_on_nodes=[],
         ) == (Freshness.DIRTY, "State orchestration for this node is disabled.")
 
@@ -48,7 +46,6 @@ class TestCalculateFreshnessOnNode:
             resource_type="model",
             track_state=True,
             from_external_package=False,
-            materialized_config="table",
             depends_on_nodes=[],
         ) == (Freshness.DIRTY, "Model not previously seen in state.")
 
@@ -68,7 +65,6 @@ class TestCalculateFreshnessOnNode:
             resource_type="model",
             track_state=True,
             from_external_package=False,
-            materialized_config="table",
             depends_on_nodes=[],
         ) == (Freshness.DIRTY, "Checksum changed since last run.")
 
@@ -88,11 +84,10 @@ class TestCalculateFreshnessOnNode:
             resource_type="model",
             track_state=True,
             from_external_package=False,
-            materialized_config="table",
             depends_on_nodes=[],
         ) == (Freshness.CLEAN, "Model in same state as last run.")
 
-    def test_calculate_freshness_on_node_incremental_model_from_external_package_with_dependencies(
+    def test_calculate_freshness_on_model_from_external_package_without_dependencies(
         self,
     ):
         assert calculate_freshness_on_node(
@@ -110,11 +105,10 @@ class TestCalculateFreshnessOnNode:
             resource_type="model",
             track_state=True,
             from_external_package=True,
-            materialized_config="incremental",
             depends_on_nodes=[],
         ) == (
             Freshness.DIRTY,
-            "Incremental model from external package without parent dependencies - skipping state orchestration.",
+            "Model from external package without parent dependencies - skipping state orchestration.",
         )
 
 
