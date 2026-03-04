@@ -86,6 +86,7 @@ WHERE active = true
 class TestPatchSeedProperties:
     SEEDS_TO_REUSE = {
         "seed_1": MaterialisationNode(
+            asset_external_id="integration_account_id.seed_1",
             checksum="checksum_1",
             dbt_path="dbt_path_1",
             file_path="seeds/some_path/seed_1.csv",
@@ -96,6 +97,7 @@ class TestPatchSeedProperties:
             reason="Seed seed_1 in same state as before.",
         ),
         "seed_2": MaterialisationNode(
+            asset_external_id="integration_account_id.seed_2",
             checksum="checksum_2",
             dbt_path="dbt_path_2",
             file_path="seed_2.csv",

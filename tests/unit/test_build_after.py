@@ -78,6 +78,7 @@ class TestPropagateFreshnessConfig:
         dag = ParsedDag(
             nodes={
                 "A": MaterialisationNode(
+                    asset_external_id="integration_account_id.model.a",
                     freshness=Freshness.CLEAN,
                     checksum="1",
                     dbt_path="models/a.sql",
@@ -87,6 +88,7 @@ class TestPropagateFreshnessConfig:
                     freshness_config=FreshnessConfig(),  # No config
                 ),
                 "B": MaterialisationNode(
+                    asset_external_id="integration_account_id.model.b",
                     freshness=Freshness.CLEAN,
                     checksum="2",
                     dbt_path="models/b.sql",
@@ -96,6 +98,7 @@ class TestPropagateFreshnessConfig:
                     freshness_config=FreshnessConfig(),  # No config
                 ),
                 "C": MaterialisationNode(
+                    asset_external_id="integration_account_id.model.c",
                     freshness=Freshness.CLEAN,
                     checksum="3",
                     dbt_path="models/c.sql",
@@ -132,6 +135,7 @@ class TestPropagateFreshnessConfig:
         dag = ParsedDag(
             nodes={
                 "A": MaterialisationNode(
+                    asset_external_id="integration_account_id.model.a",
                     freshness=Freshness.CLEAN,
                     checksum="1",
                     dbt_path="models/a.sql",
@@ -143,6 +147,7 @@ class TestPropagateFreshnessConfig:
                     ),  # Already has config
                 ),
                 "B": MaterialisationNode(
+                    asset_external_id="integration_account_id.model.b",
                     freshness=Freshness.CLEAN,
                     checksum="2",
                     dbt_path="models/b.sql",
@@ -152,6 +157,7 @@ class TestPropagateFreshnessConfig:
                     freshness_config=FreshnessConfig(),  # No config
                 ),
                 "C": MaterialisationNode(
+                    asset_external_id="integration_account_id.model.c",
                     freshness=Freshness.CLEAN,
                     checksum="3",
                     dbt_path="models/c.sql",
@@ -161,6 +167,7 @@ class TestPropagateFreshnessConfig:
                     freshness_config=FreshnessConfig(),  # No config
                 ),
                 "D": MaterialisationNode(
+                    asset_external_id="integration_account_id.model.d",
                     freshness=Freshness.CLEAN,
                     checksum="4",
                     dbt_path="models/d.sql",
@@ -204,6 +211,7 @@ class TestPropagateFreshnessConfig:
         dag = ParsedDag(
             nodes={
                 "A": MaterialisationNode(
+                    asset_external_id="integration_account_id.model.a",
                     freshness=Freshness.CLEAN,
                     checksum="1",
                     dbt_path="models/a.sql",
@@ -213,6 +221,7 @@ class TestPropagateFreshnessConfig:
                     freshness_config=FreshnessConfig(),  # No config
                 ),
                 "B": MaterialisationNode(
+                    asset_external_id="integration_account_id.model.b",
                     freshness=Freshness.CLEAN,
                     checksum="2",
                     dbt_path="models/b.sql",
@@ -222,6 +231,7 @@ class TestPropagateFreshnessConfig:
                     freshness_config=FreshnessConfig(minutes_sla=10),
                 ),
                 "C": MaterialisationNode(
+                    asset_external_id="integration_account_id.model.c",
                     freshness=Freshness.CLEAN,
                     checksum="3",
                     dbt_path="models/c.sql",
@@ -249,6 +259,7 @@ class TestPropagateFreshnessConfig:
         dag = ParsedDag(
             nodes={
                 "A": MaterialisationNode(
+                    asset_external_id="integration_account_id.model.a",
                     freshness=Freshness.CLEAN,
                     checksum="1",
                     dbt_path="models/a.sql",
@@ -258,6 +269,7 @@ class TestPropagateFreshnessConfig:
                     freshness_config=FreshnessConfig(minutes_sla=20),  # Has config
                 ),
                 "B": MaterialisationNode(
+                    asset_external_id="integration_account_id.model.b",
                     freshness=Freshness.CLEAN,
                     checksum="2",
                     dbt_path="models/b.sql",
@@ -287,6 +299,7 @@ class TestPropagateFreshnessConfig:
         dag = ParsedDag(
             nodes={
                 "A": MaterialisationNode(
+                    asset_external_id="integration_account_id.model.a",
                     freshness=Freshness.CLEAN,
                     checksum="1",
                     dbt_path="models/a.sql",
@@ -296,6 +309,7 @@ class TestPropagateFreshnessConfig:
                     freshness_config=FreshnessConfig(),  # No config
                 ),
                 "B": MaterialisationNode(
+                    asset_external_id="integration_account_id.model.b",
                     freshness=Freshness.CLEAN,
                     checksum="2",
                     dbt_path="models/b.sql",
@@ -327,6 +341,7 @@ class TestPropagateFreshnessConfig:
         dag = ParsedDag(
             nodes={
                 "A": MaterialisationNode(
+                    asset_external_id="integration_account_id.model.a",
                     freshness=Freshness.CLEAN,
                     checksum="1",
                     dbt_path="models/a.sql",
@@ -338,6 +353,7 @@ class TestPropagateFreshnessConfig:
                     ),  # No minutes_sla but has updates_on
                 ),
                 "B": MaterialisationNode(
+                    asset_external_id="integration_account_id.model.b",
                     freshness=Freshness.CLEAN,
                     checksum="2",
                     dbt_path="models/b.sql",

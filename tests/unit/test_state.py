@@ -207,6 +207,7 @@ class TestUpdateState:
         parsed_dag = ParsedDag(
             nodes={
                 "model.test_project.model_a": MaterialisationNode(
+                    asset_external_id="model.test_project.model_a",
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
                     dbt_path="models/model_a.sql",
@@ -250,6 +251,7 @@ class TestUpdateState:
             nodes={
                 "source.test_db.test_schema.test_table": SourceNode(),
                 "model.test_project.model_a": MaterialisationNode(
+                    asset_external_id="model.test_project.model_a",
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
                     dbt_path="models/model_a.sql",
@@ -288,6 +290,7 @@ class TestUpdateState:
         parsed_dag = ParsedDag(
             nodes={
                 "model.test_project.model_a": MaterialisationNode(
+                    asset_external_id="integration_account_id.model.test_project.model_a",
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
                     dbt_path="models/model_a.sql",
@@ -325,6 +328,7 @@ class TestUpdateState:
         parsed_dag = ParsedDag(
             nodes={
                 "model.test_project.model_a": MaterialisationNode(
+                    asset_external_id="integration_account_id.model.test_project.model_a",
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
                     dbt_path="models/model_a.sql",
@@ -399,6 +403,7 @@ class TestUpdateState:
         parsed_dag = ParsedDag(
             nodes={
                 "model.test_project.model_a": MaterialisationNode(
+                    asset_external_id="model.test_project.model_a",
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
                     dbt_path="models/model_a.sql",
@@ -408,6 +413,7 @@ class TestUpdateState:
                     freshness_config=FreshnessConfig(),
                 ),
                 "model.test_project.model_b": MaterialisationNode(
+                    asset_external_id="model.test_project.model_b",
                     checksum="def456",
                     freshness=Freshness.CLEAN,
                     dbt_path="models/model_b.sql",
@@ -451,6 +457,7 @@ class TestUpdateState:
                 "source.test_db.test_schema.table1": SourceNode(),
                 "source.test_db.test_schema.table2": SourceNode(),
                 "model.test_project.model_a": MaterialisationNode(
+                    asset_external_id="model.test_project.model_a",
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
                     dbt_path="models/model_a.sql",
@@ -513,6 +520,7 @@ class TestUpdateState:
                 "source.test_db.test_schema.table1": SourceNode(),
                 "source.test_db.test_schema.table2": SourceNode(),
                 "model.test_project.model_a": MaterialisationNode(
+                    asset_external_id="model.test_project.model_a",
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
                     dbt_path="models/model_a.sql",
@@ -583,6 +591,7 @@ class TestUpdateState:
         parsed_dag = ParsedDag(
             nodes={
                 "model.test_project.model_a": MaterialisationNode(
+                    asset_external_id="model.test_project.model_a",
                     checksum="new_checksum",
                     freshness=Freshness.CLEAN,
                     dbt_path="models/model_a.sql",
@@ -623,6 +632,7 @@ class TestUpdateState:
         parsed_dag = ParsedDag(
             nodes={
                 "model.test_project.model_a": MaterialisationNode(
+                    asset_external_id="model.test_project.model_a",
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
                     dbt_path="models/model_a.sql",
@@ -632,6 +642,7 @@ class TestUpdateState:
                     freshness_config=FreshnessConfig(),
                 ),
                 "model.test_project.model_b": MaterialisationNode(
+                    asset_external_id="model.test_project.model_b",
                     checksum="def456",
                     freshness=Freshness.CLEAN,
                     dbt_path="models/model_b.sql",
@@ -673,6 +684,7 @@ class TestUpdateState:
         parsed_dag = ParsedDag(
             nodes={
                 "model.test_project.model_a": MaterialisationNode(
+                    asset_external_id="integration_account_id.model.test_project.model_a",
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
                     dbt_path="models/model_a.sql",
@@ -707,6 +719,7 @@ class TestUpdateState:
         parsed_dag = ParsedDag(
             nodes={
                 "model.test_project.model_a": MaterialisationNode(
+                    asset_external_id="model.test_project.model_a",
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
                     dbt_path="models/model_a.sql",
