@@ -1,5 +1,7 @@
+from .asset_external_id import generate_asset_external_id
 from .build_after import parse_freshness_config
 from .checksum import calculate_checksum
+from .logger import log_warn
 from .models import (
     Edge,
     Freshness,
@@ -60,6 +62,11 @@ def construct_dag(
     edges: list[Edge] = []
 
     project_name_from_manifest = manifest["metadata"]["project_name"]
+    integration_account_id = get_integration_account_id_from_env()
+    if not integration_account_id:
+        log_warn(
+            "No integration account ID found. Will use node ID as the asset external ID."
+        )
 
     for node_id in manifest.get("child_map", {}).keys():
         node_id = str(node_id)
@@ -73,9 +80,9 @@ def construct_dag(
         match resource_type:
             case "seed" | "model" | "snapshot":
                 node_id: str = str(node_id)
-                asset_external_id = node_id
-                if integration_account_id := get_integration_account_id_from_env():
-                    asset_external_id = f"{integration_account_id}.{node_id}"
+                asset_external_id: str = generate_asset_external_id(
+                    node_id, node, integration_account_id
+                )
 
                 dbt_path = str(node["original_file_path"])
                 from_external_package = (
