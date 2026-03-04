@@ -156,6 +156,7 @@ class TestConstructDag:
                     last_updated=datetime(2024, 1, 3, 12, 0, 0),
                 ),
                 "model.test_project.model_a": MaterialisationNode(
+                    asset_external_id="integration_account_id.model.test_project.model_a",
                     freshness=Freshness.CLEAN,
                     last_updated=datetime(2024, 1, 1, 12, 0, 0),
                     checksum="def456",
@@ -170,6 +171,7 @@ class TestConstructDag:
                     freshness_config=FreshnessConfig(),
                 ),
                 "model.test_project_2.model_b": MaterialisationNode(
+                    asset_external_id="integration_account_id.model.test_project_2.model_b",
                     freshness=Freshness.DIRTY,
                     checksum="ghi789",
                     dbt_path="models/model_b.sql",
@@ -179,6 +181,7 @@ class TestConstructDag:
                     freshness_config=FreshnessConfig(),
                 ),
                 "model.test_project.model_c": MaterialisationNode(
+                    asset_external_id="integration_account_id.model.test_project.model_c",
                     freshness=Freshness.DIRTY,
                     last_updated=datetime(2024, 1, 1, 12, 0, 0),
                     checksum="456",

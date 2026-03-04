@@ -25,6 +25,7 @@ class TestBuildDependencyGraphs:
             dag=ParsedDag(
                 nodes={
                     "model.a": MaterialisationNode(
+                        asset_external_id="model.a",
                         freshness=Freshness.CLEAN,
                         checksum="1",
                         dbt_path="models/model_a.sql",
@@ -34,6 +35,7 @@ class TestBuildDependencyGraphs:
                         freshness_config=FreshnessConfig(),
                     ),
                     "model.b": MaterialisationNode(
+                        asset_external_id="model.b",
                         freshness=Freshness.CLEAN,
                         checksum="2",
                         dbt_path="models/model_b.sql",
@@ -43,6 +45,7 @@ class TestBuildDependencyGraphs:
                         freshness_config=FreshnessConfig(),
                     ),
                     "model.c": MaterialisationNode(
+                        asset_external_id="model.c",
                         freshness=Freshness.CLEAN,
                         checksum="3",
                         dbt_path="models/model_c.sql",
@@ -52,6 +55,7 @@ class TestBuildDependencyGraphs:
                         freshness_config=FreshnessConfig(),
                     ),
                     "model.d": MaterialisationNode(
+                        asset_external_id="model.d",
                         freshness=Freshness.CLEAN,
                         checksum="4",
                         dbt_path="models/model_d.sql",
@@ -96,6 +100,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                 "source.test",
                 SourceNode(),
                 MaterialisationNode(
+                    asset_external_id="integration_account_id.model.a",
                     freshness=Freshness.CLEAN,
                     checksum="1",
                     dbt_path="models/model_a.sql",
@@ -115,6 +120,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     last_updated=datetime.now() - timedelta(minutes=10),
                 ),
                 MaterialisationNode(
+                    asset_external_id="integration_account_id.model.a",
                     freshness=Freshness.CLEAN,
                     checksum="1",
                     dbt_path="models/model_a.sql",
@@ -133,6 +139,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                 "source.test",
                 SourceNode(last_updated=datetime.now()),
                 MaterialisationNode(
+                    asset_external_id="integration_account_id.model.a",
                     freshness=Freshness.CLEAN,
                     checksum="1",
                     dbt_path="models/model_a.sql",
@@ -151,6 +158,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                 "source.test",
                 SourceNode(last_updated=datetime.now() - timedelta(minutes=10)),
                 MaterialisationNode(
+                    asset_external_id="integration_account_id.model.a",
                     freshness=Freshness.CLEAN,
                     checksum="1",
                     dbt_path="models/model_a.sql",
@@ -169,6 +177,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                 "source.test",
                 SourceNode(last_updated=datetime.now()),
                 MaterialisationNode(
+                    asset_external_id="integration_account_id.model.a",
                     freshness=Freshness.CLEAN,
                     checksum="1",
                     dbt_path="models/model_a.sql",
@@ -192,6 +201,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                 "source.test",
                 SourceNode(last_updated=datetime.now()),
                 MaterialisationNode(
+                    asset_external_id="integration_account_id.model.a",
                     freshness=Freshness.CLEAN,
                     checksum="1",
                     dbt_path="models/model_a.sql",
@@ -209,6 +219,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
             (
                 "model.a",
                 MaterialisationNode(
+                    asset_external_id="integration_account_id.model.a",
                     freshness=Freshness.CLEAN,
                     checksum="1",
                     dbt_path="models/model_a.sql",
@@ -219,6 +230,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     freshness_config=FreshnessConfig(),
                 ),
                 MaterialisationNode(
+                    asset_external_id="integration_account_id.model.b",
                     freshness=Freshness.CLEAN,
                     checksum="1",
                     dbt_path="models/model_b.sql",
@@ -234,6 +246,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
             (
                 "model.a",
                 MaterialisationNode(
+                    asset_external_id="integration_account_id.model.a",
                     freshness=Freshness.CLEAN,
                     checksum="1",
                     dbt_path="models/model_a.sql",
@@ -244,6 +257,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     freshness_config=FreshnessConfig(),
                 ),
                 MaterialisationNode(
+                    asset_external_id="integration_account_id.model.b",
                     freshness=Freshness.CLEAN,
                     checksum="1",
                     dbt_path="models/model_b.sql",
@@ -259,6 +273,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
             (
                 "model.a",
                 MaterialisationNode(
+                    asset_external_id="integration_account_id.model.a",
                     freshness=Freshness.CLEAN,
                     checksum="1",
                     dbt_path="models/model_a.sql",
@@ -269,6 +284,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     freshness_config=FreshnessConfig(),
                 ),
                 MaterialisationNode(
+                    asset_external_id="integration_account_id.model.a",
                     freshness=Freshness.CLEAN,
                     checksum="1",
                     dbt_path="models/model_b.sql",
@@ -308,6 +324,7 @@ class TestCalculateModelsToRun:
                     last_updated=datetime.now(),
                 ),
                 "model.a": MaterialisationNode(
+                    asset_external_id="model.a",
                     freshness=Freshness.CLEAN,
                     checksum="1",
                     dbt_path="models/model_a.sql",
@@ -317,6 +334,7 @@ class TestCalculateModelsToRun:
                     freshness_config=FreshnessConfig(),
                 ),
                 "model.b": MaterialisationNode(
+                    asset_external_id="model.b",
                     freshness=Freshness.CLEAN,
                     checksum="2",
                     dbt_path="models/model_b.sql",
@@ -350,6 +368,7 @@ class TestCalculateModelsToRun:
                     last_updated=datetime.now() - timedelta(minutes=10),
                 ),
                 "model.a": MaterialisationNode(
+                    asset_external_id="model.a",
                     freshness=Freshness.CLEAN,
                     checksum="1",
                     dbt_path="models/model_a.sql",
@@ -379,6 +398,7 @@ class TestCalculateModelsToRun:
                     last_updated=datetime.now(),
                 ),
                 "model.a": MaterialisationNode(
+                    asset_external_id="model.a",
                     freshness=Freshness.CLEAN,
                     checksum="1",
                     dbt_path="models/model_a.sql",
@@ -411,6 +431,7 @@ class TestCalculateModelsToRun:
         dag = ParsedDag(
             nodes={
                 "model.a": MaterialisationNode(
+                    asset_external_id="model.a",
                     freshness=Freshness.DIRTY,
                     checksum="1",
                     dbt_path="models/model_a.sql",
@@ -421,6 +442,7 @@ class TestCalculateModelsToRun:
                     freshness_config=FreshnessConfig(),
                 ),
                 "model.b": MaterialisationNode(
+                    asset_external_id="model.b",
                     freshness=Freshness.CLEAN,
                     checksum="2",
                     dbt_path="models/model_b.sql",
@@ -431,6 +453,7 @@ class TestCalculateModelsToRun:
                     freshness_config=FreshnessConfig(),
                 ),
                 "model.c": MaterialisationNode(
+                    asset_external_id="model.c",
                     freshness=Freshness.CLEAN,
                     checksum="3",
                     dbt_path="models/model_c.sql",
@@ -467,6 +490,7 @@ class TestCalculateModelsToRun:
                     last_updated=now,
                 ),
                 "model.stg_orders": MaterialisationNode(
+                    asset_external_id="model.stg_orders",
                     freshness=Freshness.CLEAN,
                     checksum="1",
                     dbt_path="models/model_stg_orders.sql",
@@ -479,6 +503,7 @@ class TestCalculateModelsToRun:
                     freshness_config=FreshnessConfig(),
                 ),
                 "model.stg_customers": MaterialisationNode(
+                    asset_external_id="model.stg_customers",
                     freshness=Freshness.CLEAN,
                     checksum="2",
                     dbt_path="models/model_stg_customers.sql",
@@ -491,6 +516,7 @@ class TestCalculateModelsToRun:
                     freshness_config=FreshnessConfig(),
                 ),
                 "model.int_orders": MaterialisationNode(
+                    asset_external_id="model.int_orders",
                     freshness=Freshness.CLEAN,
                     checksum="3",
                     dbt_path="models/model_int_orders.sql",
@@ -501,6 +527,7 @@ class TestCalculateModelsToRun:
                     freshness_config=FreshnessConfig(),
                 ),
                 "model.dim_customers": MaterialisationNode(
+                    asset_external_id="model.dim_customers",
                     freshness=Freshness.CLEAN,
                     checksum="4",
                     dbt_path="models/model_dim_customers.sql",
@@ -511,6 +538,7 @@ class TestCalculateModelsToRun:
                     freshness_config=FreshnessConfig(),
                 ),
                 "model.cust_orders": MaterialisationNode(
+                    asset_external_id="model.cust_orders",
                     freshness=Freshness.CLEAN,
                     checksum="5",
                     dbt_path="models/model_cust_orders.sql",
@@ -569,6 +597,7 @@ class TestCalculateModelsToRun:
                     last_updated=now - timedelta(minutes=5),
                 ),
                 "model.stg_orders": MaterialisationNode(
+                    asset_external_id="model.stg_orders",
                     freshness=Freshness.CLEAN,
                     checksum="1",
                     dbt_path="models/model_stg_orders.sql",
@@ -581,6 +610,7 @@ class TestCalculateModelsToRun:
                     freshness_config=FreshnessConfig(),
                 ),
                 "model.stg_customers": MaterialisationNode(
+                    asset_external_id="model.stg_customers",
                     freshness=Freshness.CLEAN,
                     checksum="2",
                     dbt_path="models/model_stg_customers.sql",
@@ -593,6 +623,7 @@ class TestCalculateModelsToRun:
                     reason="Node not seen before",
                 ),
                 "model.int_orders": MaterialisationNode(
+                    asset_external_id="model.int_orders",
                     freshness=Freshness.CLEAN,
                     checksum="3",
                     dbt_path="models/model_int_orders.sql",
@@ -603,6 +634,7 @@ class TestCalculateModelsToRun:
                     freshness_config=FreshnessConfig(),
                 ),
                 "model.dim_customers": MaterialisationNode(
+                    asset_external_id="model.dim_customers",
                     freshness=Freshness.CLEAN,
                     checksum="4",
                     dbt_path="models/model_dim_customers.sql",
@@ -613,6 +645,7 @@ class TestCalculateModelsToRun:
                     freshness_config=FreshnessConfig(),
                 ),
                 "model.cust_orders": MaterialisationNode(
+                    asset_external_id="model.cust_orders",
                     freshness=Freshness.CLEAN,
                     dbt_path="models/model_cust_orders.sql",
                     file_path="models/model_cust_orders.sql",

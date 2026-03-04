@@ -12,6 +12,7 @@ class TestLogReusedNodes:
     def test_happy_path_formatting(self, capsys):
         nodes_to_reuse = {
             "node_1": MaterialisationNode(
+                asset_external_id="integration_account_id.model.node_1",
                 last_updated=datetime(2026, 1, 1),
                 checksum="checksum_1",
                 freshness_config=FreshnessConfig(),
@@ -22,6 +23,7 @@ class TestLogReusedNodes:
                 file_path="file_path_1",
             ),
             "node_2": MaterialisationNode(
+                asset_external_id="integration_account_id.model.node_2",
                 last_updated=None,
                 checksum="checksum_1",
                 freshness_config=FreshnessConfig(),

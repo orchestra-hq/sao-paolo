@@ -81,7 +81,9 @@ def construct_dag(
             case "seed" | "model" | "snapshot":
                 node_id: str = str(node_id)
                 asset_external_id: str = generate_asset_external_id(
-                    node_id, node, integration_account_id
+                    node_id=node_id,
+                    relation_name=node.get("relation_name"),
+                    integration_account_id=integration_account_id,
                 )
 
                 dbt_path = str(node["original_file_path"])
@@ -115,6 +117,7 @@ def construct_dag(
                 )
 
                 nodes[node_id] = MaterialisationNode(
+                    asset_external_id=asset_external_id,
                     checksum=checksum,
                     freshness_config=parse_freshness_config(
                         config_on_node=node.get("config", {}).get("freshness")
