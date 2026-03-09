@@ -100,11 +100,7 @@ def update_state(
                     ):
                         sources_dict[edge.from_] = source_freshness.sources[edge.from_]
 
-        asset_external_id = node_id
-        if integration_account_id := get_integration_account_id_from_env():
-            asset_external_id = f"{integration_account_id}.{node_id}"
-
-        state.state[asset_external_id] = StateItem(
+        state.state[materialisation_node.asset_external_id] = StateItem(
             checksum=materialisation_node.checksum,
             last_updated=last_updated_from_run_results,
             sources=sources_dict,

@@ -47,6 +47,7 @@ class SourceNode(Node):
 class MaterialisationNode(Node):
     node_type: NodeType = NodeType.MATERIALISATION
 
+    asset_external_id: str
     checksum: str
     dbt_path: str
     file_path: str
