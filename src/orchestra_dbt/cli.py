@@ -24,7 +24,6 @@ from .patcher import patch_seed_properties, patch_sql_files, revert_patching
 from .sao import Freshness, calculate_nodes_to_run
 from .source_freshness import get_source_freshness
 from .state import load_state, save_state, update_state
-from .target_finder import find_target_in_args
 
 
 def _welcome() -> None:
@@ -106,9 +105,7 @@ def main(args: tuple):
     except ImportError:
         sys.exit(1)
 
-    source_freshness: SourceFreshness | None = get_source_freshness(
-        target=find_target_in_args(list(args))
-    )
+    source_freshness: SourceFreshness | None = get_source_freshness(args[2:])
     if not source_freshness:
         sys.exit(subprocess.run(args).returncode)
     log_info(f"Collected {len(source_freshness.sources)} source(s) information.")
