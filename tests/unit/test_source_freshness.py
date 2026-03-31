@@ -1,3 +1,4 @@
+from datetime import datetime
 from unittest.mock import Mock, patch
 
 from src.orchestra_dbt.models import SourceFreshness
@@ -54,7 +55,10 @@ class TestGetSourceFreshness:
 
         freshness_result = {
             "results": [
-                {"unique_id": "source.project.raw.orders", "max_loaded_at": "2026-03-31"}
+                {
+                    "unique_id": "source.project.raw.orders",
+                    "max_loaded_at": datetime(2026, 3, 31),
+                }
             ]
         }
 
@@ -96,7 +100,7 @@ class TestGetSourceFreshness:
                 )
 
         assert result == SourceFreshness(
-            sources={"source.project.raw.orders": "2026-03-31"}
+            sources={"source.project.raw.orders": datetime(2026, 3, 31)}
         )
         mock_runner.invoke.assert_called_once_with(
             args=[
@@ -119,12 +123,18 @@ class TestGetSourceFreshness:
         mock_runner.invoke.return_value = None
         mock_runner_factory = Mock(return_value=mock_runner)
 
+        selected_source = "source.project.raw.selected_upstream_source"
+        unselected_source = "source.project.raw.other_source"
         freshness_result = {
             "results": [
                 {
-                    "unique_id": "source.project.raw.selected_upstream_source",
-                    "max_loaded_at": "2026-03-31",
-                }
+                    "unique_id": selected_source,
+                    "max_loaded_at": datetime(2026, 3, 31),
+                },
+                {
+                    "unique_id": unselected_source,
+                    "max_loaded_at": datetime(2026, 3, 30),
+                },
             ]
         }
 
@@ -150,7 +160,7 @@ class TestGetSourceFreshness:
         ):
             with patch(
                 "src.orchestra_dbt.source_freshness.load_json",
-                return_value=freshness_result,
+                return_value={"results": [freshness_result["results"][0]]},
             ):
                 result = get_source_freshness(
                     (
@@ -160,9 +170,10 @@ class TestGetSourceFreshness:
                 )
 
         assert result == SourceFreshness(
-            sources={"source.project.raw.selected_upstream_source": "2026-03-31"}
+            sources={selected_source: datetime(2026, 3, 31)}
         )
-        assert "source.project.raw.unselected_source" not in result.sources
+        assert result is not None
+        assert unselected_source not in result.sources
         mock_runner.invoke.assert_called_once_with(
             args=[
                 "source",
