@@ -7,8 +7,17 @@ from .logger import log_error, log_info, log_warn
 from .models import SourceFreshness
 from .utils import load_json
 
+INVALID_SOURCE_FRESHNESS_FLAGS = {"--full-refresh", "--empty"}
 
-def get_source_freshness(target: str | None) -> SourceFreshness | None:
+
+def get_args_for_source_freshness(user_args: tuple | list[str]) -> list[str]:
+    filtered_user_args = [
+        arg for arg in user_args if arg not in INVALID_SOURCE_FRESHNESS_FLAGS
+    ]
+    return ["source", "freshness", "-q"] + filtered_user_args
+
+
+def get_source_freshness(user_args: tuple | list[str]) -> SourceFreshness | None:
     try:
         from dbt.artifacts.schemas.freshness import SourceDefinition
         from dbt.artifacts.schemas.freshness.v3.freshness import SourceFreshnessResult
@@ -150,10 +159,7 @@ def get_source_freshness(target: str | None) -> SourceFreshness | None:
     FreshnessTask.get_runner_type = lambda self, _: OrchestraFreshnessRunner
 
     try:
-        args: list[str] = ["source", "freshness", "-q"]
-        if target:
-            args.extend(["--target", target])
-        dbtRunner().invoke(args=args)
+        dbtRunner().invoke(args=get_args_for_source_freshness(user_args))
         return SourceFreshness(
             sources={
                 source["unique_id"]: source["max_loaded_at"]
