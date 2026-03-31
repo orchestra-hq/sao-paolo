@@ -7,6 +7,15 @@ from ..models import SourceFreshness
 from ..utils import load_json
 from .fallbacks.registry import FALLBACK_BY_ADAPTER_TYPE, loaded_at_fields_unset
 
+INVALID_SOURCE_FRESHNESS_FLAGS = {"--full-refresh", "--empty"}
+
+
+def get_args_for_source_freshness(user_args: tuple | list[str]) -> list[str]:
+    filtered_user_args = [
+        arg for arg in user_args if arg not in INVALID_SOURCE_FRESHNESS_FLAGS
+    ]
+    return ["source", "freshness", "-q"] + filtered_user_args
+
 
 def should_exclude_source(
     compiled_node, require_explicit_source_freshness: bool
@@ -15,7 +24,7 @@ def should_exclude_source(
 
 
 def get_source_freshness(
-    target: str | None, require_explicit_source_freshness: bool = False
+    user_args: tuple | list[str], require_explicit_source_freshness: bool = False
 ) -> SourceFreshness | None:
     try:
         from dbt.artifacts.resources.v1.components import FreshnessThreshold
@@ -83,10 +92,7 @@ def get_source_freshness(
     FreshnessTask.get_runner_type = lambda self, _: OrchestraFreshnessRunner
 
     try:
-        args: list[str] = ["source", "freshness", "-q"]
-        if target:
-            args.extend(["--target", target])
-        dbtRunner().invoke(args=args)
+        dbtRunner().invoke(args=get_args_for_source_freshness(user_args))
         if sources_without_explicit_freshness:
             log_warn(
                 f"{len(sources_without_explicit_freshness)} source(s) have no explicit freshness "
