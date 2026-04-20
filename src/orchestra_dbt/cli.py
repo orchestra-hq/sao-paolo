@@ -7,6 +7,7 @@ from typing import cast
 import click
 
 from .build_after import propagate_freshness_config
+from .compatibility import check_dbt_core_version, check_python_version
 from .constants import SERVICE_NAME, VALID_ORCHESTRA_ENVS
 from .dag import construct_dag
 from .logger import log_debug, log_error, log_info, log_reused_nodes
@@ -69,6 +70,8 @@ def main(args: tuple):
         log_error("Usage: orchestra-dbt dbt [DBT_COMMAND] [ARGS...]")
         sys.exit(1)
 
+    check_python_version()
+
     if args[1] == "orchestra":
         match args[2]:
             case "is_warn":
@@ -100,6 +103,7 @@ def main(args: tuple):
 
     _welcome()
     _validate_environment()
+    check_dbt_core_version()
 
     try:
         paths_to_run: list[str] | None = get_paths_to_run(args[2:])
