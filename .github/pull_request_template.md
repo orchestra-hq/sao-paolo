@@ -1,6 +1,6 @@
 ## Summary
 
-<!-- What does this PR change and why? Link issues (e.g. ENG-1234) or discussions. -->
+<!-- What does this PR change and why? -->
 
 ## How to test
 
@@ -15,3 +15,5 @@ uv run ruff check . && uv run ruff format --check . && uv run basedpyright
 
 - [ ] Tests added or updated where behaviour changed
 - [ ] `uv run ruff check .`, `uv run ruff format --check .`, and `uv run basedpyright` pass locally
+- [ ] Documentation updated where necessary
+- [ ] Changelog updated where necessary
