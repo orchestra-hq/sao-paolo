@@ -736,3 +736,58 @@ class TestUpdateState:
         update_state(state, parsed_dag, source_freshness)
 
         assert state.state == {}
+
+
+class TestLoadStateFile:
+    def test_load_state_file_missing(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(tmp_path / "missing.json"))
+        from src.orchestra_dbt.state import StateLoadError, load_state
+
+        with pytest.raises(StateLoadError, match="State file not found"):
+            load_state()
+
+    def test_load_state_file_empty_state(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        p = tmp_path / "st.json"
+        p.write_text('{"state": {}}', encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(p))
+        from src.orchestra_dbt.state import load_state
+
+        assert load_state() == StateApiModel(state={})
+
+    def test_load_state_file_invalid_json(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        p = tmp_path / "st.json"
+        p.write_text("not json", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(p))
+        from src.orchestra_dbt.state import StateLoadError, load_state
+
+        with pytest.raises(StateLoadError, match="not valid JSON"):
+            load_state()
+
+
+class TestSaveStateFile:
+    def test_save_state_file_round_trip(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        p = tmp_path / "st.json"
+        p.write_text('{"state": {}}', encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(p))
+        state = StateApiModel(
+            state={
+                "model.test": StateItem(
+                    last_updated=datetime(2024, 1, 1, 14, 0, 0),
+                    checksum="123",
+                    sources={"source.test": datetime(2024, 1, 1, 11, 0, 0)},
+                )
+            }
+        )
+        save_state(state)
+        loaded = load_state()
+        assert loaded.state["model.test"].checksum == "123"
