@@ -15,4 +15,3 @@ uv run ruff check . && uv run ruff format --check . && uv run basedpyright
 
 - [ ] Tests added or updated where behaviour changed
 - [ ] `uv run ruff check .`, `uv run ruff format --check .`, and `uv run basedpyright` pass locally
-- [ ] Commits are signed off for the DCO (`git commit -s`) — see `CONTRIBUTING.md`

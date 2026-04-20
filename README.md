@@ -2,7 +2,7 @@
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, pull requests, and the Developer Certificate of Origin (DCO). Report security issues as described in [SECURITY.md](SECURITY.md), not via public issues.
+See [CONTRIBUTING.md](CONTRIBUTING.md). Licensing: [Business Source License 1.1](LICENSE).
 
 ## Installing
 

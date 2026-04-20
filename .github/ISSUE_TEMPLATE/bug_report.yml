@@ -2,10 +2,6 @@ name: Bug report
 description: Report something that is broken or incorrect
 labels: ["bug"]
 body:
-  - type: markdown
-    attributes:
-      value: |
-        If this involves a **security vulnerability**, do not file here — use the [security policy](../SECURITY.md) instead.
   - type: textarea
     id: summary
     attributes:
