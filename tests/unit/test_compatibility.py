@@ -34,7 +34,7 @@ def test_check_python_version_exits_on_too_old(monkeypatch):
 
 
 def test_check_python_version_exits_on_too_new(monkeypatch):
-    monkeypatch.setattr(sys, "version_info", (3, 15, 0, "final", 0))
+    monkeypatch.setattr(sys, "version_info", (3, 14, 0, "final", 0))
     with pytest.raises(SystemExit) as exc:
         compatibility.check_python_version()
     assert exc.value.code == 1

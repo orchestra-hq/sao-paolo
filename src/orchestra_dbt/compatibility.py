@@ -8,12 +8,17 @@ from packaging.version import Version
 
 # Keep in sync with README and optional-dependencies in pyproject.toml.
 SUPPORTED_PYTHON = (3, 11)
-MAX_SUPPORTED_PYTHON_EXCLUSIVE = (
-    3,
-    15,
-)  # i.e. 3.11 <= x < 3.15 (3.11 through 3.14 inclusive)
+MAX_SUPPORTED_PYTHON_EXCLUSIVE = (3, 14)  # i.e. 3.11 <= x < 3.14 (3.11–3.13)
 
 SUPPORTED_DBT_CORE_SPEC = ">=1.10,<1.12"
+
+
+def dbt_core_import_error_message(exc: BaseException) -> str:
+    """User-facing text when dbt-core modules cannot be imported."""
+    return (
+        f"dbt-core is required (supported versions {SUPPORTED_DBT_CORE_SPEC}). "
+        f"Install it per README. Import error: {exc}"
+    )
 
 
 def supported_dbt_core_specifier() -> SpecifierSet:

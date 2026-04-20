@@ -2,10 +2,10 @@
 
 ## Compatibility
 
-- **Python:** 3.11 through 3.14 (see `requires-python` in `pyproject.toml`). **3.14:** installs and the non-dbt test suite runs in CI; **dbt-core 1.11** still fails to import on CPython 3.14 in current stacks (mashumaro), so **stateful orchestration** (`ORCHESTRA_USE_STATEFUL=true`) and dbt import smoke tests are only meaningful on **3.11–3.13** until upstream fixes that. Use 3.11–3.13 for real dbt runs.
+- **Python:** 3.11, 3.12, and 3.13 only (see `requires-python` in `pyproject.toml`).
 - **dbt-core:** 1.10.x and 1.11.x when using stateful orchestration. The CLI checks the installed `dbt-core` version before invoking `dbt ls` / source freshness. Warehouse adapters are optional: `uv sync --extra dev --extra adapters` (Snowflake/Databricks) when you need them locally.
 
-Integration smoke tests in `tests/integration/test_dbt_smoke.py` import the same dbt internal modules used for `dbt ls` and source freshness (skipped on 3.14 until dbt imports cleanly there).
+Integration smoke tests in `tests/integration/test_dbt_smoke.py` import the same dbt internal modules used for `dbt ls` and source freshness.
 
 ## Installing
 
@@ -13,7 +13,7 @@ Integration smoke tests in `tests/integration/test_dbt_smoke.py` import the same
 python3 -m venv .venv
 source .venv/bin/activate
 uv sync --extra dev
-# Optional: Snowflake/Databricks adapters for local runs (adds heavy deps; may not install on bleeding-edge Python yet)
+# Optional: Snowflake/Databricks adapters for local runs
 # uv sync --extra dev --extra adapters
 ```
 
