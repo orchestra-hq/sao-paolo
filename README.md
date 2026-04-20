@@ -8,6 +8,10 @@ source .venv/bin/activate
 uv sync --extra dev
 ```
 
+## Tutorial dbt project
+
+A minimal dbt Core project used for docs and CI lives under [`tutorial/`](tutorial/). See [`tutorial/README.md`](tutorial/README.md) for Postgres setup, [`pipeline.yaml`](tutorial/pipeline.yaml) for an Orchestra pipeline template, and [`tutorial/dbt/`](tutorial/dbt/) for the models.
+
 ## Development
 
 1. Create a branch
@@ -15,6 +19,13 @@ uv sync --extra dev
 1. Where possible, [test locally](#running-locally)
 1. Test in Orchestra [with the branch](#running-in-orchestra)
 1. Raise a PR
+
+Pull requests run GitHub Actions: unit tests, static checks, `dbt build` for `tutorial/dbt` against Postgres, and (when configured) an Orchestra pipeline via `orchestra-hq/run-pipeline`. Configure these repository secrets:
+
+- `ORCHESTRA_API_KEY`
+- `ORCHESTRA_PIPELINE_ID` — pipeline created from [`tutorial/pipeline.yaml`](tutorial/pipeline.yaml) (or equivalent) in Orchestra
+
+The workflow uses the `production` environment for the Orchestra job (same pattern as the previous slim CI workflow).
 
 ## Running locally
 
@@ -53,7 +64,9 @@ Ask @ojc-orchestra for access to the scripts:
 pytest
 ```
 
-To run an integration test, you will require both `local_state.json` and `local_manifest.json` in the root directory. `local_state.json` can be created by running `dynamo_state.py` (see above), and `local_manifest.json` can be created by downloading a relevant dbt manifest.json file.
+Without Postgres, the tutorial `dbt build` integration test is skipped. To run it locally, start Postgres, set `PGHOST`, `PGDATABASE`, and related variables (see [`tutorial/README.md`](tutorial/README.md)), then run `pytest tests/integration/test_tutorial_dbt.py`.
+
+For the optional DAG integration test, you need both `local_state.json` and `local_manifest.json` in the root directory. `local_state.json` can be created by running `dynamo_state.py` (see above), and `local_manifest.json` can be created by downloading a relevant dbt `manifest.json` file.
 
 ## Linting
 

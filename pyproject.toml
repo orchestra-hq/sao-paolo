@@ -12,6 +12,7 @@ dev = [
     "basedpyright",
     "dbt-core",
     "dbt-databricks",
+    "dbt-postgres",
     "dbt-snowflake", # Change/add adapters for local development requirements.
     "pytest-httpx",
     "pytest",
