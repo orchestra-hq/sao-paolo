@@ -61,7 +61,7 @@ jobs:
           PGPASSWORD: postgres
           PGDATABASE: tutorial
           DBT_SCHEMA: sao_tutorial
-        run: uv run pytest tests/integration/test_tutorial_dbt.py -v
+        run: uv run pytest tests/integration/test_tutorial_dbt.py -s
 
   orchestra:
     runs-on: ubuntu-latest
@@ -77,5 +77,5 @@ jobs:
           poll_interval: 20
           run_inputs: |
             {
-              "dbt_branch": "${{ github.head_ref }}"
+              "ci_branch": "${{ github.head_ref }}"
             }

@@ -1,25 +1,28 @@
-# Import into Orchestra or paste from the product UI after creating the pipeline.
-# Replace placeholder UUIDs and connection id with values from your workspace.
 version: v1
-name: sao-paolo tutorial (dbt Core state)
+name: dbt Core - State Aware CI Smoke Test
 pipeline:
-  00000000-0000-4000-8000-000000000001:
+  ciSmokeTestGroup:
     tasks:
-      00000000-0000-4000-8000-000000000002:
+      ciSmokeTestTask:
         integration: DBT_CORE
         integration_job: DBT_CORE_EXECUTE
         parameters:
           commands: dbt build
-          package_manager: PIP
+          package_manager: UV
           python_version: "3.12"
           use_state_orchestration: true
+          branch: ${{ inputs.ci_branch }}
           project_dir: tutorial/dbt
-          shallow_clone_dirs: tutorial/dbt
-          environment_variables: '{"DBT_SCHEMA": "${{ ENV.DBT_SCHEMA }}"}'
+          shallow_clone_dirs: tutorial
+          environment_variables:
+            "{\n  \"ORCHESTRA_DBT_BRANCH\": \"${{ inputs.ci_branch\
+            \ }}\"\n}"
         depends_on: []
-        name: dbt build
-        connection: REPLACE_WITH_YOUR_DBT_CONNECTION_ID
+        name: CI Smoke Test Execution
     depends_on: []
-    name: Tutorial
+    name: CI Smoke Test Task Group
 webhook:
   enabled: false
+inputs:
+  ci_branch:
+    type: string
