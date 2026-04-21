@@ -21,11 +21,7 @@ adapters = [
     "dbt-snowflake",
 ]
 
-debug = [
-    "awscrt",
-    "boto3",
-    "graphviz",
-]
+debug = ["awscrt", "boto3", "graphviz"]
 
 [project.scripts]
 orchestra-dbt = "orchestra_dbt.cli:main"
