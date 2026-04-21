@@ -7,6 +7,7 @@ from typing import cast
 import click
 
 from .build_after import propagate_freshness_config
+from .compatibility import dbt_core_import_error_message
 from .config import effective_state_file_path
 from .constants import SERVICE_NAME, VALID_ORCHESTRA_ENVS
 from .dag import construct_dag
@@ -97,7 +98,7 @@ def main(args: tuple):
             sys.exit(subprocess.run(args).returncode)
         except FileNotFoundError as file_not_found_error:
             log_error(
-                f"dbt-core is not installed. Please install it. Issue: {file_not_found_error}"
+                f"dbt executable not found on PATH (install the dbt CLI). {file_not_found_error}"
             )
             sys.exit(1)
 
@@ -107,7 +108,7 @@ def main(args: tuple):
             sys.exit(subprocess.run(args).returncode)
         except FileNotFoundError as file_not_found_error:
             log_error(
-                f"dbt-core is not installed. Please install it. Issue: {file_not_found_error}"
+                f"dbt executable not found on PATH (install the dbt CLI). {file_not_found_error}"
             )
             sys.exit(1)
 
@@ -116,12 +117,17 @@ def main(args: tuple):
 
     try:
         paths_to_run: list[str] | None = get_paths_to_run(args[2:])
-    except ImportError:
+    except ImportError as import_error:
+        log_error(dbt_core_import_error_message(import_error))
         sys.exit(1)
 
-    source_freshness: SourceFreshness | None = get_source_freshness(
-        target=find_target_in_args(list(args))
-    )
+    try:
+        source_freshness: SourceFreshness | None = get_source_freshness(
+            target=find_target_in_args(list(args))
+        )
+    except ImportError as import_error:
+        log_error(dbt_core_import_error_message(import_error))
+        sys.exit(1)
     if not source_freshness:
         sys.exit(subprocess.run(args).returncode)
     log_info(f"Collected {len(source_freshness.sources)} source(s) information.")
