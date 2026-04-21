@@ -8,7 +8,8 @@ import click
 
 from .build_after import propagate_freshness_config
 from .compatibility import dbt_core_import_error_message
-from .config import effective_state_file_path, load_orchestra_dbt_settings
+from .config import effective_state_persistence, load_orchestra_dbt_settings
+from .state_storage import StatePersistenceKind
 from .constants import SERVICE_NAME
 from .dag import construct_dag
 from .logger import log_debug, log_error, log_info, log_reused_nodes
@@ -38,13 +39,18 @@ def _welcome() -> None:
 
 
 def _validate_environment() -> None:
-    if effective_state_file_path() is not None:
-        log_debug("Environment validated (file state backend).")
+    persistence = effective_state_persistence()
+    if persistence.kind == StatePersistenceKind.LOCAL_FILE:
+        log_debug("Environment validated (local file state backend).")
+        return
+    if persistence.kind == StatePersistenceKind.S3:
+        log_debug("Environment validated (S3 state backend).")
         return
 
     if not os.getenv("ORCHESTRA_API_KEY"):
         log_error(
-            "Stateful mode requires ORCHESTRA_API_KEY for Orchestra HTTP, or a state file "
+            "Stateful mode requires ORCHESTRA_API_KEY for Orchestra HTTP, or state storage "
+            "outside Orchestra: a local path, s3://bucket/key "
             "(ORCHESTRA_STATE_FILE or [tool.orchestra_dbt] state_file in pyproject.toml)."
         )
         sys.exit(1)

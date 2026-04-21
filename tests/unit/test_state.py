@@ -1,5 +1,5 @@
 from datetime import datetime
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
@@ -18,6 +18,7 @@ from src.orchestra_dbt.models import (
 )
 from src.orchestra_dbt.state import (
     StateLoadError,
+    StateSaveError,
     _load_run_results,
     load_state,
     save_state,
@@ -793,3 +794,95 @@ class TestSaveStateFile:
         save_state(state)
         loaded = load_state()
         assert loaded.state["model.test"].checksum == "123"
+
+
+class TestLoadStateS3:
+    @patch("src.orchestra_dbt.state._boto3_s3_client")
+    def test_load_state_s3_missing_object_starts_empty(
+        self, mock_client_fn, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        from botocore.exceptions import ClientError
+
+        mock_client = MagicMock()
+        mock_client_fn.return_value = mock_client
+        mock_client.get_object.side_effect = ClientError(
+            {"Error": {"Code": "NoSuchKey", "Message": "not found"}},
+            "GetObject",
+        )
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", "s3://my-bucket/path/state.json")
+
+        assert load_state() == StateApiModel(state={})
+
+    @patch("src.orchestra_dbt.state._boto3_s3_client")
+    def test_load_state_s3_success(
+        self, mock_client_fn, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        mock_client = MagicMock()
+        mock_client_fn.return_value = mock_client
+        body = MagicMock()
+        body.read.return_value = (
+            b'{"state": {"model.x": {"checksum": "c", '
+            b'"last_updated": "2024-01-01T12:00:00", "sources": {}}}}'
+        )
+        mock_client.get_object.return_value = {"Body": body}
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", "s3://b/k.json")
+
+        loaded = load_state()
+        assert "model.x" in loaded.state
+        assert loaded.state["model.x"].checksum == "c"
+
+    @patch("src.orchestra_dbt.state._boto3_s3_client", side_effect=ImportError)
+    def test_load_state_s3_import_error(
+        self, _mock, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", "s3://b/k.json")
+
+        with pytest.raises(StateLoadError, match="boto3"):
+            load_state()
+
+
+class TestSaveStateS3:
+    @patch("src.orchestra_dbt.state._boto3_s3_client")
+    def test_save_state_s3_put_object(
+        self, mock_client_fn, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        mock_client = MagicMock()
+        mock_client_fn.return_value = mock_client
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", "s3://bucket/dir/f.json")
+
+        save_state(
+            StateApiModel(
+                state={
+                    "m": StateItem(
+                        last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                        checksum="1",
+                        sources={},
+                    )
+                }
+            )
+        )
+
+        mock_client.put_object.assert_called_once()
+        call_kw = mock_client.put_object.call_args.kwargs
+        assert call_kw["Bucket"] == "bucket"
+        assert call_kw["Key"] == "dir/f.json"
+        assert b'"checksum"' in call_kw["Body"]
+
+    @patch("src.orchestra_dbt.state._boto3_s3_client", side_effect=ImportError)
+    def test_save_state_s3_import_error(
+        self, _mock, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", "s3://b/k.json")
+
+        with pytest.raises(StateSaveError, match="boto3"):
+            save_state(StateApiModel(state={}))

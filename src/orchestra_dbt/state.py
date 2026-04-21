@@ -10,10 +10,11 @@ import httpx
 from pydantic import ValidationError
 
 from .config import (
-    effective_state_file_path,
+    effective_state_persistence,
     get_integration_account_id,
     load_orchestra_dbt_settings,
 )
+from .state_storage import StatePersistenceKind
 from .logger import log_error, log_info, log_warn
 from .models import (
     MaterialisationNode,
@@ -78,6 +79,82 @@ def _load_state_http() -> StateApiModel:
         return StateApiModel(state={})
 
 
+_S3_MISSING_BOTO3 = (
+    "S3 state storage requires boto3. Install the optional dependency "
+    "(e.g. pip install 'orchestra-dbt[s3]' or uv sync --extra s3)."
+)
+
+
+def _boto3_s3_client():
+    import boto3
+
+    return boto3.client("s3")
+
+
+def _load_state_s3(bucket: str, key: str) -> StateApiModel:
+    try:
+        client = _boto3_s3_client()
+    except ImportError as e:
+        raise StateLoadError(_S3_MISSING_BOTO3) from e
+
+    from botocore.exceptions import ClientError
+
+    try:
+        response = client.get_object(Bucket=bucket, Key=key)
+    except ClientError as e:
+        code = e.response.get("Error", {}).get("Code", "")
+        if code in ("NoSuchKey", "404", "NotFound"):
+            log_info(
+                f"No state object at s3://{bucket}/{key}; starting with empty state."
+            )
+            return StateApiModel(state={})
+        raise StateLoadError(
+            f"Failed to load state from s3://{bucket}/{key}: {e}"
+        ) from e
+
+    try:
+        raw = response["Body"].read().decode("utf-8")
+        data = json.loads(raw)
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        raise StateLoadError(
+            f"State object at s3://{bucket}/{key} is not valid JSON: {e}"
+        ) from e
+
+    try:
+        state = StateApiModel.model_validate(data)
+    except (ValidationError, ValueError) as e:
+        raise StateLoadError(
+            f"State object at s3://{bucket}/{key} failed validation: {e}"
+        ) from e
+
+    _apply_integration_account_filter(state)
+    log_info(f"State loaded from S3. Retrieved {len(state.state)} items.")
+    return state
+
+
+def _save_state_s3(bucket: str, key: str, state: StateApiModel) -> None:
+    try:
+        client = _boto3_s3_client()
+    except ImportError as e:
+        raise StateSaveError(_S3_MISSING_BOTO3) from e
+
+    from botocore.exceptions import BotoCoreError, ClientError
+
+    payload_bytes = state.model_dump_json(exclude_none=True).encode("utf-8")
+    try:
+        client.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=payload_bytes,
+            ContentType="application/json; charset=utf-8",
+        )
+    except (ClientError, BotoCoreError, OSError) as e:
+        raise StateSaveError(
+            f"Failed to save state to s3://{bucket}/{key}: {e}"
+        ) from e
+    log_info("State saved to S3")
+
+
 def _load_state_file(path: Path) -> StateApiModel:
     if not path.is_file():
         raise StateLoadError(f"State file not found: {path}")
@@ -99,9 +176,13 @@ def _load_state_file(path: Path) -> StateApiModel:
 
 
 def load_state() -> StateApiModel:
-    path = effective_state_file_path()
-    if path is not None:
-        return _load_state_file(path)
+    persistence = effective_state_persistence()
+    if persistence.kind == StatePersistenceKind.LOCAL_FILE:
+        assert persistence.local_path is not None
+        return _load_state_file(persistence.local_path)
+    if persistence.kind == StatePersistenceKind.S3:
+        assert persistence.s3_bucket is not None and persistence.s3_key is not None
+        return _load_state_s3(persistence.s3_bucket, persistence.s3_key)
     return _load_state_http()
 
 
@@ -194,8 +275,13 @@ def _save_state_file(path: Path, state: StateApiModel) -> None:
 
 
 def save_state(state: StateApiModel) -> None:
-    path = effective_state_file_path()
-    if path is not None:
-        _save_state_file(path, state)
+    persistence = effective_state_persistence()
+    if persistence.kind == StatePersistenceKind.LOCAL_FILE:
+        assert persistence.local_path is not None
+        _save_state_file(persistence.local_path, state)
+        return
+    if persistence.kind == StatePersistenceKind.S3:
+        assert persistence.s3_bucket is not None and persistence.s3_key is not None
+        _save_state_s3(persistence.s3_bucket, persistence.s3_key, state)
         return
     _save_state_http(state)

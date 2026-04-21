@@ -5,6 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
+from .state_storage import StatePersistence, StatePersistenceKind, parse_s3_uri
+
 _TOOL_SECTION = "orchestra_dbt"
 
 
@@ -100,31 +102,58 @@ def get_integration_account_id(cwd: Path | None = None) -> str | None:
     return load_orchestra_dbt_settings(cwd).integration_account_id
 
 
-def effective_state_file_path(cwd: Path | None = None) -> Path | None:
+def effective_state_persistence(cwd: Path | None = None) -> StatePersistence:
     if os.getenv("ORCHESTRA_API_KEY", "").strip():
-        return None
+        return StatePersistence(kind=StatePersistenceKind.HTTP)
 
-    env_path = os.getenv("ORCHESTRA_STATE_FILE", "").strip()
     base = cwd or Path.cwd()
+    env_path = os.getenv("ORCHESTRA_STATE_FILE", "").strip()
     if env_path:
+        if env_path.lower().startswith("s3://"):
+            bucket, key = parse_s3_uri(env_path)
+            return StatePersistence(
+                kind=StatePersistenceKind.S3,
+                s3_bucket=bucket,
+                s3_key=key,
+            )
         resolved = Path(env_path).expanduser()
         if not resolved.is_absolute():
             resolved = base.resolve() / resolved
-        return resolved.resolve()
+        return StatePersistence(
+            kind=StatePersistenceKind.LOCAL_FILE,
+            local_path=resolved.resolve(),
+        )
 
     project_dir = find_pyproject_directory(base)
     if project_dir is None:
-        return None
+        return StatePersistence(kind=StatePersistenceKind.HTTP)
 
     tool_cfg = _read_tool_orchestra_dbt(project_dir)
     raw = tool_cfg.get("state_file")
     if not raw or not isinstance(raw, str):
-        return None
+        return StatePersistence(kind=StatePersistenceKind.HTTP)
     stripped = raw.strip()
     if not stripped:
-        return None
+        return StatePersistence(kind=StatePersistenceKind.HTTP)
+
+    if stripped.lower().startswith("s3://"):
+        bucket, key = parse_s3_uri(stripped)
+        return StatePersistence(
+            kind=StatePersistenceKind.S3,
+            s3_bucket=bucket,
+            s3_key=key,
+        )
 
     p = Path(stripped).expanduser()
     if p.is_absolute():
-        return p.resolve()
-    return (project_dir / p).resolve()
+        local_path = p.resolve()
+    else:
+        local_path = (project_dir / p).resolve()
+    return StatePersistence(kind=StatePersistenceKind.LOCAL_FILE, local_path=local_path)
+
+
+def effective_state_file_path(cwd: Path | None = None) -> Path | None:
+    persistence = effective_state_persistence(cwd)
+    if persistence.kind == StatePersistenceKind.LOCAL_FILE:
+        return persistence.local_path
+    return None

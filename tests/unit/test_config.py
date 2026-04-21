@@ -4,10 +4,12 @@ import pytest
 
 from src.orchestra_dbt.config import (
     effective_state_file_path,
+    effective_state_persistence,
     find_pyproject_directory,
     get_integration_account_id,
     load_orchestra_dbt_settings,
 )
+from src.orchestra_dbt.state_storage import StatePersistenceKind
 
 
 def _clear_orchestra_settings_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -78,6 +80,34 @@ def test_effective_state_file_path_none_without_config(
     monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
     monkeypatch.delenv("ORCHESTRA_STATE_FILE", raising=False)
     assert effective_state_file_path() is None
+
+
+def test_effective_state_persistence_s3_from_env(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+    monkeypatch.setenv("ORCHESTRA_STATE_FILE", "s3://my-bucket/prefix/state.json")
+    p = effective_state_persistence()
+    assert p.kind == StatePersistenceKind.S3
+    assert p.s3_bucket == "my-bucket"
+    assert p.s3_key == "prefix/state.json"
+
+
+def test_effective_state_persistence_s3_from_pyproject(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.orchestra_dbt]\nstate_file = "s3://b/k/state.json"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+    monkeypatch.delenv("ORCHESTRA_STATE_FILE", raising=False)
+    p = effective_state_persistence()
+    assert p.kind == StatePersistenceKind.S3
+    assert p.s3_bucket == "b"
+    assert p.s3_key == "k/state.json"
 
 
 def test_effective_state_file_path_api_key_prefers_http_over_env_and_pyproject(
