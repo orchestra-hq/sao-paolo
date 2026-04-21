@@ -1,3 +1,3 @@
 """
-Test suite for orchestra-dbt CLI tool.
+Test suite for the orc CLI tool.
 """

@@ -24,10 +24,11 @@ adapters = [
 debug = ["awscrt", "boto3", "graphviz"]
 
 [project.scripts]
-orchestra-dbt = "orchestra_dbt.cli:main"
+orc = "orchestra_dbt.cli:main"
 
 [tool.basedpyright]
 typeCheckingMode = "basic"
+include = ["src", "tests"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

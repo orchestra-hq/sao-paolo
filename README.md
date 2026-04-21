@@ -66,13 +66,13 @@ echo '{"state":{}}' > .orchestra/dbt_state.json
 Orchestra HTTP (requires an API key from Orchestra). Do not set `ORCHESTRA_STATE_FILE` or `state_file` in `pyproject.toml` if you want the HTTP backend rather than a local file.
 
 ```bash
-ORCHESTRA_ENV=dev ORCHESTRA_API_KEY=<API_KEY> ORCHESTRA_USE_STATEFUL=true ORCHESTRA_LOCAL_RUN=true orchestra-dbt dbt run --target snowflake
+ORCHESTRA_ENV=dev ORCHESTRA_API_KEY=<API_KEY> ORCHESTRA_USE_STATEFUL=true ORCHESTRA_LOCAL_RUN=true orc run --target snowflake
 ```
 
 Local JSON file (after creating the file as above), no Orchestra API key required for state:
 
 ```bash
-ORCHESTRA_USE_STATEFUL=true ORCHESTRA_STATE_FILE=.orchestra/dbt_state.json ORCHESTRA_LOCAL_RUN=true orchestra-dbt dbt run --target snowflake
+ORCHESTRA_USE_STATEFUL=true ORCHESTRA_STATE_FILE=.orchestra/dbt_state.json ORCHESTRA_LOCAL_RUN=true orc run --target snowflake
 ```
 
 ## Running in Orchestra
