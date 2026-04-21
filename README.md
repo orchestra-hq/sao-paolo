@@ -3,7 +3,7 @@
 ## Compatibility
 
 - **Python:** 3.11, 3.12, and 3.13 only (see `requires-python` in `pyproject.toml`).
-- **dbt-core:** 1.10.x and 1.11.x when using stateful orchestration. The CLI checks the installed `dbt-core` version before invoking `dbt ls` / source freshness. Warehouse adapters are optional: `uv sync --extra dev --extra adapters` (Snowflake/Databricks) when you need them locally.
+- **dbt-core:** 1.10.x and 1.11.x when using stateful orchestration. Warehouse adapters are optional: `uv sync --extra dev --extra adapters`
 
 ## Installing
 
@@ -15,6 +15,10 @@ uv sync --extra dev
 # uv sync --extra dev --extra adapters
 ```
 
+## Tutorial dbt project
+
+A minimal dbt Core project used for docs and CI lives under [`tutorial/`](tutorial/). See [`tutorial/README.md`](tutorial/README.md) for Postgres setup, [`pipeline.yaml`](tutorial/pipeline.yaml) for an Orchestra pipeline template, and [`tutorial/dbt/`](tutorial/dbt/) for the models.
+
 ## Development
 
 1. Create a branch
@@ -23,11 +27,30 @@ uv sync --extra dev
 1. Test in Orchestra [with the branch](#running-in-orchestra)
 1. Raise a PR
 
+Pull requests run GitHub Actions: unit tests, static checks, `dbt build` for `tutorial/dbt` against Postgres, and an Orchestra pipeline via the [Orchestra Run Pipeline Action](https://github.com/orchestra-hq/run-pipeline).
+
 ## Stateful mode and where state is stored
 
-When `ORCHESTRA_USE_STATEFUL=true`, the CLI must load and save [dbt Core state](https://docs.getdbt.com/) metadata used for orchestration. That state is the same JSON shape whether it comes from Orchestra’s HTTP API or from a local file.
+When stateful orchestration is enabled, the CLI loads and saves [dbt Core state](https://docs.getdbt.com/) metadata used for orchestration. Enable it with `use_stateful = true` under `[tool.orchestra_dbt]`, or set `ORCHESTRA_USE_STATEFUL=true`. That state is the same JSON shape whether it comes from Orchestra’s HTTP API or from a local file.
 
 **Do not put secrets in `pyproject.toml`.** Use environment variables (or your platform’s secret store) for `ORCHESTRA_API_KEY`.
+
+### Configuration precedence
+
+For non-secret options, **if an environment variable is set, it overrides** values from `[tool.orchestra_dbt]`; otherwise the value from `pyproject.toml` is used, then the built-in default.
+
+### `[tool.orchestra_dbt]` options
+
+| Key | Type | Default | Purpose |
+| --- | --- | --- | --- |
+| `state_file` | string (optional) | — | Local JSON path for state (see backend table below). |
+| `use_stateful` | bool | `false` | Turn on stateful orchestration for supported dbt commands. |
+| `orchestra_env` | string | `app` | Orchestra deployment: `app`, `stage`, or `dev` (HTTP API host). |
+| `local_run` | bool | `false` | After reuse, revert patched files (typical for local iteration). |
+| `debug` | bool | `false` | Verbose `orchestra-dbt` debug logging. |
+| `integration_account_id` | string (optional) | — | When set, filter state keys to this integration account prefix. |
+
+Equivalent environment overrides (when set): `ORCHESTRA_USE_STATEFUL`, `ORCHESTRA_ENV`, `ORCHESTRA_LOCAL_RUN`, `ORCHESTRA_DBT_DEBUG`, `ORCHESTRA_INTEGRATION_ACCOUNT_ID`.
 
 ### Choosing HTTP (Orchestra cloud) vs a local JSON file
 
@@ -35,11 +58,11 @@ The CLI discovers `pyproject.toml` by walking upward from the current working di
 
 | Priority | Setting | Effect |
 | --- | --- | --- |
-| 1 | `ORCHESTRA_STATE_FILE` | Path to a JSON file. Relative paths are resolved from the current working directory. |
-| 2 | `[tool.orchestra_dbt]` / `state_file` in `pyproject.toml` | Path to a JSON file. Relative paths are resolved from the directory that contains the **discovered** `pyproject.toml`; absolute paths are used as-is. |
-| 3 | Neither of the above, but `ORCHESTRA_API_KEY` is set | Load/save state via Orchestra HTTP. `ORCHESTRA_ENV` must be one of `app`, `stage`, or `dev` (it defaults to `app` if unset). |
+| 1 | `ORCHESTRA_API_KEY` | Load/save state via Orchestra HTTP. The Orchestra environment is `orchestra_env` in pyproject (default `app`) or `ORCHESTRA_ENV` when set; must be one of `app`, `stage`, or `dev`. When the API key is set, `ORCHESTRA_STATE_FILE` and `state_file` in `pyproject.toml` are **ignored** for choosing the state backend. |
+| 2 | `ORCHESTRA_STATE_FILE` | Path to a JSON file. Relative paths are resolved from the current working directory. Used only when `ORCHESTRA_API_KEY` is unset. |
+| 3 | `[tool.orchestra_dbt]` / `state_file` in `pyproject.toml` | Path to a JSON file. Relative paths are resolved from the directory that contains the **discovered** `pyproject.toml`; absolute paths are used as-is. Used only when `ORCHESTRA_API_KEY` is unset and `ORCHESTRA_STATE_FILE` is unset. |
 
-If an effective file path is configured (rows 1 or 2), that **file backend** is used and an API key is not required for state. If only `ORCHESTRA_API_KEY` is set (and no file path), the **HTTP backend** is used.
+If an effective file path is configured (rows 2 or 3), that **file backend** is used and an API key is not required for state. If `ORCHESTRA_API_KEY` is set (row 1), the **HTTP backend** is used regardless of file settings.
 
 Stateful orchestration only runs for `dbt build`, `dbt run`, and `dbt test`. Other dbt subcommands are passed through to dbt unchanged.
 
@@ -47,6 +70,8 @@ Example optional snippet in `pyproject.toml`:
 
 ```toml
 [tool.orchestra_dbt]
+use_stateful = true
+orchestra_env = "dev"
 state_file = ".orchestra/dbt_state.json"
 ```
 
@@ -63,16 +88,33 @@ echo '{"state":{}}' > .orchestra/dbt_state.json
 
 ## Running locally
 
-Orchestra HTTP (requires an API key from Orchestra). Do not set `ORCHESTRA_STATE_FILE` or `state_file` in `pyproject.toml` if you want the HTTP backend rather than a local file.
+Orchestra HTTP (requires an API key from Orchestra). Setting `ORCHESTRA_API_KEY` selects the HTTP backend; file-related settings are ignored. Put non-secret defaults in `pyproject.toml` and only export the API key:
 
-```bash
-ORCHESTRA_ENV=dev ORCHESTRA_API_KEY=<API_KEY> ORCHESTRA_USE_STATEFUL=true ORCHESTRA_LOCAL_RUN=true orc run --target snowflake
+```toml
+[tool.orchestra_dbt]
+use_stateful = true
+orchestra_env = "dev"
+local_run = true
 ```
 
-Local JSON file (after creating the file as above), no Orchestra API key required for state:
+```bash
+export ORCHESTRA_API_KEY=<API_KEY>
+orc run --target snowflake
+```
+
+You can still override with env vars (for example `ORCHESTRA_ENV=stage`) when needed.
+
+Local JSON file (after creating the file as above): **unset** `ORCHESTRA_API_KEY` so `ORCHESTRA_STATE_FILE` or `state_file` in `pyproject.toml` is used.
+
+```toml
+[tool.orchestra_dbt]
+use_stateful = true
+state_file = ".orchestra/dbt_state.json"
+local_run = true
+```
 
 ```bash
-ORCHESTRA_USE_STATEFUL=true ORCHESTRA_STATE_FILE=.orchestra/dbt_state.json ORCHESTRA_LOCAL_RUN=true orc run --target snowflake
+orc run --target snowflake
 ```
 
 ## Running in Orchestra
@@ -105,6 +147,10 @@ Ask @ojc-orchestra for access to the scripts:
 ```bash
 pytest
 ```
+
+Without Postgres, the tutorial `dbt build` integration test is skipped. To run it locally, start Postgres, set `PGHOST`, `PGDATABASE`, and related variables (see [`tutorial/README.md`](tutorial/README.md)), then run `pytest tests/integration/test_tutorial_dbt.py`.
+
+For the optional DAG integration test, you need both `local_state.json` and `local_manifest.json` in the root directory. `local_state.json` can be created by running `dynamo_state.py` (see above), and `local_manifest.json` can be created by downloading a relevant dbt `manifest.json` file
 
 Run only unit or integration tests:
 

@@ -2,7 +2,23 @@ from pathlib import Path
 
 import pytest
 
-from src.orchestra_dbt.config import effective_state_file_path, find_pyproject_directory
+from src.orchestra_dbt.config import (
+    effective_state_file_path,
+    find_pyproject_directory,
+    get_integration_account_id,
+    load_orchestra_dbt_settings,
+)
+
+
+def _clear_orchestra_settings_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for key in (
+        "ORCHESTRA_ENV",
+        "ORCHESTRA_USE_STATEFUL",
+        "ORCHESTRA_LOCAL_RUN",
+        "ORCHESTRA_DBT_DEBUG",
+        "ORCHESTRA_INTEGRATION_ACCOUNT_ID",
+    ):
+        monkeypatch.delenv(key, raising=False)
 
 
 def test_effective_state_file_path_env_overrides_pyproject(
@@ -14,6 +30,7 @@ def test_effective_state_file_path_env_overrides_pyproject(
     )
     other = tmp_path / "from_env.json"
     monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
     monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(other))
     assert effective_state_file_path() == other.resolve()
 
@@ -26,6 +43,7 @@ def test_effective_state_file_path_from_pyproject_relative(
         encoding="utf-8",
     )
     monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
     monkeypatch.delenv("ORCHESTRA_STATE_FILE", raising=False)
     expected = (tmp_path / ".orchestra" / "state.json").resolve()
     assert effective_state_file_path() == expected
@@ -35,6 +53,7 @@ def test_effective_state_file_path_env_relative_to_cwd(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
     monkeypatch.delenv("ORCHESTRA_STATE_FILE", raising=False)
     monkeypatch.setenv("ORCHESTRA_STATE_FILE", "rel/state.json")
     assert effective_state_file_path() == (tmp_path / "rel" / "state.json").resolve()
@@ -56,5 +75,103 @@ def test_effective_state_file_path_none_without_config(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
     monkeypatch.delenv("ORCHESTRA_STATE_FILE", raising=False)
     assert effective_state_file_path() is None
+
+
+def test_effective_state_file_path_api_key_prefers_http_over_env_and_pyproject(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.orchestra_dbt]\nstate_file = "from_pyproject.json"\n',
+        encoding="utf-8",
+    )
+    other = tmp_path / "from_env.json"
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ORCHESTRA_API_KEY", "secret")
+    monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(other))
+    assert effective_state_file_path() is None
+
+
+def test_load_orchestra_dbt_settings_defaults(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+    _clear_orchestra_settings_env(monkeypatch)
+    settings = load_orchestra_dbt_settings()
+    assert settings.use_stateful is False
+    assert settings.orchestra_env == "app"
+    assert settings.local_run is False
+    assert settings.debug is False
+    assert settings.integration_account_id is None
+
+
+def test_load_orchestra_dbt_settings_from_pyproject(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        """[tool.orchestra_dbt]
+use_stateful = true
+orchestra_env = "stage"
+local_run = true
+debug = true
+integration_account_id = "acct-from-toml"
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+    _clear_orchestra_settings_env(monkeypatch)
+    settings = load_orchestra_dbt_settings()
+    assert settings.use_stateful is True
+    assert settings.orchestra_env == "stage"
+    assert settings.local_run is True
+    assert settings.debug is True
+    assert settings.integration_account_id == "acct-from-toml"
+    assert get_integration_account_id() == "acct-from-toml"
+
+
+def test_load_orchestra_dbt_settings_env_overrides_pyproject(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.orchestra_dbt]\nuse_stateful = true\norchestra_env = "stage"\n'
+        'integration_account_id = "from-toml"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ORCHESTRA_USE_STATEFUL", "false")
+    monkeypatch.setenv("ORCHESTRA_ENV", "dev")
+    monkeypatch.setenv("ORCHESTRA_INTEGRATION_ACCOUNT_ID", "from-env")
+    settings = load_orchestra_dbt_settings()
+    assert settings.use_stateful is False
+    assert settings.orchestra_env == "dev"
+    assert settings.integration_account_id == "from-env"
+
+
+def test_load_orchestra_dbt_settings_invalid_orchestra_env_in_pyproject(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.orchestra_dbt]\norchestra_env = "invalid"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    _clear_orchestra_settings_env(monkeypatch)
+    with pytest.raises(ValueError, match="Invalid"):
+        load_orchestra_dbt_settings()
+
+
+def test_load_orchestra_dbt_settings_invalid_orchestra_env_from_env(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.orchestra_dbt]\norchestra_env = "dev"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ORCHESTRA_ENV", "invalid")
+    with pytest.raises(ValueError, match="Invalid"):
+        load_orchestra_dbt_settings()

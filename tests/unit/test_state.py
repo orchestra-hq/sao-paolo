@@ -26,14 +26,14 @@ from src.orchestra_dbt.state import (
 
 
 class TestLoadState:
-    @patch("src.orchestra_dbt.state.get_integration_account_id_from_env")
+    @patch("src.orchestra_dbt.state.get_integration_account_id")
     @pytest.mark.parametrize(
         "integration_account_id, expected_state_len",
         [(None, 3), ("a", 1), ("b", 1)],
     )
     def test_load_state_success(
         self,
-        mock_get_integration_account_id_from_env,
+        mock_get_integration_account_id,
         httpx_mock: HTTPXMock,
         integration_account_id: str | None,
         expected_state_len: int,
@@ -71,7 +71,7 @@ class TestLoadState:
             },
         )
 
-        mock_get_integration_account_id_from_env.return_value = integration_account_id
+        mock_get_integration_account_id.return_value = integration_account_id
         loaded_state = load_state()
         assert len(loaded_state.state) == expected_state_len
         assert list(loaded_state.state.values())[0] == StateItem(
@@ -742,6 +742,7 @@ class TestUpdateState:
 class TestLoadStateFile:
     def test_load_state_file_missing(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
         monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
         monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(tmp_path / "missing.json"))
 
         with pytest.raises(StateLoadError, match="State file not found"):
@@ -753,6 +754,7 @@ class TestLoadStateFile:
         p = tmp_path / "st.json"
         p.write_text('{"state": {}}', encoding="utf-8")
         monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
         monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(p))
 
         assert load_state() == StateApiModel(state={})
@@ -763,6 +765,7 @@ class TestLoadStateFile:
         p = tmp_path / "st.json"
         p.write_text("not json", encoding="utf-8")
         monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
         monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(p))
 
         with pytest.raises(StateLoadError, match="not valid JSON"):
@@ -776,6 +779,7 @@ class TestSaveStateFile:
         p = tmp_path / "st.json"
         p.write_text('{"state": {}}', encoding="utf-8")
         monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
         monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(p))
         state = StateApiModel(
             state={

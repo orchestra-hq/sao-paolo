@@ -1,8 +1,8 @@
-import os
 from datetime import datetime
 
 import click
 
+from .config import load_orchestra_dbt_settings
 from .constants import SERVICE_NAME
 from .models import MaterialisationNode
 
@@ -16,7 +16,7 @@ def _log(msg: str, fg: str | None, error: bool = False) -> None:
 
 
 def log_debug(msg) -> None:
-    if os.getenv("ORCHESTRA_DBT_DEBUG"):
+    if load_orchestra_dbt_settings().debug:
         _log(msg, None)
 
 

@@ -1,6 +1,7 @@
 from .asset_external_id import generate_asset_external_id
 from .build_after import parse_freshness_config
 from .checksum import calculate_checksum
+from .config import get_integration_account_id
 from .logger import log_warn
 from .models import (
     Edge,
@@ -12,7 +13,7 @@ from .models import (
     SourceNode,
     StateApiModel,
 )
-from .utils import get_integration_account_id_from_env, load_json
+from .utils import load_json
 
 
 def calculate_freshness_on_node(
@@ -62,7 +63,7 @@ def construct_dag(
     edges: list[Edge] = []
 
     project_name_from_manifest = manifest["metadata"]["project_name"]
-    integration_account_id = get_integration_account_id_from_env()
+    integration_account_id = get_integration_account_id()
     if not integration_account_id:
         log_warn(
             "No integration account ID found. Will use node ID as the asset external ID."

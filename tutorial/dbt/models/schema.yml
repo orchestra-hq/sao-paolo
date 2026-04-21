@@ -1,0 +1,39 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: "{{ target.schema }}_raw"
+    database: "{{ target.database }}"
+    tables:
+      - name: raw_events
+        identifier: raw_events
+        config:
+          freshness:
+            warn_after: { count: 24, period: hour }
+          loaded_at_field: event_at
+
+models:
+  - name: stg_events
+    columns:
+      - name: id
+        tests:
+          - not_null
+          - unique
+
+  - name: int_events_enriched
+    config:
+      tags: [intermediate]
+
+  - name: mart_daily_totals
+    description: Daily aggregates used to demonstrate build_after with Orchestra state orchestration.
+    config:
+      tags: [mart]
+      freshness:
+        build_after:
+          count: 10
+          period: minute
+          updates_on: all
+    columns:
+      - name: event_day
+        tests:
+          - not_null

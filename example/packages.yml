@@ -1,4 +1,0 @@
-packages:
-  - local: ../example_package
-  - package: dbt-labs/dbt_utils
-    version: ">=1.3.3"
