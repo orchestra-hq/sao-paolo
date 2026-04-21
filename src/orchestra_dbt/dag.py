@@ -1,6 +1,7 @@
 from .asset_external_id import generate_asset_external_id
 from .build_after import parse_freshness_config
 from .checksum import calculate_checksum
+from .config import get_integration_account_id
 from .logger import log_warn
 from .models import (
     Edge,
@@ -12,7 +13,6 @@ from .models import (
     SourceNode,
     StateApiModel,
 )
-from .config import get_integration_account_id
 from .utils import load_json
 
 
