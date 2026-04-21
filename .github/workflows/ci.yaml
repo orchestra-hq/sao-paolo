@@ -61,7 +61,7 @@ jobs:
           PGPASSWORD: postgres
           PGDATABASE: tutorial
           DBT_SCHEMA: sao_tutorial
-        run: uv run pytest tests/integration/test_tutorial_dbt.py -s
+        run: uv run pytest tests/integration/test_tutorial_dbt.py -sv
 
   orchestra:
     runs-on: ubuntu-latest
