@@ -11,19 +11,12 @@ dependencies = ["click", "httpx", "pydantic", "pyyaml"]
 dev = [
     "basedpyright",
     "dbt-core",
-    "dbt-databricks",
-    "dbt-postgres",
-    "dbt-snowflake", # Change/add adapters for local development requirements.
     "pytest-httpx",
     "pytest",
     "ruff",
 ]
 
-debug = [
-    "awscrt",
-    "boto3",
-    "graphviz",
-]
+debug = ["awscrt", "boto3", "graphviz"]
 
 [project.scripts]
 orchestra-dbt = "orchestra_dbt.cli:main"
