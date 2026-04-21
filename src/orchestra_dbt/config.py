@@ -26,6 +26,9 @@ def _read_tool_orchestra_dbt(project_dir: Path) -> dict:
 
 
 def effective_state_file_path(cwd: Path | None = None) -> Path | None:
+    if os.getenv("ORCHESTRA_API_KEY", "").strip():
+        return None
+
     env_path = os.getenv("ORCHESTRA_STATE_FILE", "").strip()
     base = cwd or Path.cwd()
     if env_path:
