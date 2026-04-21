@@ -5,8 +5,6 @@
 - **Python:** 3.11, 3.12, and 3.13 only (see `requires-python` in `pyproject.toml`).
 - **dbt-core:** 1.10.x and 1.11.x when using stateful orchestration. The CLI checks the installed `dbt-core` version before invoking `dbt ls` / source freshness. Warehouse adapters are optional: `uv sync --extra dev --extra adapters` (Snowflake/Databricks) when you need them locally.
 
-Integration smoke tests in `tests/integration/test_dbt_smoke.py` import the same dbt internal modules used for `dbt ls` and source freshness.
-
 ## Installing
 
 ```bash
