@@ -114,11 +114,11 @@ class TestCalculateFreshnessOnNode:
 
 class TestConstructDag:
     @patch("src.orchestra_dbt.dag.load_json")
-    @patch("src.orchestra_dbt.dag.get_integration_account_id_from_env")
+    @patch("src.orchestra_dbt.dag.get_integration_account_id")
     def test_construct_dag_with_sources(
-        self, mock_get_integration_account_id_from_env, mock_load_json, sample_manifest
+        self, mock_get_integration_account_id, mock_load_json, sample_manifest
     ):
-        mock_get_integration_account_id_from_env.return_value = "integration_account_id"
+        mock_get_integration_account_id.return_value = "integration_account_id"
         mock_load_json.return_value = sample_manifest
 
         source_freshness = SourceFreshness(
