@@ -10,7 +10,6 @@ jobs:
       matrix:
         python-version: [ "3.11", "3.12", "3.13" ]
     env:
-      # Use matrix interpreter for sync and all uv run commands (no per-step --python flags).
       UV_PYTHON: ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@v5
@@ -22,12 +21,12 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
       - name: Install dependencies
         run: uv sync --extra dev
-      - name: Run tests
-        run: uv run pytest
       - name: Run ruff check
         run: uv run ruff check .
       - name: Run basedpyright
         run: uv run basedpyright
+      - name: Run tests
+        run: uv run pytest
 
   tutorial-dbt:
     runs-on: ubuntu-latest
