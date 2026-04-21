@@ -2,7 +2,7 @@
 name = "tutorial"
 version = "0.0.1"
 requires-python = ">=3.11"
-dependencies = ["dbt-core", "dbt-postgres"]
+dependencies = ["dbt-core", "dbt-postgres", "dbt-snowflake"]
 
 [tool.orchestra_dbt]
 state_file = ".orchestra/dbt_state.json"
