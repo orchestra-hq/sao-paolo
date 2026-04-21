@@ -25,4 +25,4 @@ Optional debug tooling is documented in `README.md` (`--extra debug`).
 
 ## License
 
-This project is under the [Business Source License 1.1](LICENSE).
+This project is under the [Elastic License 2.0](LICENSE).
