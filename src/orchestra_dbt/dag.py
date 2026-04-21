@@ -12,7 +12,8 @@ from .models import (
     SourceNode,
     StateApiModel,
 )
-from .utils import get_integration_account_id_from_env, load_json
+from .config import get_integration_account_id
+from .utils import load_json
 
 
 def calculate_freshness_on_node(
@@ -62,7 +63,7 @@ def construct_dag(
     edges: list[Edge] = []
 
     project_name_from_manifest = manifest["metadata"]["project_name"]
-    integration_account_id = get_integration_account_id_from_env()
+    integration_account_id = get_integration_account_id()
     if not integration_account_id:
         log_warn(
             "No integration account ID found. Will use node ID as the asset external ID."

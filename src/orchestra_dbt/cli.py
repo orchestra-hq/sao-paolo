@@ -8,8 +8,8 @@ import click
 
 from .build_after import propagate_freshness_config
 from .compatibility import dbt_core_import_error_message
-from .config import effective_state_file_path
-from .constants import SERVICE_NAME, VALID_ORCHESTRA_ENVS
+from .config import effective_state_file_path, load_orchestra_dbt_settings
+from .constants import SERVICE_NAME
 from .dag import construct_dag
 from .logger import log_debug, log_error, log_info, log_reused_nodes
 from .ls import get_paths_to_run
@@ -49,12 +49,6 @@ def _validate_environment() -> None:
         )
         sys.exit(1)
 
-    if os.getenv("ORCHESTRA_ENV", "app").lower() not in VALID_ORCHESTRA_ENVS:
-        log_error(
-            f"Invalid ORCHESTRA_ENV environment variable. Must be one of: {', '.join(VALID_ORCHESTRA_ENVS)}"
-        )
-        sys.exit(1)
-
     log_debug("Environment validated.")
 
 
@@ -91,7 +85,13 @@ def main(args: tuple):
                 sys.exit(1)
         sys.exit(0)
 
-    if not os.getenv("ORCHESTRA_USE_STATEFUL", "false").lower() == "true":
+    try:
+        settings = load_orchestra_dbt_settings()
+    except ValueError as exc:
+        log_error(str(exc))
+        sys.exit(1)
+
+    if not settings.use_stateful:
         log_debug("Stateful orchestration is disabled. Running dbt command directly.")
         try:
             sys.exit(subprocess.run(args).returncode)
@@ -175,7 +175,7 @@ def main(args: tuple):
         result = subprocess.run(modify_dbt_command(cmd=list(args)))
 
         log_info(f"{len(nodes_to_reuse)}/{node_count} nodes reused.")
-        if os.getenv("ORCHESTRA_LOCAL_RUN", "false").lower() == "true":
+        if settings.local_run:
             revert_patching(
                 file_paths_to_revert=[
                     node.file_path for node in nodes_to_reuse.values()

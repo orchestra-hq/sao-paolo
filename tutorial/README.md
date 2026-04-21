@@ -8,7 +8,7 @@ This folder is a minimal [dbt Core](https://www.getdbt.com/) project that works 
 - **Staging → intermediate → marts** show a small DAG; the mart [`mart_daily_totals`](dbt/models/marts/mart_daily_totals.sql) sets **`freshness.build_after`** so Orchestra can reason about when downstream models should run relative to upstream updates (see [dbt Core state management](https://docs.getorchestra.io/docs/guides/dbt-core-state-management/guide)).
 - **Macros** ([`dbt/macros/audit_run_id.sql`](dbt/macros/audit_run_id.sql)) and **snapshots** ([`dbt/snapshots/snap_mart_daily_totals.sql`](dbt/snapshots/snap_mart_daily_totals.sql)) mirror common real projects without extra packages.
 
-Orchestra’s CLI wrapper (`orchestra-dbt`) reads manifest and state from the platform when `ORCHESTRA_USE_STATEFUL=true`. See the repo root [README](../README.md) for local env vars.
+Orchestra’s CLI wrapper (`orchestra-dbt`) reads manifest and state from the platform when stateful orchestration is enabled (`use_stateful` in `[tool.orchestra_dbt]` or `ORCHESTRA_USE_STATEFUL=true`). See the repo root [README](../README.md) for configuration and env overrides.
 
 ## Local run (Postgres)
 

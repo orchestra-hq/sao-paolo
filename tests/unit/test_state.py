@@ -26,14 +26,14 @@ from src.orchestra_dbt.state import (
 
 
 class TestLoadState:
-    @patch("src.orchestra_dbt.state.get_integration_account_id_from_env")
+    @patch("src.orchestra_dbt.state.get_integration_account_id")
     @pytest.mark.parametrize(
         "integration_account_id, expected_state_len",
         [(None, 3), ("a", 1), ("b", 1)],
     )
     def test_load_state_success(
         self,
-        mock_get_integration_account_id_from_env,
+        mock_get_integration_account_id,
         httpx_mock: HTTPXMock,
         integration_account_id: str | None,
         expected_state_len: int,
@@ -71,7 +71,7 @@ class TestLoadState:
             },
         )
 
-        mock_get_integration_account_id_from_env.return_value = integration_account_id
+        mock_get_integration_account_id.return_value = integration_account_id
         loaded_state = load_state()
         assert len(loaded_state.state) == expected_state_len
         assert list(loaded_state.state.values())[0] == StateItem(
