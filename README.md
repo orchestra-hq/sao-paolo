@@ -3,7 +3,7 @@
 ## Compatibility
 
 - **Python:** 3.11, 3.12, and 3.13 only (see `requires-python` in `pyproject.toml`).
-- **dbt-core:** 1.10.x and 1.11.x when using stateful orchestration. The CLI checks the installed `dbt-core` version before invoking `dbt ls` / source freshness. Warehouse adapters are optional: `uv sync --extra dev --extra adapters` (Snowflake/Databricks) when you need them locally.
+- **dbt-core:** 1.10.x and 1.11.x when using stateful orchestration. Warehouse adapters are optional: `uv sync --extra dev --extra adapters`
 
 ## Installing
 
@@ -27,12 +27,7 @@ A minimal dbt Core project used for docs and CI lives under [`tutorial/`](tutori
 1. Test in Orchestra [with the branch](#running-in-orchestra)
 1. Raise a PR
 
-Pull requests run GitHub Actions: unit tests, static checks, `dbt build` for `tutorial/dbt` against Postgres, and (when configured) an Orchestra pipeline via `orchestra-hq/run-pipeline`. Configure these repository secrets:
-
-- `ORCHESTRA_API_KEY`
-- `ORCHESTRA_PIPELINE_ID` — pipeline created from [`tutorial/pipeline.yaml`](tutorial/pipeline.yaml) (or equivalent) in Orchestra
-
-The workflow uses the `production` environment for the Orchestra job (same pattern as the previous slim CI workflow).
+Pull requests run GitHub Actions: unit tests, static checks, `dbt build` for `tutorial/dbt` against Postgres, and an Orchestra pipeline via the [Orchestra Run Pipeline Action](https://github.com/orchestra-hq/run-pipeline).
 
 ## Stateful mode and where state is stored
 
