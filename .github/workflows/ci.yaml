@@ -1,16 +1,15 @@
 name: CI
 on:
   pull_request:
-    branches: [main, release-03]
+    branches: [ main, release-03 ]
 jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        python-version: [ "3.11", "3.12", "3.13" ]
     env:
-      # Use matrix interpreter for sync and all uv run commands (no per-step --python flags).
       UV_PYTHON: ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@v5
@@ -22,9 +21,61 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
       - name: Install dependencies
         run: uv sync --extra dev
-      - name: Run tests
-        run: uv run pytest
       - name: Run ruff check
         run: uv run ruff check .
       - name: Run basedpyright
         run: uv run basedpyright
+      - name: Run tests
+        run: uv run pytest
+
+  tutorial-dbt:
+    runs-on: ubuntu-latest
+    needs: [ test ]
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: tutorial
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 10s --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+      - name: Set up Python 3.13
+        run: uv python install 3.13
+      - name: Install dependencies
+        run: uv sync --extra dev --extra adapters
+      - name: Run tutorial dbt build
+        env:
+          PGHOST: localhost
+          PGPORT: "5432"
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: tutorial
+          DBT_SCHEMA: sao_tutorial
+        run: uv run pytest tests/integration/test_tutorial_dbt.py -sv
+
+  orchestra:
+    runs-on: ubuntu-latest
+    needs: [ test, tutorial-dbt ]
+    environment: production
+    steps:
+      - name: Trigger Orchestra pipeline
+        uses: orchestra-hq/run-pipeline@v1.4.1
+        with:
+          api_key: ${{ secrets.ORCHESTRA_API_KEY }}
+          pipeline_id: ${{ secrets.ORCHESTRA_PIPELINE_ID }}
+          branch: ${{ github.head_ref }}
+          poll_interval: 20
+          run_inputs: |
+            {
+              "ci_branch": "${{ github.head_ref }}"
+            }

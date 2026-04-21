@@ -3,7 +3,7 @@
 ## Compatibility
 
 - **Python:** 3.11, 3.12, and 3.13 only (see `requires-python` in `pyproject.toml`).
-- **dbt-core:** 1.10.x and 1.11.x when using stateful orchestration. The CLI checks the installed `dbt-core` version before invoking `dbt ls` / source freshness. Warehouse adapters are optional: `uv sync --extra dev --extra adapters` (Snowflake/Databricks) when you need them locally.
+- **dbt-core:** 1.10.x and 1.11.x when using stateful orchestration. Warehouse adapters are optional: `uv sync --extra dev --extra adapters`
 
 ## Installing
 
@@ -15,6 +15,10 @@ uv sync --extra dev
 # uv sync --extra dev --extra adapters
 ```
 
+## Tutorial dbt project
+
+A minimal dbt Core project used for docs and CI lives under [`tutorial/`](tutorial/). See [`tutorial/README.md`](tutorial/README.md) for Postgres setup, [`pipeline.yaml`](tutorial/pipeline.yaml) for an Orchestra pipeline template, and [`tutorial/dbt/`](tutorial/dbt/) for the models.
+
 ## Development
 
 1. Create a branch
@@ -22,6 +26,8 @@ uv sync --extra dev
 1. Where possible, [test locally](#running-locally)
 1. Test in Orchestra [with the branch](#running-in-orchestra)
 1. Raise a PR
+
+Pull requests run GitHub Actions: unit tests, static checks, `dbt build` for `tutorial/dbt` against Postgres, and an Orchestra pipeline via the [Orchestra Run Pipeline Action](https://github.com/orchestra-hq/run-pipeline).
 
 ## Stateful mode and where state is stored
 
@@ -105,6 +111,10 @@ Ask @ojc-orchestra for access to the scripts:
 ```bash
 pytest
 ```
+
+Without Postgres, the tutorial `dbt build` integration test is skipped. To run it locally, start Postgres, set `PGHOST`, `PGDATABASE`, and related variables (see [`tutorial/README.md`](tutorial/README.md)), then run `pytest tests/integration/test_tutorial_dbt.py`.
+
+For the optional DAG integration test, you need both `local_state.json` and `local_manifest.json` in the root directory. `local_state.json` can be created by running `dynamo_state.py` (see above), and `local_manifest.json` can be created by downloading a relevant dbt `manifest.json` file
 
 Run only unit or integration tests:
 

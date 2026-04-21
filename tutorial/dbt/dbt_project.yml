@@ -1,0 +1,29 @@
+name: sao_tutorial
+config-version: 2
+
+profile: tutorial
+
+on-run-start: "SELECT 1 AS ok, 'on-run-start' AS phase"
+on-run-end: "SELECT 1 AS ok, 'on-run-end' AS phase"
+
+models:
+  sao_tutorial:
+    +materialized: view
+    staging:
+      +schema: staging
+    intermediate:
+      +schema: intermediate
+    marts:
+      +schema: marts
+      +materialized: table
+  +persist_docs:
+    relation: true
+    columns: true
+
+seeds:
+  sao_tutorial:
+    +schema: raw
+
+snapshots:
+  sao_tutorial:
+    +target_schema: snapshots
