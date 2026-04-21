@@ -17,6 +17,7 @@ from src.orchestra_dbt.models import (
     StateItem,
 )
 from src.orchestra_dbt.state import (
+    StateLoadError,
     _load_run_results,
     load_state,
     save_state,
@@ -742,7 +743,6 @@ class TestLoadStateFile:
     def test_load_state_file_missing(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(tmp_path / "missing.json"))
-        from src.orchestra_dbt.state import StateLoadError, load_state
 
         with pytest.raises(StateLoadError, match="State file not found"):
             load_state()
@@ -754,7 +754,6 @@ class TestLoadStateFile:
         p.write_text('{"state": {}}', encoding="utf-8")
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(p))
-        from src.orchestra_dbt.state import load_state
 
         assert load_state() == StateApiModel(state={})
 
@@ -765,7 +764,6 @@ class TestLoadStateFile:
         p.write_text("not json", encoding="utf-8")
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(p))
-        from src.orchestra_dbt.state import StateLoadError, load_state
 
         with pytest.raises(StateLoadError, match="not valid JSON"):
             load_state()

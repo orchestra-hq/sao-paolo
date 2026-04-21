@@ -81,17 +81,15 @@ def _load_state_file(path: Path) -> StateApiModel:
         raw = path.read_text(encoding="utf-8")
         data = json.loads(raw)
     except json.JSONDecodeError as e:
-        raise StateLoadError(f"State file is not valid JSON ({path}): {e}") from e
+        raise StateLoadError(f"State file is not valid JSON ({path}): {e}")
 
     try:
         state = StateApiModel.model_validate(data)
     except (ValidationError, ValueError) as e:
-        raise StateLoadError(f"State file failed validation ({path}): {e}") from e
+        raise StateLoadError(f"State file failed validation ({path}): {e}")
 
     _apply_integration_account_filter(state)
-    log_info(
-        f"State loaded from file. Retrieved {len(state.state)} items.",
-    )
+    log_info(f"State loaded from file. Retrieved {len(state.state)} items.")
     return state
 
 

@@ -14,7 +14,7 @@ def find_pyproject_directory(start: Path | None = None) -> Path | None:
     return None
 
 
-def read_tool_orchestra_dbt(project_dir: Path) -> dict:
+def _read_tool_orchestra_dbt(project_dir: Path) -> dict:
     path = project_dir / "pyproject.toml"
     with path.open("rb") as f:
         data = tomllib.load(f)
@@ -38,7 +38,7 @@ def effective_state_file_path(cwd: Path | None = None) -> Path | None:
     if project_dir is None:
         return None
 
-    tool_cfg = read_tool_orchestra_dbt(project_dir)
+    tool_cfg = _read_tool_orchestra_dbt(project_dir)
     raw = tool_cfg.get("state_file")
     if not raw or not isinstance(raw, str):
         return None
