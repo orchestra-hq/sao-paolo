@@ -44,9 +44,8 @@ def _validate_environment() -> None:
 
     if not os.getenv("ORCHESTRA_API_KEY"):
         log_error(
-            "Stateful mode requires a state file (ORCHESTRA_STATE_FILE or "
-            "[tool.orchestra_dbt] state_file in pyproject.toml) or ORCHESTRA_API_KEY "
-            "for Orchestra HTTP."
+            "Stateful mode requires ORCHESTRA_API_KEY for Orchestra HTTP, or a state file "
+            "(ORCHESTRA_STATE_FILE or [tool.orchestra_dbt] state_file in pyproject.toml)."
         )
         sys.exit(1)
 
