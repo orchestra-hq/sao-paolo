@@ -2,7 +2,7 @@ import os
 import tomllib
 from pathlib import Path
 
-_TOOL_SECTION = "orchestra_dbt"
+from .constants import SERVICE_NAME
 
 
 def find_pyproject_directory(start: Path | None = None) -> Path | None:
@@ -21,7 +21,7 @@ def _read_tool_orchestra_dbt(project_dir: Path) -> dict:
     tool = data.get("tool", {})
     if not isinstance(tool, dict):
         return {}
-    section = tool.get(_TOOL_SECTION, {})
+    section = tool.get(SERVICE_NAME, {})
     return section if isinstance(section, dict) else {}
 
 
