@@ -31,6 +31,11 @@ def test_tutorial_dbt_build_succeeds() -> None:
         capture_output=True,
         text=True,
     )
+
+    # Show output in print logs.
+    print("\n\nSTDOUT:\n" + result.stdout)
+    print("\n\nSTDERR:\n" + result.stderr)
+
     if result.returncode != 0:
         pytest.fail(
             f"dbt build failed ({result.returncode})\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
