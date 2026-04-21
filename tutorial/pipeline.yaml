@@ -1,0 +1,28 @@
+version: v1
+name: dbt Core - State Aware CI Smoke Test
+pipeline:
+  ciSmokeTestGroup:
+    tasks:
+      ciSmokeTestTask:
+        integration: DBT_CORE
+        integration_job: DBT_CORE_EXECUTE
+        parameters:
+          commands: dbt build
+          package_manager: UV
+          python_version: "3.12"
+          use_state_orchestration: true
+          branch: ${{ inputs.ci_branch }}
+          project_dir: tutorial/dbt
+          shallow_clone_dirs: tutorial
+          environment_variables:
+            "{\n  \"ORCHESTRA_DBT_BRANCH\": \"${{ inputs.ci_branch\
+            \ }}\"\n}"
+        depends_on: []
+        name: CI Smoke Test Execution
+    depends_on: []
+    name: CI Smoke Test Task Group
+webhook:
+  enabled: false
+inputs:
+  ci_branch:
+    type: string

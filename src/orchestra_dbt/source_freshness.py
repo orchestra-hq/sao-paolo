@@ -3,6 +3,7 @@ from datetime import datetime
 
 import pytz
 
+from .compatibility import dbt_core_import_error_message
 from .logger import log_error, log_info, log_warn
 from .models import SourceFreshness
 from .utils import load_json
@@ -17,9 +18,7 @@ def get_source_freshness(target: str | None) -> SourceFreshness | None:
         from dbt.task.freshness import FreshnessRunner, FreshnessTask
         from dbt_common.exceptions import DbtRuntimeError
     except ImportError as missing_dbt_core_error:
-        log_error(
-            f"dbt-core is not installed. Please install it. Issue: {missing_dbt_core_error}"
-        )
+        log_error(dbt_core_import_error_message(missing_dbt_core_error))
         raise missing_dbt_core_error
 
     class OrchestraFreshnessRunner(FreshnessRunner):

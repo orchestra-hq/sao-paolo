@@ -1,0 +1,9 @@
+[project]
+name = "tutorial"
+version = "0.0.1"
+requires-python = ">=3.11"
+dependencies = ["dbt-core", "dbt-postgres", "dbt-snowflake"]
+
+# To be enabled when ordering of state preference updated in a separate PR.
+# [tool.orchestra_dbt]
+# state_file = ".orchestra/dbt_state.json"

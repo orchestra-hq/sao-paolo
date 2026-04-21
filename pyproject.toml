@@ -4,25 +4,16 @@ version = "0.3.0"
 description = "Stateful orchestration for dbt Core projects in Orchestra."
 authors = [{ name = "Oliver Crawford" }]
 readme = "README.md"
-requires-python = ">=3.11"
-dependencies = ["click", "httpx", "pydantic", "pyyaml"]
+requires-python = ">=3.11,<3.14"
+dependencies = ["click", "httpx", "packaging", "pydantic", "pyyaml"]
 
 [project.optional-dependencies]
-dev = [
-    "basedpyright",
-    "dbt-core",
-    "dbt-databricks",
-    "dbt-snowflake", # Change/add adapters for local development requirements.
-    "pytest-httpx",
-    "pytest",
-    "ruff",
-]
+dev = ["basedpyright", "dbt-core>=1.10,<1.12", "pytest-httpx", "pytest", "ruff"]
 
-debug = [
-    "awscrt",
-    "boto3",
-    "graphviz",
-]
+# Warehouse adapters (optional). Not required for tests.
+adapters = ["dbt-postgres"]
+
+debug = ["awscrt", "boto3", "graphviz"]
 
 [project.scripts]
 orchestra-dbt = "orchestra_dbt.cli:main"
