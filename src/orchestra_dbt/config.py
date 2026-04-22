@@ -1,9 +1,15 @@
 import os
-import tomllib
 from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
+
+from .project_discovery import (
+    find_pyproject_directory,
+    read_orchestra_dbt_tool_config,
+)
+from .state_types import StateBackendConfig, StateBackendKind
+from .state_storage import StatePersistence
 
 
 class OrchestraDbtSettings(BaseModel):
@@ -22,26 +28,6 @@ class OrchestraDbtSettings(BaseModel):
         if isinstance(v, str):
             return v.lower()
         return v
-
-
-def find_pyproject_directory(start: Path | None = None) -> Path | None:
-    current = (start or Path.cwd()).resolve()
-    for directory in [current, *current.parents]:
-        candidate = directory / "pyproject.toml"
-        if candidate.is_file():
-            return directory
-    return None
-
-
-def _read_tool_orchestra_dbt(project_dir: Path) -> dict:
-    path = project_dir / "pyproject.toml"
-    with path.open("rb") as f:
-        data = tomllib.load(f)
-    tool = data.get("tool", {})
-    if not isinstance(tool, dict):
-        return {}
-    section = tool.get("orchestra_dbt", {})
-    return section if isinstance(section, dict) else {}
 
 
 def _env_bool(name: str) -> bool | None:
@@ -86,7 +72,7 @@ def load_orchestra_dbt_settings(cwd: Path | None = None) -> OrchestraDbtSettings
     project_dir = find_pyproject_directory(base)
     raw: dict = {}
     if project_dir is not None:
-        raw = _read_tool_orchestra_dbt(project_dir)
+        raw = read_orchestra_dbt_tool_config(project_dir)
     try:
         settings = OrchestraDbtSettings.model_validate(raw)
         return _merge_env_overrides(settings)
@@ -98,31 +84,25 @@ def get_integration_account_id(cwd: Path | None = None) -> str | None:
     return load_orchestra_dbt_settings(cwd).integration_account_id
 
 
+def resolve_state_backend_config(cwd: Path | None = None) -> StateBackendConfig:
+    from .state_backends.factory import resolve_state_backend_config as _resolve
+
+    return _resolve(cwd)
+
+
+def resolve_state_file_path(cwd: Path | None = None) -> Path | None:
+    cfg = resolve_state_backend_config(cwd)
+    match cfg.kind:
+        case StateBackendKind.LOCAL_FILE:
+            return cfg.local_path
+        case _:
+            return None
+
+
 def effective_state_file_path(cwd: Path | None = None) -> Path | None:
-    if os.getenv("ORCHESTRA_API_KEY", "").strip():
-        return None
+    return resolve_state_file_path(cwd)
 
-    env_path = os.getenv("ORCHESTRA_STATE_FILE", "").strip()
-    base = cwd or Path.cwd()
-    if env_path:
-        resolved = Path(env_path).expanduser()
-        if not resolved.is_absolute():
-            resolved = base.resolve() / resolved
-        return resolved.resolve()
 
-    project_dir = find_pyproject_directory(base)
-    if project_dir is None:
-        return None
-
-    tool_cfg = _read_tool_orchestra_dbt(project_dir)
-    raw = tool_cfg.get("state_file")
-    if not raw or not isinstance(raw, str):
-        return None
-    stripped = raw.strip()
-    if not stripped:
-        return None
-
-    p = Path(stripped).expanduser()
-    if p.is_absolute():
-        return p.resolve()
-    return (project_dir / p).resolve()
+def effective_state_persistence(cwd: Path | None = None) -> StatePersistence:
+    cfg = resolve_state_backend_config(cwd)
+    return StatePersistence.model_validate(cfg.model_dump())

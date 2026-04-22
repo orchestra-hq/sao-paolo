@@ -1,4 +1,4 @@
-# sao-paolo
+# sao-paolo (orchestra-dbt)
 
 ## Compatibility
 
@@ -35,7 +35,7 @@ Pull requests run GitHub Actions: unit tests, static checks, `dbt build` for `tu
 
 ## Stateful mode and where state is stored
 
-When stateful orchestration is enabled, the CLI loads and saves [dbt Core state](https://docs.getdbt.com/) metadata used for orchestration. Enable it with `use_stateful = true` under `[tool.orchestra_dbt]`, or set `ORCHESTRA_USE_STATEFUL=true`. That state is the same JSON shape whether it comes from Orchestra’s HTTP API or from a local file.
+When stateful orchestration is enabled, the CLI loads and saves [dbt Core state](https://docs.getdbt.com/) metadata used for orchestration. Enable it with `use_stateful = true` under `[tool.orchestra_dbt]`, or set `ORCHESTRA_USE_STATEFUL=true`. That state is the same JSON shape whether it comes from Orchestra’s HTTP API, a local file, or an object in Amazon S3.
 
 **Do not put secrets in `pyproject.toml`.** Use environment variables (or your platform’s secret store) for `ORCHESTRA_API_KEY`.
 
@@ -47,7 +47,7 @@ For non-secret options, **if an environment variable is set, it overrides** valu
 
 | Key | Type | Default | Purpose |
 | --- | --- | --- | --- |
-| `state_file` | string (optional) | — | Local JSON path for state (see backend table below). |
+| `state_file` | string (optional) | — | Local JSON path or `s3://bucket/key` for state (see backend table below). |
 | `use_stateful` | bool | `false` | Turn on stateful orchestration for supported dbt commands. |
 | `orchestra_env` | string | `app` | Orchestra deployment: `app`, `stage`, or `dev` (HTTP API host). |
 | `local_run` | bool | `false` | After reuse, revert patched files (typical for local iteration). |
@@ -56,17 +56,19 @@ For non-secret options, **if an environment variable is set, it overrides** valu
 
 Equivalent environment overrides (when set): `ORCHESTRA_USE_STATEFUL`, `ORCHESTRA_ENV`, `ORCHESTRA_LOCAL_RUN`, `ORCHESTRA_DBT_DEBUG`, `ORCHESTRA_INTEGRATION_ACCOUNT_ID`.
 
-### Choosing HTTP (Orchestra cloud) vs a local JSON file
+### Choosing HTTP (Orchestra cloud), a local JSON file, or S3
 
 The CLI discovers `pyproject.toml` by walking upward from the current working directory. `[tool.orchestra_dbt]` is read from that file when present.
 
 | Priority | Setting | Effect |
 | --- | --- | --- |
 | 1 | `ORCHESTRA_API_KEY` | Load/save state via Orchestra HTTP. The Orchestra environment is `orchestra_env` in pyproject (default `app`) or `ORCHESTRA_ENV` when set; must be one of `app`, `stage`, or `dev`. When the API key is set, `ORCHESTRA_STATE_FILE` and `state_file` in `pyproject.toml` are **ignored** for choosing the state backend. |
-| 2 | `ORCHESTRA_STATE_FILE` | Path to a JSON file. Relative paths are resolved from the current working directory. Used only when `ORCHESTRA_API_KEY` is unset. |
-| 3 | `[tool.orchestra_dbt]` / `state_file` in `pyproject.toml` | Path to a JSON file. Relative paths are resolved from the directory that contains the **discovered** `pyproject.toml`; absolute paths are used as-is. Used only when `ORCHESTRA_API_KEY` is unset and `ORCHESTRA_STATE_FILE` is unset. |
+| 2 | `ORCHESTRA_STATE_FILE` | Path to a JSON file, or `s3://bucket/key` for an object in S3. Relative file paths are resolved from the current working directory. Used only when `ORCHESTRA_API_KEY` is unset. |
+| 3 | `[tool.orchestra_dbt]` / `state_file` in `pyproject.toml` | Path to a JSON file, or `s3://bucket/key`. Relative file paths are resolved from the directory that contains the **discovered** `pyproject.toml`; absolute paths are used as-is. Used only when `ORCHESTRA_API_KEY` is unset and `ORCHESTRA_STATE_FILE` is unset. |
 
-If an effective file path is configured (rows 2 or 3), that **file backend** is used and an API key is not required for state. If `ORCHESTRA_API_KEY` is set (row 1), the **HTTP backend** is used regardless of file settings.
+If an effective local path or S3 URI is configured (rows 2 or 3), that **file** or **S3** backend is used and an API key is not required for state. If `ORCHESTRA_API_KEY` is set (row 1), the **HTTP backend** is used regardless of file settings.
+
+For S3, install the optional dependency (`pip install 'orchestra-dbt[s3]'` or `uv sync --extra s3`). Credentials and region follow the usual [AWS SDK resolution](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html) (environment variables, shared config, IAM role, etc.). If the object does not exist yet, load starts with an empty state and save creates the object.
 
 Stateful orchestration only runs for `dbt build`, `dbt run`, and `dbt test`. Other dbt subcommands are passed through to dbt unchanged.
 
@@ -83,7 +85,7 @@ Add `.orchestra/` (or your chosen path) to `.gitignore` if the file should not b
 
 ### Bootstrapping a new local state file
 
-If the configured file does not exist, the CLI fails with an error (it does not silently start from empty state). Create a minimal file first, for example:
+If the configured **local** file does not exist, the CLI fails with an error (it does not silently start from empty state). Create a minimal file first, for example:
 
 ```bash
 mkdir -p .orchestra

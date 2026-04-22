@@ -26,12 +26,23 @@ Repository = "https://github.com/orchestra-hq/sao-paolo"
 Issues = "https://github.com/orchestra-hq/sao-paolo/issues"
 
 [project.optional-dependencies]
-dev = ["basedpyright", "dbt-core>=1.10,<1.12", "pytest-httpx", "pytest", "ruff"]
+dev = [
+    "basedpyright",
+    "boto3",
+    "dbt-core>=1.10,<1.12",
+    "moto[s3]",
+    "pytest-httpx",
+    "pytest",
+    "ruff",
+]
 
 # Warehouse adapters (optional). Not required for tests.
 adapters = ["dbt-postgres"]
 
 debug = ["awscrt", "boto3", "graphviz"]
+
+# S3-backed state (optional; boto3 loaded only when S3 URI is configured)
+s3 = ["boto3"]
 
 [project.scripts]
 orc = "orchestra_dbt.cli:main"

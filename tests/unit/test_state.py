@@ -1,8 +1,10 @@
 from datetime import datetime
 from unittest.mock import patch
 
+import boto3
 import httpx
 import pytest
+from moto import mock_aws
 from pytest_httpx import HTTPXMock
 
 from src.orchestra_dbt.models import (
@@ -26,7 +28,7 @@ from src.orchestra_dbt.state import (
 
 
 class TestLoadState:
-    @patch("src.orchestra_dbt.state.get_integration_account_id")
+    @patch("src.orchestra_dbt.state_filters.get_integration_account_id")
     @pytest.mark.parametrize(
         "integration_account_id, expected_state_len",
         [(None, 3), ("a", 1), ("b", 1)],
@@ -793,3 +795,66 @@ class TestSaveStateFile:
         save_state(state)
         loaded = load_state()
         assert loaded.state["model.test"].checksum == "123"
+
+
+class TestLoadStateS3:
+    @mock_aws
+    def test_load_state_s3_missing_object_starts_empty(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        conn = boto3.client("s3", region_name="us-east-1")
+        conn.create_bucket(Bucket="test-bucket")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv(
+            "ORCHESTRA_STATE_FILE", "s3://test-bucket/prefix/state.json"
+        )
+
+        assert load_state() == StateApiModel(state={})
+
+    @mock_aws
+    def test_load_state_s3_success(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        conn = boto3.client("s3", region_name="us-east-1")
+        conn.create_bucket(Bucket="test-bucket-s3")
+        payload = (
+            b'{"state": {"model.x": {"checksum": "c", '
+            b'"last_updated": "2024-01-01T12:00:00", "sources": {}}}}'
+        )
+        conn.put_object(Bucket="test-bucket-s3", Key="k.json", Body=payload)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", "s3://test-bucket-s3/k.json")
+
+        loaded = load_state()
+        assert "model.x" in loaded.state
+        assert loaded.state["model.x"].checksum == "c"
+
+
+class TestSaveStateS3:
+    @mock_aws
+    def test_save_state_s3_put_object(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        conn = boto3.client("s3", region_name="us-east-1")
+        conn.create_bucket(Bucket="bucket")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", "s3://bucket/dir/f.json")
+
+        save_state(
+            StateApiModel(
+                state={
+                    "m": StateItem(
+                        last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                        checksum="1",
+                        sources={},
+                    )
+                }
+            )
+        )
+
+        obj = conn.get_object(Bucket="bucket", Key="dir/f.json")
+        body = obj["Body"].read()
+        assert b'"checksum"' in body

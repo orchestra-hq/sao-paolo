@@ -4,10 +4,13 @@ import pytest
 
 from src.orchestra_dbt.config import (
     effective_state_file_path,
-    find_pyproject_directory,
+    effective_state_persistence,
     get_integration_account_id,
     load_orchestra_dbt_settings,
+    resolve_state_backend_config,
 )
+from src.orchestra_dbt.project_discovery import find_pyproject_directory
+from src.orchestra_dbt.state_types import StateBackendKind
 
 
 def _clear_orchestra_settings_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -64,6 +67,43 @@ def test_effective_state_file_path_none_without_config(
     monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
     monkeypatch.delenv("ORCHESTRA_STATE_FILE", raising=False)
     assert effective_state_file_path() is None
+
+
+def test_resolve_state_backend_config_s3_from_env(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+    monkeypatch.setenv("ORCHESTRA_STATE_FILE", "s3://my-bucket/prefix/state.json")
+    cfg = resolve_state_backend_config()
+    assert cfg.kind == StateBackendKind.S3
+    assert cfg.s3_bucket == "my-bucket"
+    assert cfg.s3_key == "prefix/state.json"
+
+
+def test_effective_state_persistence_matches_resolve_config(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+    monkeypatch.setenv("ORCHESTRA_STATE_FILE", "s3://my-bucket/prefix/state.json")
+    assert effective_state_persistence().model_dump() == resolve_state_backend_config().model_dump()
+
+
+def test_resolve_state_backend_config_s3_from_pyproject(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.orchestra_dbt]\nstate_file = "s3://b/k/state.json"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+    monkeypatch.delenv("ORCHESTRA_STATE_FILE", raising=False)
+    cfg = resolve_state_backend_config()
+    assert cfg.kind == StateBackendKind.S3
+    assert cfg.s3_bucket == "b"
+    assert cfg.s3_key == "k/state.json"
 
 
 def test_effective_state_file_path_api_key_prefers_http_over_env_and_pyproject(
