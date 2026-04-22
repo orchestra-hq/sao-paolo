@@ -26,6 +26,9 @@ include = ["src", "tests"]
 pythonpath = ["src"]
 testpaths = ["tests"]
 
+[tool.setuptools]
+license-files = ["LICENSE"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
