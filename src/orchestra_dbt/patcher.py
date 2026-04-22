@@ -35,7 +35,7 @@ def patch_file(
     meta_dict: dict[str, str | int] = {
         "orchestra_reused_reason": reason.replace("'", "").replace('"', "")
     }
-    if freshness:
+    if freshness is not None:
         meta_dict["orchestra_freshness"] = freshness
     if last_updated:
         meta_dict["orchestra_last_updated"] = last_updated.isoformat()
@@ -141,8 +141,7 @@ def patch_seed_properties(
         log_info(
             f"No {seed_properties_file_path} file found in project directory. Creating one."
         )
-        # If there is no 'seeds' directory, create one.
-        os.makedirs("seeds", exist_ok=True)
+        Path(seed_properties_file_path).parent.mkdir(parents=True, exist_ok=True)
         seeds_properties: dict = {"seeds": []}
     except Exception as e:
         log_error(f"Error loading {seed_properties_file_path}: {e}")
@@ -156,22 +155,27 @@ def patch_seed_properties(
         seed_node: MaterialisationNode = seeds_to_reuse.pop(seed_name)
 
         try:
-            existing_tags_on_seed = seed_properties["config"].get("tags", [])
-            seed_properties["config"]["tags"] = existing_tags_on_seed + [
-                ORCHESTRA_REUSED_NODE
-            ]
-            existing_meta_on_seed = seed_properties["config"].get("meta", {})
+            config = seed_properties.setdefault("config", {})
+            if not isinstance(config, dict):
+                raise ValueError("'config' key must be a dictionary.")
+
+            existing_tags_on_seed = config.get("tags", [])
+            if not isinstance(existing_tags_on_seed, list):
+                raise ValueError("'config.tags' must be a list when provided.")
+            if ORCHESTRA_REUSED_NODE not in existing_tags_on_seed:
+                existing_tags_on_seed.append(ORCHESTRA_REUSED_NODE)
+            config["tags"] = existing_tags_on_seed
+
+            existing_meta_on_seed = config.get("meta", {})
+            if not isinstance(existing_meta_on_seed, dict):
+                raise ValueError("'config.meta' must be a dictionary when provided.")
             seed_last_updated = seed_node.last_updated
-            seed_properties["config"]["meta"] = existing_meta_on_seed | {
+            config["meta"] = existing_meta_on_seed | {
                 "orchestra_reused_reason": seed_node.reason,
                 "orchestra_last_updated": (
                     seed_last_updated.isoformat() if seed_last_updated else None
                 ),
             }
-        except KeyError as key_error:
-            log_error(
-                f"Error updating seed '{seed_name}' properties. Missing key: {key_error}"
-            )
         except Exception as e:
             log_error(f"Unknown error updating seed '{seed_name}' properties: {e}")
 

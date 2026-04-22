@@ -8,8 +8,8 @@ from .project_discovery import (
     find_pyproject_directory,
     read_orchestra_dbt_tool_config,
 )
-from .state_types import StateBackendConfig, StateBackendKind
 from .state_storage import StatePersistence
+from .state_types import StateBackendConfig, StateBackendKind
 
 
 class OrchestraDbtSettings(BaseModel):
@@ -43,6 +43,14 @@ def _env_str(name: str) -> str | None:
     return stripped if stripped else None
 
 
+def get_orchestra_api_key() -> str | None:
+    return _env_str("ORCHESTRA_API_KEY")
+
+
+def get_orchestra_state_file_env_override() -> str | None:
+    return _env_str("ORCHESTRA_STATE_FILE")
+
+
 def _merge_env_overrides(settings: OrchestraDbtSettings) -> OrchestraDbtSettings:
     use_stateful = _env_bool("ORCHESTRA_USE_STATEFUL")
     if use_stateful is not None:
@@ -56,8 +64,8 @@ def _merge_env_overrides(settings: OrchestraDbtSettings) -> OrchestraDbtSettings
     if local_run is not None:
         settings = settings.model_copy(update={"local_run": local_run})
 
-    if "ORCHESTRA_DBT_DEBUG" in os.environ:
-        debug = os.environ["ORCHESTRA_DBT_DEBUG"].strip().lower() == "true"
+    debug = _env_bool("ORCHESTRA_DBT_DEBUG")
+    if debug is not None:
         settings = settings.model_copy(update={"debug": debug})
 
     integration = _env_str("ORCHESTRA_INTEGRATION_ACCOUNT_ID")

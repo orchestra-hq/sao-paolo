@@ -1,6 +1,9 @@
 from datetime import datetime
-from unittest.mock import patch
 
+import pytest
+
+import src.orchestra_dbt.dag as dag_module
+from src.orchestra_dbt.config import OrchestraDbtSettings
 from src.orchestra_dbt.dag import calculate_freshness_on_node, construct_dag
 from src.orchestra_dbt.models import (
     Edge,
@@ -113,13 +116,17 @@ class TestCalculateFreshnessOnNode:
 
 
 class TestConstructDag:
-    @patch("src.orchestra_dbt.dag.load_json")
-    @patch("src.orchestra_dbt.dag.get_integration_account_id")
     def test_construct_dag_with_sources(
-        self, mock_get_integration_account_id, mock_load_json, sample_manifest
-    ):
-        mock_get_integration_account_id.return_value = "integration_account_id"
-        mock_load_json.return_value = sample_manifest
+        self, monkeypatch: pytest.MonkeyPatch, sample_manifest: dict
+    ) -> None:
+        monkeypatch.setattr(dag_module, "load_json", lambda _: sample_manifest)
+        monkeypatch.setattr(
+            dag_module,
+            "load_orchestra_dbt_settings",
+            lambda: OrchestraDbtSettings(
+                integration_account_id="integration_account_id"
+            ),
+        )
 
         source_freshness = SourceFreshness(
             sources={
@@ -204,9 +211,10 @@ class TestConstructDag:
             ],
         )
 
-    @patch("src.orchestra_dbt.dag.load_json")
-    def test_construct_dag_dirty_model(self, mock_load_json, sample_manifest):
-        mock_load_json.return_value = sample_manifest
+    def test_construct_dag_dirty_model(
+        self, monkeypatch: pytest.MonkeyPatch, sample_manifest: dict
+    ) -> None:
+        monkeypatch.setattr(dag_module, "load_json", lambda _: sample_manifest)
 
         source_freshness = SourceFreshness(
             sources={

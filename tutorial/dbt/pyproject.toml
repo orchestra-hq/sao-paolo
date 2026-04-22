@@ -4,9 +4,7 @@ version = "0.0.1"
 requires-python = ">=3.11"
 dependencies = ["dbt-core", "dbt-postgres", "dbt-snowflake"]
 
-# Optional: configure orchestra-dbt without exporting many env vars (see repo README).
-# [tool.orchestra_dbt]
-# use_stateful = true
-# orchestra_env = "dev"
-# state_file = ".orchestra/dbt_state.json"
-# local_run = true
+[tool.orchestra_dbt]
+use_stateful = true
+state_file = ".orchestra/dbt_state.json"
+local_run = true

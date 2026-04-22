@@ -4,9 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "orchestra-dbt"
-version = "0.3.0"
-description = "Stateful orchestration for dbt Core projects in Orchestra."
-authors = [{ name = "Oliver Crawford" }]
+version = "0.4.0"
+description = "Orchestra wrapper for dbt Core - allows for stateful orchestration of dbt Core projects."
+authors = [{ name = "Orchestra Technologies" }]
+license = "Elastic-2.0"
+license-files = ["LICENSE"]
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.11,<3.14"
 dependencies = ["click", "httpx", "packaging", "pydantic", "pyyaml"]
@@ -24,6 +26,8 @@ classifiers = [
 [project.urls]
 Repository = "https://github.com/orchestra-hq/sao-paolo"
 Issues = "https://github.com/orchestra-hq/sao-paolo/issues"
+Changelog = "https://github.com/orchestra-hq/sao-paolo/blob/main/CHANGELOG.md"
+Security = "https://github.com/orchestra-hq/sao-paolo/security/policy"
 
 [project.optional-dependencies]
 dev = [
@@ -39,6 +43,7 @@ dev = [
 # Warehouse adapters (optional). Not required for tests.
 adapters = ["dbt-postgres"]
 
+# Debug dependencies (optional).
 debug = ["awscrt", "boto3", "graphviz"]
 
 # S3-backed state (optional; boto3 loaded only when S3 URI is configured)
@@ -54,9 +59,6 @@ include = ["src", "tests"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
-
-[tool.setuptools]
-license-files = ["LICENSE"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

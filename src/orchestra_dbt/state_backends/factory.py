@@ -1,22 +1,27 @@
-import os
 from pathlib import Path
 
-from ..project_discovery import find_pyproject_directory, read_orchestra_dbt_tool_config
+from ..config import (
+    get_orchestra_api_key,
+    get_orchestra_state_file_env_override,
+    load_orchestra_dbt_settings,
+)
+from ..project_discovery import find_pyproject_directory
 from ..state_types import (
     StateBackendConfig,
     StateBackendKind,
     backend_config_from_state_location,
 )
+from .base import StateBackend
 from .http import HttpStateBackend
 from .local_file import LocalFileStateBackend
 
 
 def resolve_state_backend_config(cwd: Path | None = None) -> StateBackendConfig:
-    if os.getenv("ORCHESTRA_API_KEY", "").strip():
+    if get_orchestra_api_key():
         return StateBackendConfig(kind=StateBackendKind.HTTP)
 
     base = cwd or Path.cwd()
-    env_path = os.getenv("ORCHESTRA_STATE_FILE", "").strip()
+    env_path = get_orchestra_state_file_env_override()
     if env_path:
         return backend_config_from_state_location(
             env_path, resolve_relative_from=base.resolve()
@@ -26,9 +31,9 @@ def resolve_state_backend_config(cwd: Path | None = None) -> StateBackendConfig:
     if project_dir is None:
         return StateBackendConfig(kind=StateBackendKind.HTTP)
 
-    tool_cfg = read_orchestra_dbt_tool_config(project_dir)
-    raw = tool_cfg.get("state_file")
-    if not raw or not isinstance(raw, str) or not raw.strip():
+    settings = load_orchestra_dbt_settings(cwd)
+    raw = settings.state_file
+    if not raw or not raw.strip():
         return StateBackendConfig(kind=StateBackendKind.HTTP)
 
     return backend_config_from_state_location(
@@ -36,7 +41,7 @@ def resolve_state_backend_config(cwd: Path | None = None) -> StateBackendConfig:
     )
 
 
-def resolved_state_backend(cwd: Path | None = None):
+def resolved_state_backend(cwd: Path | None = None) -> StateBackend:
     cfg = resolve_state_backend_config(cwd)
     match cfg.kind:
         case StateBackendKind.HTTP:

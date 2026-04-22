@@ -26,7 +26,6 @@ def parse_query_timestamp_cell(timestamp_value: object) -> datetime:
 
 
 def build_source_freshness_result_from_loaded_at(
-    *,
     max_loaded_at: datetime,
     compiled_node: Any,
     adapter_response: Any | None,

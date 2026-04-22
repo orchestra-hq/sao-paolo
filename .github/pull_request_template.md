@@ -1,4 +1,4 @@
-## Summary
+# Summary
 
 <!-- What does this PR change and why? -->
 
@@ -14,5 +14,6 @@ uv run ruff check . && uv run ruff format --check . && uv run basedpyright
 ## Checklist
 
 - [ ] Tests added or updated where behaviour changed
-- [ ] `uv run ruff check .`, `uv run ruff format --check .`, and `uv run basedpyright` pass locally
+- [ ] Unit tests and linting pass locally
 - [ ] Documentation updated where necessary
+- [ ] Changelog updated for user-visible changes

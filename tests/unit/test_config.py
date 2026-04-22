@@ -6,11 +6,31 @@ from src.orchestra_dbt.config import (
     effective_state_file_path,
     effective_state_persistence,
     get_integration_account_id,
+    get_orchestra_api_key,
+    get_orchestra_state_file_env_override,
     load_orchestra_dbt_settings,
     resolve_state_backend_config,
 )
 from src.orchestra_dbt.project_discovery import find_pyproject_directory
 from src.orchestra_dbt.state_types import StateBackendKind
+
+
+def test_get_orchestra_api_key_strips_and_none_when_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+    assert get_orchestra_api_key() is None
+    monkeypatch.setenv("ORCHESTRA_API_KEY", "  secret  ")
+    assert get_orchestra_api_key() == "secret"
+
+
+def test_get_orchestra_state_file_env_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("ORCHESTRA_STATE_FILE", raising=False)
+    assert get_orchestra_state_file_env_override() is None
+    monkeypatch.setenv("ORCHESTRA_STATE_FILE", " /tmp/state.json ")
+    assert get_orchestra_state_file_env_override() == "/tmp/state.json"
 
 
 def _clear_orchestra_settings_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -87,7 +107,10 @@ def test_effective_state_persistence_matches_resolve_config(
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
     monkeypatch.setenv("ORCHESTRA_STATE_FILE", "s3://my-bucket/prefix/state.json")
-    assert effective_state_persistence().model_dump() == resolve_state_backend_config().model_dump()
+    assert (
+        effective_state_persistence().model_dump()
+        == resolve_state_backend_config().model_dump()
+    )
 
 
 def test_resolve_state_backend_config_s3_from_pyproject(

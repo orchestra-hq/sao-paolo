@@ -1,4 +1,3 @@
-import os
 import subprocess
 import sys
 from importlib.metadata import version
@@ -9,8 +8,11 @@ import click
 
 from .build_after import propagate_freshness_config
 from .compatibility import dbt_core_import_error_message
-from .config import load_orchestra_dbt_settings, resolve_state_backend_config
-from .state_types import StateBackendKind
+from .config import (
+    get_orchestra_api_key,
+    load_orchestra_dbt_settings,
+    resolve_state_backend_config,
+)
 from .constants import SERVICE_NAME
 from .dag import construct_dag
 from .logger import log_debug, log_error, log_info, log_reused_nodes
@@ -28,6 +30,7 @@ from .patcher import patch_seed_properties, patch_sql_files, revert_patching
 from .sao import Freshness, calculate_nodes_to_run
 from .source_freshness import get_source_freshness
 from .state import StateLoadError, StateSaveError, load_state, save_state, update_state
+from .state_types import StateBackendKind
 from .target_finder import find_target_in_args
 
 
@@ -53,7 +56,7 @@ def _validate_environment() -> None:
             log_debug("State backend: S3 (URI configured).")
             return
         case StateBackendKind.HTTP:
-            if not os.getenv("ORCHESTRA_API_KEY"):
+            if not get_orchestra_api_key():
                 log_error(
                     "Stateful mode requires ORCHESTRA_API_KEY for Orchestra HTTP, or state storage "
                     "outside Orchestra: a local path, s3://bucket/key "
@@ -61,6 +64,16 @@ def _validate_environment() -> None:
                 )
                 sys.exit(1)
             log_debug("State backend: Orchestra HTTP (API key set).")
+
+
+def _run_dbt_passthrough(dbt_args: tuple[str, ...]) -> None:
+    try:
+        sys.exit(subprocess.run(dbt_args).returncode)
+    except FileNotFoundError as file_not_found_error:
+        log_error(
+            f"dbt executable not found on PATH (install the dbt CLI). {file_not_found_error}"
+        )
+        sys.exit(1)
 
 
 def _complete_run(
@@ -120,25 +133,13 @@ def main(args: tuple[str, ...]) -> None:
 
     if not settings.use_stateful:
         log_debug("Stateful orchestration is disabled. Running dbt command directly.")
-        try:
-            sys.exit(subprocess.run(dbt_args).returncode)
-        except FileNotFoundError as file_not_found_error:
-            log_error(
-                f"dbt executable not found on PATH (install the dbt CLI). {file_not_found_error}"
-            )
-            sys.exit(1)
+        _run_dbt_passthrough(dbt_args)
 
     if dbt_args[1] not in ["build", "run", "test"]:
         log_debug(
             f"dbt command {dbt_args[1]} not supported for stateful orchestration."
         )
-        try:
-            sys.exit(subprocess.run(dbt_args).returncode)
-        except FileNotFoundError as file_not_found_error:
-            log_error(
-                f"dbt executable not found on PATH (install the dbt CLI). {file_not_found_error}"
-            )
-            sys.exit(1)
+        _run_dbt_passthrough(dbt_args)
 
     _welcome()
     _validate_environment()

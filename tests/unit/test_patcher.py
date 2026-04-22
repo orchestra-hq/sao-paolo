@@ -58,6 +58,20 @@ WHERE active = true
         assert "FROM customers" in result
         assert "old_tag" in result
 
+    def test_patch_file_keeps_zero_freshness(self, tmp_path) -> None:
+        sql_file = tmp_path / "test_model.sql"
+        sql_file.write_text("select 1", encoding="utf-8")
+
+        patch_file(
+            file_path=sql_file,
+            reason="Test reason",
+            freshness=0,
+            last_updated=None,
+        )
+
+        result = sql_file.read_text(encoding="utf-8")
+        assert "'orchestra_freshness': 0" in result
+
     @pytest.mark.parametrize(
         "freshness, last_updated",
         [

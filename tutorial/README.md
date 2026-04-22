@@ -8,7 +8,21 @@ This folder is a minimal [dbt Core](https://www.getdbt.com/) project that works 
 - **Staging → intermediate → marts** show a small DAG; the mart [`mart_daily_totals`](dbt/models/marts/mart_daily_totals.sql) sets **`freshness.build_after`** so Orchestra can reason about when downstream models should run relative to upstream updates (see [dbt Core state management](https://docs.getorchestra.io/docs/guides/dbt-core-state-management/guide)).
 - **Macros** ([`dbt/macros/audit_run_id.sql`](dbt/macros/audit_run_id.sql)) and **snapshots** ([`dbt/snapshots/snap_mart_daily_totals.sql`](dbt/snapshots/snap_mart_daily_totals.sql)) mirror common real projects without extra packages.
 
-Orchestra’s CLI wrapper (`orchestra-dbt`) reads manifest and state from the platform when stateful orchestration is enabled (`use_stateful` in `[tool.orchestra_dbt]` or `ORCHESTRA_USE_STATEFUL=true`). See the repo root [README](../README.md) for configuration and env overrides.
+Orchestra’s CLI wrapper (`orc`) reads manifest and state from the platform when stateful orchestration is enabled (`use_stateful` in `[tool.orchestra_dbt]` or `ORCHESTRA_USE_STATEFUL=true`). See the repo root [README](../README.md) for configuration and env overrides.
+
+## Coverage of orchestration code paths
+
+Use this tutorial project to exercise all supported stateful permutations:
+
+| Scenario | Config / command | Expected behavior |
+| --- | --- | --- |
+| Stateful disabled pass-through | `ORCHESTRA_USE_STATEFUL=false` then `orc dbt build --target ci` | Wrapper delegates directly to dbt; no state orchestration. |
+| Stateful with local file backend | `ORCHESTRA_USE_STATEFUL=true`, `ORCHESTRA_STATE_FILE=.orchestra/dbt_state.json`, no `ORCHESTRA_API_KEY` | State is loaded/saved from local JSON and clean nodes can be reused. |
+| Stateful with HTTP backend | `ORCHESTRA_USE_STATEFUL=true`, `ORCHESTRA_API_KEY=...` | State is loaded/saved through Orchestra API. |
+| Stateful with S3 backend | `ORCHESTRA_USE_STATEFUL=true`, `ORCHESTRA_STATE_FILE=s3://bucket/key`, no API key | State is loaded/saved in S3 (requires `orchestra-dbt[s3]`). |
+| Full refresh override | any stateful backend + `orc dbt build --full-refresh --target ci` | Reuse logic is bypassed for that run; state is still updated after execution. |
+| Supported stateful commands | `orc dbt run --target ci`, `orc dbt test --target ci` | Same orchestration flow as build: compute freshness, patch reusable nodes, update state. |
+| Unsupported stateful command | `orc dbt seed --target ci` | Pass-through to dbt even when `use_stateful=true`. |
 
 ## Local run (Postgres)
 

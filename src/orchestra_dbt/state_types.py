@@ -38,7 +38,7 @@ def parse_s3_uri(uri: str) -> tuple[str, str]:
 
 
 def backend_config_from_state_location(
-    raw: str, *, resolve_relative_from: Path
+    raw: str, resolve_relative_from: Path
 ) -> StateBackendConfig:
     stripped = raw.strip()
     if stripped.lower().startswith("s3://"):

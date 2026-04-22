@@ -1,18 +1,14 @@
-# sao-paolo (orchestra-dbt)
+# orchestra-dbt
 
 ## Compatibility
 
 - **Python:** 3.11, 3.12, and 3.13 only (see `requires-python` in `pyproject.toml`).
-- **dbt-core:** 1.10.x and 1.11.x when using stateful orchestration. Warehouse adapters are optional: `uv sync --extra dev --extra adapters`
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md). Licensing: [Elastic License 2.0](LICENSE).
+- **dbt-core:** 1.10.x and 1.11.x when using stateful orchestration.
 
 ## Installing
 
 ```bash
-python3.13 -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 uv sync --extra dev
 # Optional: Snowflake/Databricks adapters for local runs
@@ -21,21 +17,21 @@ uv sync --extra dev
 
 ## Tutorial dbt project
 
-A minimal dbt Core project used for docs and CI lives under [`tutorial/`](tutorial/). See [`tutorial/README.md`](tutorial/README.md) for Postgres setup, [`pipeline.yaml`](tutorial/pipeline.yaml) for an Orchestra pipeline template, and [`tutorial/dbt/`](tutorial/dbt/) for the models.
+A minimal dbt Core project lives under [`tutorial/`](tutorial/). This is used for testing and CI.
 
 ## Development
 
 1. Create a branch
 1. Add the code and unit tests
 1. Where possible, [test locally](#running-locally)
-1. Test in Orchestra [with the branch](#running-in-orchestra)
+1. Test in Orchestra with the branch
 1. Raise a PR
 
 Pull requests run GitHub Actions: unit tests, static checks, `dbt build` for `tutorial/dbt` against Postgres, and an Orchestra pipeline via the [Orchestra Run Pipeline Action](https://github.com/orchestra-hq/run-pipeline).
 
-## Stateful mode and where state is stored
+## State Aware Orchestration
 
-When stateful orchestration is enabled, the CLI loads and saves [dbt Core state](https://docs.getdbt.com/) metadata used for orchestration. Enable it with `use_stateful = true` under `[tool.orchestra_dbt]`, or set `ORCHESTRA_USE_STATEFUL=true`. That state is the same JSON shape whether it comes from Orchestra’s HTTP API, a local file, or an object in Amazon S3.
+When stateful orchestration is enabled, the CLI loads and saves [dbt Core state](https://docs.getdbt.com/). Enable it with `use_stateful = true` under `[tool.orchestra_dbt]`, or set `ORCHESTRA_USE_STATEFUL=true`. That state is the same JSON shape regardless of the backend used.
 
 **Do not put secrets in `pyproject.toml`.** Use environment variables (or your platform’s secret store) for `ORCHESTRA_API_KEY`.
 
@@ -71,6 +67,15 @@ If an effective local path or S3 URI is configured (rows 2 or 3), that **file** 
 For S3, install the optional dependency (`pip install 'orchestra-dbt[s3]'` or `uv sync --extra s3`). Credentials and region follow the usual [AWS SDK resolution](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html) (environment variables, shared config, IAM role, etc.). If the object does not exist yet, load starts with an empty state and save creates the object.
 
 Stateful orchestration only runs for `dbt build`, `dbt run`, and `dbt test`. Other dbt subcommands are passed through to dbt unchanged.
+
+### Runtime behavior by command and mode
+
+| Stateful enabled | dbt command | Behavior |
+| --- | --- | --- |
+| `false` | any command | `orc` passes through to dbt with no state load/save. |
+| `true` | `build`, `run`, `test` | `orc` loads state, computes reusable nodes, patches clean nodes, runs dbt, updates and saves state. |
+| `true` | `build`, `run`, `test` + `--full-refresh` | `orc` skips reuse decisions for this invocation, runs dbt directly, then still updates/saves state after execution. |
+| `true` | other command (for example `seed`, `docs generate`) | `orc` passes through to dbt unchanged. |
 
 Example optional snippet in `pyproject.toml`:
 
@@ -123,16 +128,6 @@ local_run = true
 orc dbt run --target snowflake
 ```
 
-## Running in Orchestra
-
-The branch of this project that is run in Orchestra can be set by the environment variable on the task run:
-
-```json
-{
-    "ORCHESTRA_DBT_BRANCH": "main/feature/whatever"
-}
-```
-
 ## Debugging
 
 To debug pipelines, there are some local files and scripts.
@@ -156,7 +151,7 @@ pytest
 
 Without Postgres, the tutorial `dbt build` integration test is skipped. To run it locally, start Postgres, set `PGHOST`, `PGDATABASE`, and related variables (see [`tutorial/README.md`](tutorial/README.md)), then run `pytest tests/integration/test_tutorial_dbt.py`.
 
-For the optional DAG integration test, you need both `local_state.json` and `local_manifest.json` in the root directory. `local_state.json` can be created by running `dynamo_state.py` (see above), and `local_manifest.json` can be created by downloading a relevant dbt `manifest.json` file
+For the optional DAG integration test (`tests/integration/test_local.py`), place both `local_state.json` and `local_manifest.json` in the repository root. `local_state.json` can be created with `dynamo_state.py` (see above), and `local_manifest.json` can be downloaded from a representative dbt run.
 
 Run only unit or integration tests:
 
@@ -171,8 +166,6 @@ Run a specific test module or case:
 pytest tests/unit/test_state.py
 pytest tests/unit/test_state.py::TestLoadState::test_load_state_success
 ```
-
-To run the integration test in `tests/integration/test_local.py`, you will require both `local_state.json` and `local_manifest.json` in the root directory. `local_state.json` can be created by running `dynamo_state.py` (see above), and `local_manifest.json` can be created by downloading a relevant dbt `manifest.json` file.
 
 ## Linting
 
