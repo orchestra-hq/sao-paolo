@@ -5,8 +5,6 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
-_TOOL_SECTION = "orchestra_dbt"
-
 
 class OrchestraDbtSettings(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -42,7 +40,7 @@ def _read_tool_orchestra_dbt(project_dir: Path) -> dict:
     tool = data.get("tool", {})
     if not isinstance(tool, dict):
         return {}
-    section = tool.get(_TOOL_SECTION, {})
+    section = tool.get("orchestra_dbt", {})
     return section if isinstance(section, dict) else {}
 
 

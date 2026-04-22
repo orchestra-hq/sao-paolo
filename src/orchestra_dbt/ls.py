@@ -15,7 +15,7 @@ def get_args_for_ls(user_args: tuple) -> list[str]:
 
 def get_paths_to_run(args: tuple) -> list[str] | None:
     try:
-        from dbt.cli.main import (  # pyright: ignore[reportMissingImports]
+        from dbt.cli.main import (
             dbtRunner,
             dbtRunnerResult,
         )
