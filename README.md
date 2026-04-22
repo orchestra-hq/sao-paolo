@@ -103,7 +103,7 @@ local_run = true
 
 ```bash
 export ORCHESTRA_API_KEY=<API_KEY>
-orc run --target snowflake
+orc dbt run --target snowflake
 ```
 
 You can still override with env vars (for example `ORCHESTRA_ENV=stage`) when needed.
@@ -118,7 +118,7 @@ local_run = true
 ```
 
 ```bash
-orc run --target snowflake
+orc dbt run --target snowflake
 ```
 
 ## Running in Orchestra

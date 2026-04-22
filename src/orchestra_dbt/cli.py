@@ -78,17 +78,21 @@ def _complete_run(
 @click.argument("args", nargs=-1, type=click.UNPROCESSED)
 def main(args: tuple[str, ...]) -> None:
     if not args:
-        log_error(f"Usage: {_usage_program()} <DBT_COMMAND> [ARGS...]")
+        log_error(f"Usage: {_usage_program()} dbt <DBT_COMMAND> [ARGS...]")
         sys.exit(1)
 
-    if args[0] == "dbt":
+    if args[0] != "dbt":
         log_error(
-            "Do not pass `dbt` as the first argument. "
-            f"Example: `{_usage_program()} build` not `{_usage_program()} dbt build`."
+            f"Expected `{_usage_program()} dbt ...`. "
+            f"Example: `{_usage_program()} dbt run` not `{_usage_program()} run`."
         )
         sys.exit(1)
 
-    dbt_args: tuple[str, ...] = ("dbt",) + tuple(args)
+    dbt_args: tuple[str, ...] = tuple(args)
+
+    if len(dbt_args) < 2:
+        log_error("dbt requires a subcommand (e.g. run, build, test).")
+        sys.exit(1)
 
     if dbt_args[1] == "orchestra":
         if len(dbt_args) < 3:
