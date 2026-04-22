@@ -1,5 +1,4 @@
 import json
-import os
 
 import yaml
 
@@ -22,7 +21,3 @@ def save_yaml(path: str, data: dict) -> None:
 def load_seed_bytes(path: str) -> bytes:
     with open(path, "rb") as f:
         return f.read()
-
-
-def get_integration_account_id_from_env() -> str | None:
-    return os.getenv("ORCHESTRA_INTEGRATION_ACCOUNT_ID")

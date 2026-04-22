@@ -9,7 +9,11 @@ from typing import cast
 import httpx
 from pydantic import ValidationError
 
-from .config import effective_state_file_path
+from .config import (
+    effective_state_file_path,
+    get_integration_account_id,
+    load_orchestra_dbt_settings,
+)
 from .logger import log_error, log_info, log_warn
 from .models import (
     MaterialisationNode,
@@ -19,7 +23,7 @@ from .models import (
     StateApiModel,
     StateItem,
 )
-from .utils import get_integration_account_id_from_env, load_json
+from .utils import load_json
 
 
 class StateLoadError(Exception):
@@ -31,7 +35,8 @@ class StateSaveError(Exception):
 
 
 def _get_base_api_url() -> str:
-    return f"https://{os.getenv('ORCHESTRA_ENV', 'app').lower()}.getorchestra.io/api/engine/public"
+    env_name = load_orchestra_dbt_settings().orchestra_env
+    return f"https://{env_name}.getorchestra.io/api/engine/public"
 
 
 def _get_headers() -> dict:
@@ -41,7 +46,7 @@ def _get_headers() -> dict:
 
 
 def _apply_integration_account_filter(state: StateApiModel) -> None:
-    if integration_account_id := get_integration_account_id_from_env():
+    if integration_account_id := get_integration_account_id():
         for key in list(state.state):
             if not key.startswith(integration_account_id):
                 state.state.pop(key)
