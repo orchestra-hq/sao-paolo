@@ -24,7 +24,7 @@ def test_tutorial_dbt_build_succeeds() -> None:
     env["DBT_PROFILES_DIR"] = str(_TUTORIAL_DBT)
 
     result = subprocess.run(
-        ["orchestra-dbt", "dbt", "build", "--target", "ci"],
+        ["orc", "dbt", "build", "--target", "ci"],
         cwd=_TUTORIAL_DBT,
         env=env,
         check=False,

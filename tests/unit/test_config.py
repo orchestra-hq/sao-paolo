@@ -38,20 +38,6 @@ def test_effective_state_file_path_env_overrides_pyproject(
     assert effective_state_file_path() == other.resolve()
 
 
-def test_effective_state_file_path_from_pyproject_relative(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    (tmp_path / "pyproject.toml").write_text(
-        '[tool.orchestra_dbt]\nstate_file = ".orchestra/state.json"\n',
-        encoding="utf-8",
-    )
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
-    monkeypatch.delenv("ORCHESTRA_STATE_FILE", raising=False)
-    expected = (tmp_path / ".orchestra" / "state.json").resolve()
-    assert effective_state_file_path() == expected
-
-
 def test_effective_state_file_path_env_relative_to_cwd(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

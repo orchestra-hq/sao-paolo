@@ -1,4 +1,4 @@
-SUPPORTED_DBT_CORE_SPEC = ">=1.10,<1.12"
+from .constants import SUPPORTED_DBT_CORE_SPEC
 
 
 def dbt_core_import_error_message(exc: BaseException) -> str:
