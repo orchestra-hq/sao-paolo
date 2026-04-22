@@ -5,6 +5,10 @@
 - **Python:** 3.11, 3.12, and 3.13 only (see `requires-python` in `pyproject.toml`).
 - **dbt-core:** 1.10.x and 1.11.x when using stateful orchestration. Warehouse adapters are optional: `uv sync --extra dev --extra adapters`
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Licensing: [Elastic License 2.0](LICENSE).
+
 ## Installing
 
 ```bash
