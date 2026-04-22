@@ -8,8 +8,8 @@ import click
 
 from .build_after import propagate_freshness_config
 from .compatibility import dbt_core_import_error_message
-from .config import effective_state_persistence, load_orchestra_dbt_settings
-from .state_storage import StatePersistenceKind
+from .config import load_orchestra_dbt_settings, resolve_state_backend_config
+from .state_backend_config import StateBackendKind
 from .constants import SERVICE_NAME
 from .dag import construct_dag
 from .logger import log_debug, log_error, log_info, log_reused_nodes
@@ -39,12 +39,12 @@ def _welcome() -> None:
 
 
 def _validate_environment() -> None:
-    persistence = effective_state_persistence()
-    if persistence.kind == StatePersistenceKind.LOCAL_FILE:
-        log_debug("Environment validated (local file state backend).")
+    backend_cfg = resolve_state_backend_config()
+    if backend_cfg.kind == StateBackendKind.LOCAL_FILE:
+        log_debug("State backend: local file (path configured).")
         return
-    if persistence.kind == StatePersistenceKind.S3:
-        log_debug("Environment validated (S3 state backend).")
+    if backend_cfg.kind == StateBackendKind.S3:
+        log_debug("State backend: S3 (URI configured).")
         return
 
     if not os.getenv("ORCHESTRA_API_KEY"):

@@ -1,13 +1,15 @@
 import os
-import tomllib
 from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
-from .state_storage import StatePersistence, StatePersistenceKind, parse_s3_uri
-
-_TOOL_SECTION = "orchestra_dbt"
+from .project_discovery import (
+    find_pyproject_directory,
+    read_orchestra_dbt_tool_config,
+)
+from .state_backend_config import StateBackendConfig, StateBackendKind
+from .state_storage import StatePersistence
 
 
 class OrchestraDbtSettings(BaseModel):
@@ -26,26 +28,6 @@ class OrchestraDbtSettings(BaseModel):
         if isinstance(v, str):
             return v.lower()
         return v
-
-
-def find_pyproject_directory(start: Path | None = None) -> Path | None:
-    current = (start or Path.cwd()).resolve()
-    for directory in [current, *current.parents]:
-        candidate = directory / "pyproject.toml"
-        if candidate.is_file():
-            return directory
-    return None
-
-
-def _read_tool_orchestra_dbt(project_dir: Path) -> dict:
-    path = project_dir / "pyproject.toml"
-    with path.open("rb") as f:
-        data = tomllib.load(f)
-    tool = data.get("tool", {})
-    if not isinstance(tool, dict):
-        return {}
-    section = tool.get(_TOOL_SECTION, {})
-    return section if isinstance(section, dict) else {}
 
 
 def _env_bool(name: str) -> bool | None:
@@ -90,7 +72,7 @@ def load_orchestra_dbt_settings(cwd: Path | None = None) -> OrchestraDbtSettings
     project_dir = find_pyproject_directory(base)
     raw: dict = {}
     if project_dir is not None:
-        raw = _read_tool_orchestra_dbt(project_dir)
+        raw = read_orchestra_dbt_tool_config(project_dir)
     try:
         settings = OrchestraDbtSettings.model_validate(raw)
         return _merge_env_overrides(settings)
@@ -102,58 +84,23 @@ def get_integration_account_id(cwd: Path | None = None) -> str | None:
     return load_orchestra_dbt_settings(cwd).integration_account_id
 
 
-def effective_state_persistence(cwd: Path | None = None) -> StatePersistence:
-    if os.getenv("ORCHESTRA_API_KEY", "").strip():
-        return StatePersistence(kind=StatePersistenceKind.HTTP)
+def resolve_state_backend_config(cwd: Path | None = None) -> StateBackendConfig:
+    from .state_backends.factory import resolve_state_backend_config as _resolve
 
-    base = cwd or Path.cwd()
-    env_path = os.getenv("ORCHESTRA_STATE_FILE", "").strip()
-    if env_path:
-        if env_path.lower().startswith("s3://"):
-            bucket, key = parse_s3_uri(env_path)
-            return StatePersistence(
-                kind=StatePersistenceKind.S3,
-                s3_bucket=bucket,
-                s3_key=key,
-            )
-        resolved = Path(env_path).expanduser()
-        if not resolved.is_absolute():
-            resolved = base.resolve() / resolved
-        return StatePersistence(
-            kind=StatePersistenceKind.LOCAL_FILE,
-            local_path=resolved.resolve(),
-        )
+    return _resolve(cwd)
 
-    project_dir = find_pyproject_directory(base)
-    if project_dir is None:
-        return StatePersistence(kind=StatePersistenceKind.HTTP)
 
-    tool_cfg = _read_tool_orchestra_dbt(project_dir)
-    raw = tool_cfg.get("state_file")
-    if not raw or not isinstance(raw, str):
-        return StatePersistence(kind=StatePersistenceKind.HTTP)
-    stripped = raw.strip()
-    if not stripped:
-        return StatePersistence(kind=StatePersistenceKind.HTTP)
-
-    if stripped.lower().startswith("s3://"):
-        bucket, key = parse_s3_uri(stripped)
-        return StatePersistence(
-            kind=StatePersistenceKind.S3,
-            s3_bucket=bucket,
-            s3_key=key,
-        )
-
-    p = Path(stripped).expanduser()
-    if p.is_absolute():
-        local_path = p.resolve()
-    else:
-        local_path = (project_dir / p).resolve()
-    return StatePersistence(kind=StatePersistenceKind.LOCAL_FILE, local_path=local_path)
+def resolve_state_file_path(cwd: Path | None = None) -> Path | None:
+    cfg = resolve_state_backend_config(cwd)
+    if cfg.kind == StateBackendKind.LOCAL_FILE:
+        return cfg.local_path
+    return None
 
 
 def effective_state_file_path(cwd: Path | None = None) -> Path | None:
-    persistence = effective_state_persistence(cwd)
-    if persistence.kind == StatePersistenceKind.LOCAL_FILE:
-        return persistence.local_path
-    return None
+    return resolve_state_file_path(cwd)
+
+
+def effective_state_persistence(cwd: Path | None = None) -> StatePersistence:
+    cfg = resolve_state_backend_config(cwd)
+    return StatePersistence.model_validate(cfg.model_dump())

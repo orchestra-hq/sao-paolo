@@ -1,8 +1,10 @@
 from datetime import datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
+import boto3
 import httpx
 import pytest
+from moto import mock_aws
 from pytest_httpx import HTTPXMock
 
 from src.orchestra_dbt.models import (
@@ -18,7 +20,6 @@ from src.orchestra_dbt.models import (
 )
 from src.orchestra_dbt.state import (
     StateLoadError,
-    StateSaveError,
     _load_run_results,
     load_state,
     save_state,
@@ -27,7 +28,7 @@ from src.orchestra_dbt.state import (
 
 
 class TestLoadState:
-    @patch("src.orchestra_dbt.state.get_integration_account_id")
+    @patch("src.orchestra_dbt.state_filters.get_integration_account_id")
     @pytest.mark.parametrize(
         "integration_account_id, expected_state_len",
         [(None, 3), ("a", 1), ("b", 1)],
@@ -797,63 +798,47 @@ class TestSaveStateFile:
 
 
 class TestLoadStateS3:
-    @patch("src.orchestra_dbt.state._boto3_s3_client")
+    @mock_aws
     def test_load_state_s3_missing_object_starts_empty(
-        self, mock_client_fn, monkeypatch: pytest.MonkeyPatch, tmp_path
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
     ):
-        from botocore.exceptions import ClientError
-
-        mock_client = MagicMock()
-        mock_client_fn.return_value = mock_client
-        mock_client.get_object.side_effect = ClientError(
-            {"Error": {"Code": "NoSuchKey", "Message": "not found"}},
-            "GetObject",
-        )
+        conn = boto3.client("s3", region_name="us-east-1")
+        conn.create_bucket(Bucket="test-bucket")
         monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
-        monkeypatch.setenv("ORCHESTRA_STATE_FILE", "s3://my-bucket/path/state.json")
+        monkeypatch.setenv(
+            "ORCHESTRA_STATE_FILE", "s3://test-bucket/prefix/state.json"
+        )
 
         assert load_state() == StateApiModel(state={})
 
-    @patch("src.orchestra_dbt.state._boto3_s3_client")
+    @mock_aws
     def test_load_state_s3_success(
-        self, mock_client_fn, monkeypatch: pytest.MonkeyPatch, tmp_path
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
     ):
-        mock_client = MagicMock()
-        mock_client_fn.return_value = mock_client
-        body = MagicMock()
-        body.read.return_value = (
+        conn = boto3.client("s3", region_name="us-east-1")
+        conn.create_bucket(Bucket="test-bucket-s3")
+        payload = (
             b'{"state": {"model.x": {"checksum": "c", '
             b'"last_updated": "2024-01-01T12:00:00", "sources": {}}}}'
         )
-        mock_client.get_object.return_value = {"Body": body}
+        conn.put_object(Bucket="test-bucket-s3", Key="k.json", Body=payload)
         monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
-        monkeypatch.setenv("ORCHESTRA_STATE_FILE", "s3://b/k.json")
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", "s3://test-bucket-s3/k.json")
 
         loaded = load_state()
         assert "model.x" in loaded.state
         assert loaded.state["model.x"].checksum == "c"
 
-    @patch("src.orchestra_dbt.state._boto3_s3_client", side_effect=ImportError)
-    def test_load_state_s3_import_error(
-        self, _mock, monkeypatch: pytest.MonkeyPatch, tmp_path
-    ):
-        monkeypatch.chdir(tmp_path)
-        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
-        monkeypatch.setenv("ORCHESTRA_STATE_FILE", "s3://b/k.json")
-
-        with pytest.raises(StateLoadError, match="boto3"):
-            load_state()
-
 
 class TestSaveStateS3:
-    @patch("src.orchestra_dbt.state._boto3_s3_client")
+    @mock_aws
     def test_save_state_s3_put_object(
-        self, mock_client_fn, monkeypatch: pytest.MonkeyPatch, tmp_path
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
     ):
-        mock_client = MagicMock()
-        mock_client_fn.return_value = mock_client
+        conn = boto3.client("s3", region_name="us-east-1")
+        conn.create_bucket(Bucket="bucket")
         monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
         monkeypatch.setenv("ORCHESTRA_STATE_FILE", "s3://bucket/dir/f.json")
@@ -870,19 +855,6 @@ class TestSaveStateS3:
             )
         )
 
-        mock_client.put_object.assert_called_once()
-        call_kw = mock_client.put_object.call_args.kwargs
-        assert call_kw["Bucket"] == "bucket"
-        assert call_kw["Key"] == "dir/f.json"
-        assert b'"checksum"' in call_kw["Body"]
-
-    @patch("src.orchestra_dbt.state._boto3_s3_client", side_effect=ImportError)
-    def test_save_state_s3_import_error(
-        self, _mock, monkeypatch: pytest.MonkeyPatch, tmp_path
-    ):
-        monkeypatch.chdir(tmp_path)
-        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
-        monkeypatch.setenv("ORCHESTRA_STATE_FILE", "s3://b/k.json")
-
-        with pytest.raises(StateSaveError, match="boto3"):
-            save_state(StateApiModel(state={}))
+        obj = conn.get_object(Bucket="bucket", Key="dir/f.json")
+        body = obj["Body"].read()
+        assert b'"checksum"' in body
