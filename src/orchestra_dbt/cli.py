@@ -7,7 +7,9 @@ from typing import cast
 import click
 
 from .build_after import propagate_freshness_config
-from .constants import SERVICE_NAME, VALID_ORCHESTRA_ENVS
+from .compatibility import dbt_core_import_error_message
+from .config import effective_state_file_path, load_orchestra_dbt_settings
+from .constants import SERVICE_NAME
 from .dag import construct_dag
 from .logger import log_debug, log_error, log_info, log_reused_nodes
 from .ls import get_paths_to_run
@@ -23,7 +25,7 @@ from .orchestra import is_warn
 from .patcher import patch_seed_properties, patch_sql_files, revert_patching
 from .sao import Freshness, calculate_nodes_to_run
 from .source_freshness import get_source_freshness
-from .state import load_state, save_state, update_state
+from .state import StateLoadError, StateSaveError, load_state, save_state, update_state
 from .target_finder import find_target_in_args
 
 
@@ -36,14 +38,15 @@ def _welcome() -> None:
 
 
 def _validate_environment() -> None:
-    if os.getenv("ORCHESTRA_ENV", "app").lower() not in VALID_ORCHESTRA_ENVS:
-        log_error(
-            f"Invalid ORCHESTRA_ENV environment variable. Must be one of: {', '.join(VALID_ORCHESTRA_ENVS)}"
-        )
-        sys.exit(1)
+    if effective_state_file_path() is not None:
+        log_debug("Environment validated (file state backend).")
+        return
 
     if not os.getenv("ORCHESTRA_API_KEY"):
-        log_error("Missing ORCHESTRA_API_KEY environment variable.")
+        log_error(
+            "Stateful mode requires ORCHESTRA_API_KEY for Orchestra HTTP, or a state file "
+            "(ORCHESTRA_STATE_FILE or [tool.orchestra_dbt] state_file in pyproject.toml)."
+        )
         sys.exit(1)
 
     log_debug("Environment validated.")
@@ -56,7 +59,11 @@ def _complete_run(
     dbt_exit_code: int,
 ) -> None:
     update_state(state=state, parsed_dag=parsed_dag, source_freshness=source_freshness)
-    save_state(state=state)
+    try:
+        save_state(state=state)
+    except StateSaveError as e:
+        log_error(str(e))
+        sys.exit(1)
     sys.exit(dbt_exit_code)
 
 
@@ -78,13 +85,19 @@ def main(args: tuple):
                 sys.exit(1)
         sys.exit(0)
 
-    if not os.getenv("ORCHESTRA_USE_STATEFUL", "false").lower() == "true":
+    try:
+        settings = load_orchestra_dbt_settings()
+    except ValueError as exc:
+        log_error(str(exc))
+        sys.exit(1)
+
+    if not settings.use_stateful:
         log_debug("Stateful orchestration is disabled. Running dbt command directly.")
         try:
             sys.exit(subprocess.run(args).returncode)
         except FileNotFoundError as file_not_found_error:
             log_error(
-                f"dbt-core is not installed. Please install it. Issue: {file_not_found_error}"
+                f"dbt executable not found on PATH (install the dbt CLI). {file_not_found_error}"
             )
             sys.exit(1)
 
@@ -94,7 +107,7 @@ def main(args: tuple):
             sys.exit(subprocess.run(args).returncode)
         except FileNotFoundError as file_not_found_error:
             log_error(
-                f"dbt-core is not installed. Please install it. Issue: {file_not_found_error}"
+                f"dbt executable not found on PATH (install the dbt CLI). {file_not_found_error}"
             )
             sys.exit(1)
 
@@ -103,17 +116,27 @@ def main(args: tuple):
 
     try:
         paths_to_run: list[str] | None = get_paths_to_run(args[2:])
-    except ImportError:
+    except ImportError as import_error:
+        log_error(dbt_core_import_error_message(import_error))
         sys.exit(1)
 
-    source_freshness: SourceFreshness | None = get_source_freshness(
-        target=find_target_in_args(list(args))
-    )
+    try:
+        source_freshness: SourceFreshness | None = get_source_freshness(
+            target=find_target_in_args(list(args))
+        )
+    except ImportError as import_error:
+        log_error(dbt_core_import_error_message(import_error))
+        sys.exit(1)
     if not source_freshness:
         sys.exit(subprocess.run(args).returncode)
     log_info(f"Collected {len(source_freshness.sources)} source(s) information.")
 
-    state = load_state()
+    try:
+        state = load_state()
+    except StateLoadError as e:
+        log_error(str(e))
+        sys.exit(1)
+
     parsed_dag = construct_dag(source_freshness, state)
 
     # Propagate freshness config to upstream nodes
@@ -152,7 +175,7 @@ def main(args: tuple):
         result = subprocess.run(modify_dbt_command(cmd=list(args)))
 
         log_info(f"{len(nodes_to_reuse)}/{node_count} nodes reused.")
-        if os.getenv("ORCHESTRA_LOCAL_RUN", "false").lower() == "true":
+        if settings.local_run:
             revert_patching(
                 file_paths_to_revert=[
                     node.file_path for node in nodes_to_reuse.values()

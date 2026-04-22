@@ -16,8 +16,8 @@ from src.orchestra_dbt.models import (
 from src.orchestra_dbt.sao import calculate_nodes_to_run
 
 
-@patch("src.orchestra_dbt.dag.get_integration_account_id_from_env")
-def test_e2e(mock_get_integration_account_id_from_env):
+@patch("src.orchestra_dbt.dag.get_integration_account_id")
+def test_e2e(mock_get_integration_account_id):
     try:
         local_state = open("local_state.json", "r").read()
     except FileNotFoundError:
@@ -28,7 +28,7 @@ def test_e2e(mock_get_integration_account_id_from_env):
     except FileNotFoundError:
         pytest.skip("local_manifest.json not found")
 
-    mock_get_integration_account_id_from_env.return_value = "TO_BE_COMPLETED"
+    mock_get_integration_account_id.return_value = "TO_BE_COMPLETED"
 
     parsed_dag = construct_dag(
         source_freshness=SourceFreshness(sources={}),
