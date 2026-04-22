@@ -27,7 +27,7 @@ Ensure `uv sync --extra dev --extra adapters` has been run.
    export DBT_SCHEMA=sao_tutorial
    cd tutorial
    export DBT_PROFILES_DIR="$(pwd)/dbt"
-   cd dbt && orchestra-dbt dbt build --target ci
+   cd dbt && orc dbt build --target ci
    ```
 
 `dbt/profiles.yml` uses only environment variables. Do not commit warehouse passwords.

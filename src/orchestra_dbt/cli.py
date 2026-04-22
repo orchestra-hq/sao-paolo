@@ -2,6 +2,7 @@ import os
 import subprocess
 import sys
 from importlib.metadata import version
+from pathlib import Path
 from typing import cast
 
 import click
@@ -27,6 +28,10 @@ from .sao import Freshness, calculate_nodes_to_run
 from .source_freshness import get_source_freshness
 from .state import StateLoadError, StateSaveError, load_state, save_state, update_state
 from .target_finder import find_target_in_args
+
+
+def _usage_program() -> str:
+    return Path(sys.argv[0]).name if sys.argv else "orc"
 
 
 def _welcome() -> None:
@@ -71,17 +76,33 @@ def _complete_run(
     context_settings={"ignore_unknown_options": True, "allow_extra_args": True}
 )
 @click.argument("args", nargs=-1, type=click.UNPROCESSED)
-def main(args: tuple):
-    if not args or args[0] != "dbt" or len(args) < 2:
-        log_error("Usage: orchestra-dbt dbt [DBT_COMMAND] [ARGS...]")
+def main(args: tuple[str, ...]) -> None:
+    if not args:
+        log_error(f"Usage: {_usage_program()} dbt <DBT_COMMAND> [ARGS...]")
         sys.exit(1)
 
-    if args[1] == "orchestra":
-        match args[2]:
+    if args[0] != "dbt":
+        log_error(
+            f"Expected `{_usage_program()} dbt ...`. "
+            f"Example: `{_usage_program()} dbt run` not `{_usage_program()} run`."
+        )
+        sys.exit(1)
+
+    dbt_args: tuple[str, ...] = tuple(args)
+
+    if len(dbt_args) < 2:
+        log_error("dbt requires a subcommand (e.g. run, build, test).")
+        sys.exit(1)
+
+    if dbt_args[1] == "orchestra":
+        if len(dbt_args) < 3:
+            log_error("dbt orchestra requires a subcommand (e.g. is_warn).")
+            sys.exit(1)
+        match dbt_args[2]:
             case "is_warn":
                 is_warn()
             case _:
-                log_error(f"dbt orchestra command {args[2]} not known.")
+                log_error(f"dbt orchestra command {dbt_args[2]} not known.")
                 sys.exit(1)
         sys.exit(0)
 
@@ -94,17 +115,19 @@ def main(args: tuple):
     if not settings.use_stateful:
         log_debug("Stateful orchestration is disabled. Running dbt command directly.")
         try:
-            sys.exit(subprocess.run(args).returncode)
+            sys.exit(subprocess.run(dbt_args).returncode)
         except FileNotFoundError as file_not_found_error:
             log_error(
                 f"dbt executable not found on PATH (install the dbt CLI). {file_not_found_error}"
             )
             sys.exit(1)
 
-    if args[1] not in ["build", "run", "test"]:
-        log_debug(f"dbt command {args[1]} not supported for stateful orchestration.")
+    if dbt_args[1] not in ["build", "run", "test"]:
+        log_debug(
+            f"dbt command {dbt_args[1]} not supported for stateful orchestration."
+        )
         try:
-            sys.exit(subprocess.run(args).returncode)
+            sys.exit(subprocess.run(dbt_args).returncode)
         except FileNotFoundError as file_not_found_error:
             log_error(
                 f"dbt executable not found on PATH (install the dbt CLI). {file_not_found_error}"
@@ -115,20 +138,20 @@ def main(args: tuple):
     _validate_environment()
 
     try:
-        paths_to_run: list[str] | None = get_paths_to_run(args[2:])
+        paths_to_run: list[str] | None = get_paths_to_run(dbt_args[2:])
     except ImportError as import_error:
         log_error(dbt_core_import_error_message(import_error))
         sys.exit(1)
 
     try:
         source_freshness: SourceFreshness | None = get_source_freshness(
-            target=find_target_in_args(list(args))
+            target=find_target_in_args(list(dbt_args))
         )
     except ImportError as import_error:
         log_error(dbt_core_import_error_message(import_error))
         sys.exit(1)
     if not source_freshness:
-        sys.exit(subprocess.run(args).returncode)
+        sys.exit(subprocess.run(dbt_args).returncode)
     log_info(f"Collected {len(source_freshness.sources)} source(s) information.")
 
     try:
@@ -142,13 +165,13 @@ def main(args: tuple):
     # Propagate freshness config to upstream nodes
     propagate_freshness_config(parsed_dag)
 
-    if "--full-refresh" in args:
+    if "--full-refresh" in dbt_args:
         log_info("Full refresh detected. Stateful orchestration disabled.")
         _complete_run(
             state,
             parsed_dag,
             source_freshness,
-            dbt_exit_code=subprocess.run(args).returncode,
+            dbt_exit_code=subprocess.run(dbt_args).returncode,
         )
 
     # Edit the DAG inline.
@@ -172,7 +195,7 @@ def main(args: tuple):
         patch_sql_files(nodes_to_reuse)
         patch_seed_properties(nodes_to_reuse)
 
-        result = subprocess.run(modify_dbt_command(cmd=list(args)))
+        result = subprocess.run(modify_dbt_command(cmd=list(dbt_args)))
 
         log_info(f"{len(nodes_to_reuse)}/{node_count} nodes reused.")
         if settings.local_run:
@@ -182,6 +205,6 @@ def main(args: tuple):
                 ]
             )
     else:
-        result = subprocess.run(list(args))
+        result = subprocess.run(list(dbt_args))
 
     _complete_run(state, parsed_dag, source_freshness, dbt_exit_code=result.returncode)
