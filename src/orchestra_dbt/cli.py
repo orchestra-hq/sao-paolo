@@ -31,7 +31,7 @@ from .target_finder import find_target_in_args
 
 def _welcome() -> None:
     try:
-        project_version = version(SERVICE_NAME)
+        project_version = version(distribution_name=SERVICE_NAME)
     except Exception:
         project_version = "unknown"
     log_info(f"Version: {project_version}. Stateful orchestration enabled.")
