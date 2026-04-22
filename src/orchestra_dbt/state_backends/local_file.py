@@ -32,7 +32,7 @@ class LocalFileStateBackend:
             raise StateLoadError(f"State file failed validation ({path}): {e}")
 
         apply_integration_account_filter(state)
-        log_state_loaded("local file", state)
+        log_state_loaded("local_file", state)
         return state
 
     def save(self, state: StateApiModel) -> None:

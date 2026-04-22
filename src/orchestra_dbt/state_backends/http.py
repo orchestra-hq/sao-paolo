@@ -40,7 +40,7 @@ class HttpStateBackend:
         try:
             state = StateApiModel.model_validate(response.json())
             apply_integration_account_filter(state)
-            log_state_loaded("Orchestra HTTP", state)
+            log_state_loaded("http", state)
             return state
         except (ValidationError, ValueError) as e:
             log_error(f"Failed to validate state: {e}")

@@ -49,7 +49,7 @@ class S3StateBackend:
             ) from e
 
         apply_integration_account_filter(state)
-        log_state_loaded("S3", state)
+        log_state_loaded("s3", state)
         return state
 
     def save(self, state: StateApiModel) -> None:
