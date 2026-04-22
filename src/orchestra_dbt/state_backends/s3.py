@@ -8,6 +8,7 @@ from ..logger import log_info
 from ..models import StateApiModel
 from ..state_errors import StateLoadError, StateSaveError
 from ..state_filters import apply_integration_account_filter
+from .logging import log_state_loaded, log_state_saved
 
 
 class S3StateBackend:
@@ -48,7 +49,7 @@ class S3StateBackend:
             ) from e
 
         apply_integration_account_filter(state)
-        log_info(f"State loaded from S3. Retrieved {len(state.state)} items.")
+        log_state_loaded("S3", state)
         return state
 
     def save(self, state: StateApiModel) -> None:
@@ -67,4 +68,4 @@ class S3StateBackend:
             raise StateSaveError(
                 f"Failed to save state to s3://{bucket}/{key}: {e}"
             ) from e
-        log_info("State saved to S3")
+        log_state_saved("s3")

@@ -8,7 +8,7 @@ from .project_discovery import (
     find_pyproject_directory,
     read_orchestra_dbt_tool_config,
 )
-from .state_backend_config import StateBackendConfig, StateBackendKind
+from .state_types import StateBackendConfig, StateBackendKind
 from .state_storage import StatePersistence
 
 
@@ -92,9 +92,11 @@ def resolve_state_backend_config(cwd: Path | None = None) -> StateBackendConfig:
 
 def resolve_state_file_path(cwd: Path | None = None) -> Path | None:
     cfg = resolve_state_backend_config(cwd)
-    if cfg.kind == StateBackendKind.LOCAL_FILE:
-        return cfg.local_path
-    return None
+    match cfg.kind:
+        case StateBackendKind.LOCAL_FILE:
+            return cfg.local_path
+        case _:
+            return None
 
 
 def effective_state_file_path(cwd: Path | None = None) -> Path | None:

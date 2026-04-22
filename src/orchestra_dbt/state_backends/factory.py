@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 from ..project_discovery import find_pyproject_directory, read_orchestra_dbt_tool_config
-from ..state_backend_config import (
+from ..state_types import (
     StateBackendConfig,
     StateBackendKind,
     backend_config_from_state_location,
@@ -38,12 +38,20 @@ def resolve_state_backend_config(cwd: Path | None = None) -> StateBackendConfig:
 
 def resolved_state_backend(cwd: Path | None = None):
     cfg = resolve_state_backend_config(cwd)
-    if cfg.kind == StateBackendKind.LOCAL_FILE:
-        assert cfg.local_path is not None
-        return LocalFileStateBackend(cfg.local_path)
-    if cfg.kind == StateBackendKind.S3:
-        from .s3 import S3StateBackend
+    match cfg.kind:
+        case StateBackendKind.HTTP:
+            return HttpStateBackend()
+        case StateBackendKind.LOCAL_FILE:
+            if cfg.local_path is None:
+                raise RuntimeError(
+                    "State backend config is LOCAL_FILE but local_path is missing"
+                )
+            return LocalFileStateBackend(cfg.local_path)
+        case StateBackendKind.S3:
+            from .s3 import S3StateBackend
 
-        assert cfg.s3_bucket is not None and cfg.s3_key is not None
-        return S3StateBackend(cfg.s3_bucket, cfg.s3_key)
-    return HttpStateBackend()
+            if cfg.s3_bucket is None or cfg.s3_key is None:
+                raise RuntimeError(
+                    "State backend config is S3 but s3_bucket or s3_key is missing"
+                )
+            return S3StateBackend(cfg.s3_bucket, cfg.s3_key)

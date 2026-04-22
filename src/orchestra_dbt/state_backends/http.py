@@ -5,9 +5,10 @@ import httpx
 from pydantic import ValidationError
 
 from ..config import load_orchestra_dbt_settings
-from ..logger import log_error, log_info, log_warn
+from ..logger import log_error, log_warn
 from ..models import StateApiModel
 from ..state_filters import apply_integration_account_filter
+from .logging import log_state_loaded, log_state_saved
 
 
 class HttpStateBackend:
@@ -39,9 +40,7 @@ class HttpStateBackend:
         try:
             state = StateApiModel.model_validate(response.json())
             apply_integration_account_filter(state)
-            log_info(
-                f"State loaded. Retrieved {len(state.state)} items.",
-            )
+            log_state_loaded("Orchestra HTTP", state)
             return state
         except (ValidationError, ValueError) as e:
             log_error(f"Failed to validate state: {e}")
@@ -59,7 +58,7 @@ class HttpStateBackend:
                 timeout=httpx.Timeout(timeout=30),
             )
             response.raise_for_status()
-            log_info("State saved")
+            log_state_saved("http")
         except httpx.HTTPStatusError as e:
             log_warn(
                 f"Failed to save state ({e.response.status_code}): {e.response.text}"

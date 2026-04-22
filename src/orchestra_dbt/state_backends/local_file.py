@@ -5,10 +5,10 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from ..logger import log_info
 from ..models import StateApiModel
 from ..state_errors import StateLoadError, StateSaveError
 from ..state_filters import apply_integration_account_filter
+from .logging import log_state_loaded, log_state_saved
 
 
 class LocalFileStateBackend:
@@ -32,7 +32,7 @@ class LocalFileStateBackend:
             raise StateLoadError(f"State file failed validation ({path}): {e}")
 
         apply_integration_account_filter(state)
-        log_info(f"State loaded from file. Retrieved {len(state.state)} items.")
+        log_state_loaded("local file", state)
         return state
 
     def save(self, state: StateApiModel) -> None:
@@ -53,4 +53,4 @@ class LocalFileStateBackend:
             except OSError:
                 pass
             raise StateSaveError(f"Failed to save state file ({path}): {e}") from e
-        log_info("State saved")
+        log_state_saved("local_file")

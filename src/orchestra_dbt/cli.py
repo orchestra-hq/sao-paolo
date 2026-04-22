@@ -9,7 +9,7 @@ import click
 from .build_after import propagate_freshness_config
 from .compatibility import dbt_core_import_error_message
 from .config import load_orchestra_dbt_settings, resolve_state_backend_config
-from .state_backend_config import StateBackendKind
+from .state_types import StateBackendKind
 from .constants import SERVICE_NAME
 from .dag import construct_dag
 from .logger import log_debug, log_error, log_info, log_reused_nodes
@@ -40,22 +40,22 @@ def _welcome() -> None:
 
 def _validate_environment() -> None:
     backend_cfg = resolve_state_backend_config()
-    if backend_cfg.kind == StateBackendKind.LOCAL_FILE:
-        log_debug("State backend: local file (path configured).")
-        return
-    if backend_cfg.kind == StateBackendKind.S3:
-        log_debug("State backend: S3 (URI configured).")
-        return
-
-    if not os.getenv("ORCHESTRA_API_KEY"):
-        log_error(
-            "Stateful mode requires ORCHESTRA_API_KEY for Orchestra HTTP, or state storage "
-            "outside Orchestra: a local path, s3://bucket/key "
-            "(ORCHESTRA_STATE_FILE or [tool.orchestra_dbt] state_file in pyproject.toml)."
-        )
-        sys.exit(1)
-
-    log_debug("Environment validated.")
+    match backend_cfg.kind:
+        case StateBackendKind.LOCAL_FILE:
+            log_debug("State backend: local file (path configured).")
+            return
+        case StateBackendKind.S3:
+            log_debug("State backend: S3 (URI configured).")
+            return
+        case StateBackendKind.HTTP:
+            if not os.getenv("ORCHESTRA_API_KEY"):
+                log_error(
+                    "Stateful mode requires ORCHESTRA_API_KEY for Orchestra HTTP, or state storage "
+                    "outside Orchestra: a local path, s3://bucket/key "
+                    "(ORCHESTRA_STATE_FILE or [tool.orchestra_dbt] state_file in pyproject.toml)."
+                )
+                sys.exit(1)
+            log_debug("State backend: Orchestra HTTP (API key set).")
 
 
 def _complete_run(

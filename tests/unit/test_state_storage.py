@@ -1,6 +1,6 @@
 import pytest
 
-from src.orchestra_dbt.state_backend_config import parse_s3_uri
+from src.orchestra_dbt.state_types import parse_s3_uri
 
 
 @pytest.mark.parametrize(

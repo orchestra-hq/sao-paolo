@@ -10,7 +10,7 @@ from src.orchestra_dbt.config import (
     resolve_state_backend_config,
 )
 from src.orchestra_dbt.project_discovery import find_pyproject_directory
-from src.orchestra_dbt.state_backend_config import StateBackendKind
+from src.orchestra_dbt.state_types import StateBackendKind
 
 
 def _clear_orchestra_settings_env(monkeypatch: pytest.MonkeyPatch) -> None:
