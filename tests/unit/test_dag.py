@@ -124,7 +124,8 @@ class TestConstructDag:
             dag_module,
             "load_orchestra_dbt_settings",
             lambda: OrchestraDbtSettings(
-                integration_account_id="integration_account_id"
+                integration_account_id="integration_account_id",
+                local_run=False,
             ),
         )
 

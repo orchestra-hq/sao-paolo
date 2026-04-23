@@ -5,7 +5,7 @@ def generate_asset_external_id(
     node_id: str,
     relation_name: str | None,
     integration_account_id: str | None,
-    local_run: bool = False,
+    local_run: bool = True,
 ) -> str:
     """
     Generate a stable external ID used for Orchestra state keys.
