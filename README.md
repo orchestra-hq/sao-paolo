@@ -68,6 +68,23 @@ For S3, install the optional dependency (`pip install 'orchestra-dbt[s3]'` or `u
 
 Stateful orchestration only runs for `dbt build`, `dbt run`, and `dbt test`. Other dbt subcommands are passed through to dbt unchanged.
 
+### Warehouse adapters and implicit source freshness
+
+Stateful reuse uses `dbt source freshness` results. When a source defines **`loaded_at_field`** or **`loaded_at_query`**, dbt’s normal freshness logic runs on every adapter Orchestra supports through dbt Core.
+
+When **both** are omitted, Orchestra can still run **adapter-specific** SQL to infer `max_loaded_at` (see `src/orchestra_dbt/source_freshness/`). Only the adapters below register that path today; the mapping is keyed by `FreshnessRunner.adapter.type()`.
+
+| Warehouse | dbt adapter type (typical) | Implicit freshness (no `loaded_at_*`) |
+| --- | --- | --- |
+| **Databricks** | `databricks` | **Supported** — uses `DESCRIBE HISTORY` on the source relation. |
+| **Snowflake** | `snowflake` | **Use `loaded_at_field` or `loaded_at_query`** — no Orchestra fallback; standard dbt freshness. |
+| **Microsoft Fabric** | `fabric` | Same as Snowflake — configure `loaded_at_*`; no Orchestra fallback. |
+| **PostgreSQL** | `postgres` | Same as Snowflake — configure `loaded_at_*`; no Orchestra fallback. |
+| **DuckDB** | `duckdb` | **Not supported** |
+| **Other adapters** | varies | No Orchestra fallback unless listed above; use `loaded_at_*` or verify dbt’s default behavior for your warehouse. |
+
+For adapters without a registered fallback, if both `loaded_at` settings are missing, Orchestra follows dbt’s `FreshnessRunner` behavior (which may surface as warnings or a non-actionable result depending on dbt and the warehouse).
+
 ### Runtime behavior by command and mode
 
 | Stateful enabled | dbt command | Behavior |
