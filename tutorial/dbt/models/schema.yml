@@ -19,6 +19,13 @@ models:
         tests:
           - not_null
           - unique
+      - name: customer_id
+        tests:
+          - accepted_values:
+              arguments:
+                values: [999]
+              config:
+                severity: warn
 
   - name: int_events_enriched
     config:
@@ -30,7 +37,7 @@ models:
       tags: [mart]
       freshness:
         build_after:
-          count: 10
+          count: 5
           period: minute
           updates_on: all
     columns:
