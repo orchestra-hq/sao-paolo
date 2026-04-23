@@ -53,6 +53,8 @@ jobs:
         run: uv python install 3.13
       - name: Install dependencies
         run: uv sync --extra dev --extra adapters
+      - name: Create .orchestra/dbt_state.json
+        run: mkdir -p .orchestra && echo '{"state":{}}' > .orchestra/dbt_state.json
       - name: Run tutorial dbt build
         env:
           PGHOST: localhost
@@ -61,6 +63,7 @@ jobs:
           PGPASSWORD: postgres
           PGDATABASE: tutorial
           DBT_SCHEMA: sao_tutorial
+          ORCHESTRA_API_KEY: ""
         run: uv run pytest tests/integration/test_tutorial_dbt.py -sv
 
   orchestra:
