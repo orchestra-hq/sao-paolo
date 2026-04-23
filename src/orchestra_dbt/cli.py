@@ -121,7 +121,7 @@ def main(args: tuple[str, ...]) -> None:
             case "is_warn":
                 is_warn()
             case _:
-                log_error(f"dbt orchestra command {dbt_args[2]} not known.")
+                log_error(f"dbt orchestra command '{dbt_args[2]}' not known.")
                 sys.exit(1)
         sys.exit(0)
 
@@ -137,7 +137,7 @@ def main(args: tuple[str, ...]) -> None:
 
     if dbt_args[1] not in ["build", "run", "test"]:
         log_debug(
-            f"dbt command {dbt_args[1]} not supported for stateful orchestration."
+            f"dbt command '{dbt_args[1]}' not supported for stateful orchestration."
         )
         _run_dbt_passthrough(dbt_args)
 

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 import click
 
@@ -8,7 +8,7 @@ from .models import MaterialisationNode
 
 
 def _log(msg: str, fg: str | None, error: bool = False) -> None:
-    text = str(datetime.now().strftime("%H:%M:%S")) + " "
+    text = str(datetime.now(UTC).strftime("%H:%M:%S")) + " "
     if error:
         text += " [ERROR]"
     text += f" [{SERVICE_NAME}] {msg}"

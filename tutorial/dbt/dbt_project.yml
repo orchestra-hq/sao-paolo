@@ -17,8 +17,8 @@ models:
       +schema: marts
       +materialized: table
   +persist_docs:
-    relation: true
-    columns: true
+    relation: false
+    columns: false
 
 seeds:
   sao_tutorial:
