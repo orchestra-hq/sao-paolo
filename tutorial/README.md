@@ -14,13 +14,13 @@ Use this tutorial project to exercise all supported stateful permutations:
 
 | Scenario | Config / command | Expected behavior |
 | --- | --- | --- |
-| Stateful disabled pass-through | `ORCHESTRA_USE_STATEFUL=false` then `orc dbt build --target ci` | Wrapper delegates directly to dbt; no state orchestration. |
+| Stateful disabled pass-through | `ORCHESTRA_USE_STATEFUL=false` then `orc dbt build` | Wrapper delegates directly to dbt; no state orchestration. |
 | Stateful with local file backend | `ORCHESTRA_USE_STATEFUL=true`, `ORCHESTRA_STATE_FILE=.orchestra/dbt_state.json`, no `ORCHESTRA_API_KEY` | State is loaded/saved from local JSON and clean nodes can be reused. |
 | Stateful with HTTP backend | `ORCHESTRA_USE_STATEFUL=true`, `ORCHESTRA_API_KEY=...` | State is loaded/saved through Orchestra API. |
 | Stateful with S3 backend | `ORCHESTRA_USE_STATEFUL=true`, `ORCHESTRA_STATE_FILE=s3://bucket/key`, no API key | State is loaded/saved in S3 (requires `orchestra-dbt[s3]`). |
-| Full refresh override | any stateful backend + `orc dbt build --full-refresh --target ci` | Reuse logic is bypassed for that run; state is still updated after execution. |
-| Supported stateful commands | `orc dbt run --target ci`, `orc dbt test --target ci` | Same orchestration flow as build: compute freshness, patch reusable nodes, update state. |
-| Unsupported stateful command | `orc dbt seed --target ci` | Pass-through to dbt even when `use_stateful=true`. |
+| Full refresh override | any stateful backend + `orc dbt build --full-refresh` | Reuse logic is bypassed for that run; state is still updated after execution. |
+| Supported stateful commands | `orc dbt run`, `orc dbt test` | Same orchestration flow as build: compute freshness, patch reusable nodes, update state. |
+| Unsupported stateful command | `orc dbt seed` | Pass-through to dbt even when `use_stateful=true`. |
 
 ## Local run (Postgres)
 
@@ -49,7 +49,7 @@ Ensure `uv sync --extra dev --extra adapters` has been run.
 
    ```bash
    export PGHOST=127.0.0.1 PGPORT=5432 PGUSER=postgres PGPASSWORD=postgres PGDATABASE=tutorial DBT_SCHEMA=sao_tutorial DBT_PROFILES_DIR="$(pwd)"
-   orc dbt build --target ci
+   orc dbt build
    ```
 
 1. (Optional) To remove the Postgres container after testing, run:

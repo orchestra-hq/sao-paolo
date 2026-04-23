@@ -1,6 +1,6 @@
 select
     id,
-    event_at,
     amount,
+    event_at,
     customer_id
 from {{ ref('raw_events') }}
