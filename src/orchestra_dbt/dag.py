@@ -25,6 +25,8 @@ def calculate_freshness_on_node(
     track_state: bool,
     from_external_package: bool,
     depends_on_nodes: list[str] | None,
+    *,
+    seed_state_orchestration: bool = False,
 ) -> tuple[Freshness, str]:
     if resource_type == "snapshot":
         # Note: currently, we always run snapshots. Need to configure how to propagate
@@ -40,7 +42,7 @@ def calculate_freshness_on_node(
             "Model from external package without parent dependencies - skipping state orchestration.",
         )
 
-    if resource_type == "seed":
+    if resource_type == "seed" and not seed_state_orchestration:
         return Freshness.DIRTY, "State orchestration for seeds currently disabled."
 
     if asset_external_id not in state.state:
@@ -119,6 +121,7 @@ def construct_dag(
                     track_state,
                     from_external_package,
                     depends_on_nodes,
+                    seed_state_orchestration=settings.seed_state_orchestration,
                 )
 
                 nodes[node_id] = MaterialisationNode(
