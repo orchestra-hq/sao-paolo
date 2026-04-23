@@ -46,7 +46,7 @@ For non-secret options, **if an environment variable is set, it overrides** valu
 | `state_file` | string (optional) | — | Local JSON path or `s3://bucket/key` for state (see backend table below). |
 | `use_stateful` | bool | `false` | Turn on stateful orchestration for supported dbt commands. |
 | `orchestra_env` | string | `app` | Orchestra deployment: `app`, `stage`, or `dev` (HTTP API host). |
-| `local_run` | bool | `false` | After reuse, revert patched files (typical for local iteration). |
+| `local_run` | bool | `true` | After reuse, revert patched files (typical for local iteration). |
 | `debug` | bool | `false` | Verbose `orchestra-dbt` debug logging. |
 | `integration_account_id` | string (optional) | — | When set, filter state keys to this integration account prefix. |
 

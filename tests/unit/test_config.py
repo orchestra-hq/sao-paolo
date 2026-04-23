@@ -152,7 +152,7 @@ def test_load_orchestra_dbt_settings_defaults(
     settings = load_orchestra_dbt_settings()
     assert settings.use_stateful is False
     assert settings.orchestra_env == "app"
-    assert settings.local_run is False
+    assert settings.local_run is True
     assert settings.debug is False
     assert settings.integration_account_id is None
 

@@ -18,7 +18,7 @@ class OrchestraDbtSettings(BaseModel):
     state_file: str | None = None
     use_stateful: bool = False
     orchestra_env: Literal["app", "stage", "dev"] = "app"
-    local_run: bool = False
+    local_run: bool = True
     debug: bool = False
     integration_account_id: str | None = None
 

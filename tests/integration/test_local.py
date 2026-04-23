@@ -31,7 +31,10 @@ def test_e2e(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         dag_module,
         "load_orchestra_dbt_settings",
-        lambda: OrchestraDbtSettings(integration_account_id="TO_BE_COMPLETED"),
+        lambda: OrchestraDbtSettings(
+            integration_account_id="TO_BE_COMPLETED",
+            local_run=False,
+        ),
     )
 
     parsed_dag = construct_dag(
