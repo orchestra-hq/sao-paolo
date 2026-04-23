@@ -57,6 +57,8 @@ Ensure `uv sync --extra dev --extra adapters` has been run.
    orc dbt seed
    ```
 
+   `orc dbt` commands other than `build`, `run` and `test` are passed through to `dbt`.
+
 1. Run a dbt build for the first time:
 
    ```bash
