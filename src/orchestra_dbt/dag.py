@@ -25,7 +25,6 @@ def calculate_freshness_on_node(
     track_state: bool,
     from_external_package: bool,
     depends_on_nodes: list[str] | None,
-    *,
     seed_state_orchestration: bool = False,
 ) -> tuple[Freshness, str]:
     if resource_type == "snapshot":
@@ -121,7 +120,7 @@ def construct_dag(
                     track_state,
                     from_external_package,
                     depends_on_nodes,
-                    seed_state_orchestration=settings.seed_state_orchestration,
+                    settings.seed_state_orchestration,
                 )
 
                 nodes[node_id] = MaterialisationNode(
