@@ -106,6 +106,18 @@ class TestLoadState:
         )
         assert load_state() == StateApiModel(state={})
 
+    def test_load_state_request_error(self, httpx_mock: HTTPXMock):
+        httpx_mock.add_exception(
+            httpx.ConnectError("Connection failed"),
+            method="GET",
+            url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
+            match_headers={
+                "Accept": "application/json",
+                "Authorization": "Bearer test-api-key",
+            },
+        )
+        assert load_state() == StateApiModel(state={})
+
 
 class TestSaveState:
     def test_save_state_success(self, httpx_mock: HTTPXMock):
@@ -806,16 +818,12 @@ class TestLoadStateS3:
         conn.create_bucket(Bucket="test-bucket")
         monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
-        monkeypatch.setenv(
-            "ORCHESTRA_STATE_FILE", "s3://test-bucket/prefix/state.json"
-        )
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", "s3://test-bucket/prefix/state.json")
 
         assert load_state() == StateApiModel(state={})
 
     @mock_aws
-    def test_load_state_s3_success(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path
-    ):
+    def test_load_state_s3_success(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
         conn = boto3.client("s3", region_name="us-east-1")
         conn.create_bucket(Bucket="test-bucket-s3")
         payload = (
@@ -834,9 +842,7 @@ class TestLoadStateS3:
 
 class TestSaveStateS3:
     @mock_aws
-    def test_save_state_s3_put_object(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path
-    ):
+    def test_save_state_s3_put_object(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
         conn = boto3.client("s3", region_name="us-east-1")
         conn.create_bucket(Bucket="bucket")
         monkeypatch.chdir(tmp_path)

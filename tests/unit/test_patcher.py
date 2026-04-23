@@ -223,3 +223,69 @@ class TestPatchSeedProperties:
             "Missing 'seeds' key. Skipping patching of seeds."
             in capsys.readouterr().out
         )
+
+    def test_patch_seed_properties_creates_config_when_missing(self, tmp_path) -> None:
+        seeds_properties_file = tmp_path / "seeds" / "properties.yml"
+        seeds_properties_file.parent.mkdir(parents=True, exist_ok=True)
+        seeds_properties_file.write_text(
+            yaml.safe_dump({"seeds": [{"name": "seed_1"}]}), encoding="utf-8"
+        )
+
+        patch_seed_properties(
+            nodes_to_reuse=self.SEEDS_TO_REUSE,
+            seed_properties_file_path=str(seeds_properties_file),
+        )
+
+        saved = yaml.safe_load(seeds_properties_file.read_text(encoding="utf-8"))
+        seed_1 = next(seed for seed in saved["seeds"] if seed["name"] == "seed_1")
+        assert seed_1["config"]["tags"] == [ORCHESTRA_REUSED_NODE]
+        assert seed_1["config"]["meta"]["orchestra_reused_reason"] == (
+            "Seed seed_1 in same state as before."
+        )
+
+    def test_patch_seed_properties_does_not_duplicate_reused_tag(
+        self, tmp_path
+    ) -> None:
+        seeds_properties_file = tmp_path / "seeds" / "properties.yml"
+        seeds_properties_file.parent.mkdir(parents=True, exist_ok=True)
+        seeds_properties_file.write_text(
+            yaml.safe_dump(
+                {
+                    "seeds": [
+                        {
+                            "name": "seed_1",
+                            "config": {"tags": [ORCHESTRA_REUSED_NODE], "meta": {}},
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        patch_seed_properties(
+            nodes_to_reuse=self.SEEDS_TO_REUSE,
+            seed_properties_file_path=str(seeds_properties_file),
+        )
+
+        saved = yaml.safe_load(seeds_properties_file.read_text(encoding="utf-8"))
+        seed_1 = next(seed for seed in saved["seeds"] if seed["name"] == "seed_1")
+        assert seed_1["config"]["tags"].count(ORCHESTRA_REUSED_NODE) == 1
+
+    def test_patch_seed_properties_handles_invalid_config_shape(
+        self, tmp_path, capsys
+    ) -> None:
+        seeds_properties_file = tmp_path / "seeds" / "properties.yml"
+        seeds_properties_file.parent.mkdir(parents=True, exist_ok=True)
+        seeds_properties_file.write_text(
+            yaml.safe_dump({"seeds": [{"name": "seed_1", "config": "invalid"}]}),
+            encoding="utf-8",
+        )
+
+        patch_seed_properties(
+            nodes_to_reuse=self.SEEDS_TO_REUSE,
+            seed_properties_file_path=str(seeds_properties_file),
+        )
+
+        output = capsys.readouterr().out
+        assert "Unknown error updating seed 'seed_1'" in output
+        assert "'config' key must be a dictionary." in output
