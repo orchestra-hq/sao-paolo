@@ -140,6 +140,7 @@ When **both** are omitted, Orchestra can still run **adapter-specific** SQL to i
 | **Databricks** | `databricks` | **Supported** — uses `DESCRIBE HISTORY` on the source relation. |
 | **Snowflake** | `snowflake` | **Use `loaded_at_field` or `loaded_at_query`** — no Orchestra fallback; standard dbt freshness. |
 | **Microsoft Fabric** | `fabric` | Same as Snowflake — configure `loaded_at_*`; no Orchestra fallback. |
+| **AWS Redshift** | `redshift` | Same as Snowflake — configure `loaded_at_*`; no Orchestra fallback. |
 | **PostgreSQL** | `postgres` | Same as Snowflake — configure `loaded_at_*`; no Orchestra fallback. |
 | **DuckDB** | `duckdb` | **Not supported** |
 | **Other adapters** | varies | No Orchestra fallback unless listed above; use `loaded_at_*` or verify dbt's default behavior for your warehouse. |
