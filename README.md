@@ -1,4 +1,4 @@
-# orchestra-dbt
+# dbt-orchestra
 
 ## Introduction
 
