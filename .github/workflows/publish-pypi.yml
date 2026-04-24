@@ -2,31 +2,49 @@ name: Publish to PyPI
 
 on:
   release:
-    types: [published]
+    types: [ published ]
 
 permissions:
   contents: read
 
 jobs:
   publish:
+    name: Upload release to PyPI
     runs-on: ubuntu-latest
+    environment: pypi
     permissions:
       id-token: write
-      attestations: write
-      contents: read
     steps:
       - uses: actions/checkout@v6
-
       - name: Install uv
         uses: astral-sh/setup-uv@v8.1.0
         with:
           version: "latest"
+      - name: Validate pyproject version matches release tag
+        run: |
+          RELEASE_TAG="${{ github.event.release.tag_name }}"
+          NORMALIZED_TAG="${RELEASE_TAG#refs/tags/}"
+          NORMALIZED_TAG="${NORMALIZED_TAG#v}"
+          PYPROJECT_VERSION="$(python - <<'PY'
+          import tomllib
+          from pathlib import Path
 
+          pyproject = tomllib.loads(Path("pyproject.toml").read_text())
+          print(pyproject["project"]["version"])
+          PY
+          )"
+
+          echo "Release tag: ${RELEASE_TAG}"
+          echo "Expected version: ${NORMALIZED_TAG}"
+          echo "pyproject version: ${PYPROJECT_VERSION}"
+
+          if [ "${PYPROJECT_VERSION}" != "${NORMALIZED_TAG}" ]; then
+            echo "Version mismatch: pyproject.toml version must match release tag."
+            exit 1
+          fi
       - name: Build sdist and wheel
         run: uv build
-
       - name: Verify package metadata
         run: uv run --with twine twine check dist/*
-
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
