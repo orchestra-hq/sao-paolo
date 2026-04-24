@@ -103,30 +103,30 @@ wheels = [
 
 [[package]]
 name = "boto3"
-version = "1.42.94"
+version = "1.42.95"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "botocore" },
     { name = "jmespath" },
     { name = "s3transfer" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6a/6a/95302333208830de932ad1d0b69599ee13e936349a44981fb72632507861/boto3-1.42.94.tar.gz", hash = "sha256:5b6056a661c19e974aaea3cb97690ddbe30d10c31e4f887df3bff06574f34510", size = 113211 }
+sdist = { url = "https://files.pythonhosted.org/packages/e0/33/1e44193d5419683bf9dc121108407cbd6ebe73e17f5615cb62c68fae97b1/boto3-1.42.95.tar.gz", hash = "sha256:1cb77a269596abe05e72ed44a26167e7a620df920edb7c65e7d8a7dd39b427d5", size = 113226 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c4/6f/4e175604f3168befcb413c95bf45eada67d12042f92f76a9305d6a817ea9/boto3-1.42.94-py3-none-any.whl", hash = "sha256:56d53bce75629cc7c78a32da8b62de74cee3e2a3d54a2b60ba1a65f9f1b129da", size = 140555 },
+    { url = "https://files.pythonhosted.org/packages/a4/c6/8908d18c0fbef8edb62791e1a5b8ff33b816b1a9b9dff360159befdb8fac/boto3-1.42.95-py3-none-any.whl", hash = "sha256:f0175de8f52448e9ecade9573532c25bed390a7c30435920a0da42a10f4cafb3", size = 140557 },
 ]
 
 [[package]]
 name = "botocore"
-version = "1.42.94"
+version = "1.42.95"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jmespath" },
     { name = "python-dateutil" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b7/90/1a4d0e81b325d38e37f81d907ceacac3b8f509ad38b495bb95086ecb609d/botocore-1.42.94.tar.gz", hash = "sha256:41c6b3b11b073221a41f52b222ba387be34459fb77cdc506e8b74cdaf24bdcce", size = 15260901 }
+sdist = { url = "https://files.pythonhosted.org/packages/a0/29/a6d95515b49357891f63cb7a93fef37334118ba7d11d686d139e5d648733/botocore-1.42.95.tar.gz", hash = "sha256:f23a78b76def67222ddac738fb65475f55d17fd88c1e18573b3a561135ec4527", size = 15260896 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/61/73/313af9ee02ac0155247bcf3f04fcf54fcae2e33250bb437528c18aeefd81/botocore-1.42.94-py3-none-any.whl", hash = "sha256:a2143742132ed0f6cdb90204d667b89d0301068b1045e8bc099efa267bf1b348", size = 14942938 },
+    { url = "https://files.pythonhosted.org/packages/fa/ee/b08867e183922dd356d2d8f23bafd7bb6b24c5992bdb301873edbb096e2d/botocore-1.42.95-py3-none-any.whl", hash = "sha256:3381279d26792df2fcc3d5d7fa052ecf1949a0fe1ea819bf35d61e943c15a3b6", size = 14943430 },
 ]
 
 [[package]]
@@ -338,7 +338,7 @@ wheels = [
 
 [[package]]
 name = "dbt-common"
-version = "1.37.3"
+version = "1.37.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "agate" },
@@ -355,9 +355,9 @@ dependencies = [
     { name = "requests" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/12/3a/c95078b7ebb87795551f73fd58e5ddbcf7f75b478e9b50ab72fe2939baf0/dbt_common-1.37.3.tar.gz", hash = "sha256:f99304cf93f549c09d302eb61d9b280748bbe24e2245e214189ea08b41196ec3", size = 86217 }
+sdist = { url = "https://files.pythonhosted.org/packages/50/aa/b7f49e008d7dfda8401b720078ba01b79ca012ea41bc4b080fced1f50439/dbt_common-1.37.5.tar.gz", hash = "sha256:5a575736b5ec09a110955cd9e6b6a4c67e481c9ac9f45acaa51a6da5b1dd6aaa", size = 86876 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3b/7e/629351d21ffa1b51a893334faf8c497f0c34f4da3cece9b24d7a5af29d90/dbt_common-1.37.3-py3-none-any.whl", hash = "sha256:e11b81903107d9f254d0ec7ac14b2bcf6d531e46456cbc7881fdbfeb9bbd8eec", size = 87733 },
+    { url = "https://files.pythonhosted.org/packages/6d/d2/ed3aaecd04a96e905b7b7d6482445153309bfca74905d4fc27bca4bac720/dbt_common-1.37.5-py3-none-any.whl", hash = "sha256:432e3f2f9ca61eace65d4d1cb99a715c3ffc343b7190a692c39f126eedf0c077", size = 88323 },
 ]
 
 [[package]]
@@ -415,6 +415,64 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/c4/de/d1492ab6beaf0a18aee17c7a9562592ac2981e962b4058262f5eb6dabfc5/dbt_extractor-0.6.0-cp39-abi3-win32.whl", hash = "sha256:369dcc3499f160256756585783f1308868076d5a65d0a051348d22da8b90e67d", size = 252721 },
     { url = "https://files.pythonhosted.org/packages/60/36/f5b1c4159fa911607f3a49fcbc535e4783870fd887bc0a1b3ad42587cb73/dbt_extractor-0.6.0-cp39-abi3-win_amd64.whl", hash = "sha256:a79a570fdcb672505ac2bdc12360a2a7aec622ef604d8c607225854ff862518c", size = 277146 },
 ]
+
+[[package]]
+name = "dbt-orchestra"
+version = "0.4.0"
+source = { editable = "." }
+dependencies = [
+    { name = "click" },
+    { name = "httpx" },
+    { name = "packaging" },
+    { name = "pydantic" },
+    { name = "pytz" },
+    { name = "pyyaml" },
+]
+
+[package.optional-dependencies]
+adapters = [
+    { name = "dbt-postgres" },
+]
+debug = [
+    { name = "awscrt" },
+    { name = "boto3" },
+    { name = "graphviz" },
+]
+dev = [
+    { name = "basedpyright" },
+    { name = "boto3" },
+    { name = "dbt-core" },
+    { name = "moto", extra = ["s3"] },
+    { name = "pytest" },
+    { name = "pytest-httpx" },
+    { name = "ruff" },
+]
+s3 = [
+    { name = "boto3" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "awscrt", marker = "extra == 'debug'" },
+    { name = "basedpyright", marker = "extra == 'dev'" },
+    { name = "boto3", marker = "extra == 'debug'" },
+    { name = "boto3", marker = "extra == 'dev'" },
+    { name = "boto3", marker = "extra == 's3'" },
+    { name = "click" },
+    { name = "dbt-core", marker = "extra == 'dev'", specifier = ">=1.10,<1.12" },
+    { name = "dbt-postgres", marker = "extra == 'adapters'" },
+    { name = "graphviz", marker = "extra == 'debug'" },
+    { name = "httpx" },
+    { name = "moto", extras = ["s3"], marker = "extra == 'dev'" },
+    { name = "packaging" },
+    { name = "pydantic" },
+    { name = "pytest", marker = "extra == 'dev'" },
+    { name = "pytest-httpx", marker = "extra == 'dev'" },
+    { name = "pytz" },
+    { name = "pyyaml" },
+    { name = "ruff", marker = "extra == 'dev'" },
+]
+provides-extras = ["dev", "adapters", "debug", "s3"]
 
 [[package]]
 name = "dbt-postgres"
@@ -781,64 +839,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/c9/17/09252bf35672dba926649d59dfe51443a0f6955ad13784e91131d5ec82a2/nodejs_wheel_binaries-24.15.0-py2.py3-none-win_amd64.whl", hash = "sha256:a437601956b532dcb3082046e6978e622733f90edc0932cbb9adb3bb97a16501", size = 41543461 },
     { url = "https://files.pythonhosted.org/packages/0a/7e/b649777d148e1e0c2ce349156603cdb12f7ed99921b95d93717393650193/nodejs_wheel_binaries-24.15.0-py2.py3-none-win_arm64.whl", hash = "sha256:bdf4a431e08321a32efc604111c6f23941f87055d796a537e8c4110daecad23f", size = 39233248 },
 ]
-
-[[package]]
-name = "orchestra-dbt"
-version = "0.4.0"
-source = { editable = "." }
-dependencies = [
-    { name = "click" },
-    { name = "httpx" },
-    { name = "packaging" },
-    { name = "pydantic" },
-    { name = "pytz" },
-    { name = "pyyaml" },
-]
-
-[package.optional-dependencies]
-adapters = [
-    { name = "dbt-postgres" },
-]
-debug = [
-    { name = "awscrt" },
-    { name = "boto3" },
-    { name = "graphviz" },
-]
-dev = [
-    { name = "basedpyright" },
-    { name = "boto3" },
-    { name = "dbt-core" },
-    { name = "moto", extra = ["s3"] },
-    { name = "pytest" },
-    { name = "pytest-httpx" },
-    { name = "ruff" },
-]
-s3 = [
-    { name = "boto3" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "awscrt", marker = "extra == 'debug'" },
-    { name = "basedpyright", marker = "extra == 'dev'" },
-    { name = "boto3", marker = "extra == 'debug'" },
-    { name = "boto3", marker = "extra == 'dev'" },
-    { name = "boto3", marker = "extra == 's3'" },
-    { name = "click" },
-    { name = "dbt-core", marker = "extra == 'dev'", specifier = ">=1.10,<1.12" },
-    { name = "dbt-postgres", marker = "extra == 'adapters'" },
-    { name = "graphviz", marker = "extra == 'debug'" },
-    { name = "httpx" },
-    { name = "moto", extras = ["s3"], marker = "extra == 'dev'" },
-    { name = "packaging" },
-    { name = "pydantic" },
-    { name = "pytest", marker = "extra == 'dev'" },
-    { name = "pytest-httpx", marker = "extra == 'dev'" },
-    { name = "pytz" },
-    { name = "pyyaml" },
-    { name = "ruff", marker = "extra == 'dev'" },
-]
-provides-extras = ["dev", "adapters", "debug", "s3"]
 
 [[package]]
 name = "orderly-set"

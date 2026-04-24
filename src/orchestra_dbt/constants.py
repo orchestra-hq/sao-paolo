@@ -1,6 +1,6 @@
 MAX_SEED_SIZE_BYTES = 100 * 1024 * 1024  # 100 MB
 ORCHESTRA_REUSED_NODE = "ORCHESTRA_REUSED_NODE"
 RESOURCE_TYPES_TO_LS = ["model", "snapshot", "seed"]
-SERVICE_NAME = "orchestra-dbt"
+SERVICE_NAME = "dbt-orchestra"
 SUPPORTED_DBT_CORE_SPEC = ">=1.10,<1.12"
 VALID_ORCHESTRA_ENVS = ["app", "stage", "dev"]

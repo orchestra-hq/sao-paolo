@@ -17,7 +17,7 @@ Use this tutorial project to exercise all supported stateful permutations:
 | Stateful disabled pass-through | `ORCHESTRA_USE_STATEFUL=false` then `orc dbt build` | Wrapper delegates directly to dbt; no state orchestration. |
 | Stateful with local file backend | `ORCHESTRA_USE_STATEFUL=true`, `ORCHESTRA_STATE_FILE=.orchestra/dbt_state.json`, no `ORCHESTRA_API_KEY` | State is loaded/saved from local JSON and clean nodes can be reused. |
 | Stateful with HTTP backend | `ORCHESTRA_USE_STATEFUL=true`, `ORCHESTRA_API_KEY=...` | State is loaded/saved through Orchestra API. |
-| Stateful with S3 backend | `ORCHESTRA_USE_STATEFUL=true`, `ORCHESTRA_STATE_FILE=s3://bucket/key`, no API key | State is loaded/saved in S3 (requires `orchestra-dbt[s3]`). |
+| Stateful with S3 backend | `ORCHESTRA_USE_STATEFUL=true`, `ORCHESTRA_STATE_FILE=s3://bucket/key`, no API key | State is loaded/saved in S3 (requires `dbt-orchestra[s3]`). |
 | Full refresh override | any stateful backend + `orc dbt build --full-refresh` | Reuse logic is bypassed for that run; state is still updated after execution. |
 | Supported stateful commands | `orc dbt run`, `orc dbt test` | Same orchestration flow as build: compute freshness, patch reusable nodes, update state. |
 | Unsupported stateful command | `orc dbt seed` | Pass-through to dbt even when `use_stateful=true`. |
