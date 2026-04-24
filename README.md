@@ -2,9 +2,7 @@
 
 ## Introduction
 
-`dbt-orchestra` wraps dbt Core commands, use previous run state to reduce unnecessary work.
-
-It is designed to be added to an existing dbt Core project, not used as a standalone dbt repository.
+`dbt-orchestra` wraps dbt Core commands, using previous run state to reduce unnecessary work. It is designed to be added to an existing dbt Core project, not used as a standalone dbt repository.
 
 ## Compatibility and prerequisites
 
@@ -20,14 +18,17 @@ It is designed to be added to an existing dbt Core project, not used as a standa
     pip install dbt-orchestra
     ```
 
-1. Add a minimal config block to your dbt project's `pyproject.toml`:
+2. Add a minimal config block to your dbt project's `pyproject.toml`:
 
     ```toml
     [tool.orchestra_dbt]
     use_stateful = true
     state_file = ".orchestra/dbt_state.json"
-    local_run = true
     ```
+
+You can skip `pyproject.toml` entirely: every `[tool.orchestra_dbt]` option has an environment-variable override (see [Pyproject.toml and environment variables](#pyprojecttoml-and-environment-variables)).
+
+## Running
 
 1. Bootstrap the local state file once:
 
@@ -36,7 +37,7 @@ It is designed to be added to an existing dbt Core project, not used as a standa
     echo '{"state":{}}' > .orchestra/dbt_state.json
     ```
 
-1. Run your normal dbt command through `orc`:
+2. Run your normal dbt command through `orc`:
 
     ```bash
     orc dbt run
@@ -44,7 +45,7 @@ It is designed to be added to an existing dbt Core project, not used as a standa
 
 After this run, your `.orchestra/dbt_state.json` state file will contain freshness information, and subsequent runs will compare this information to your project's model freshness configuration for optimisation.
 
-If you want a small demo dbt project to try this with, use [`tutorial/README.md`](tutorial/README.md).
+If you want a small demo dbt Core project to try this with, use [`tutorial/README.md`](tutorial/README.md).
 
 ## State backends
 
@@ -56,7 +57,6 @@ Local JSON is the easiest way to try state-aware orchestration quickly. Keep `OR
 [tool.orchestra_dbt]
 use_stateful = true
 state_file = ".orchestra/dbt_state.json"
-local_run = true
 ```
 
 ```bash
@@ -70,7 +70,6 @@ Managing your dbt Core state in Orchestra requires an Orchestra API key. When `O
 ```toml
 [tool.orchestra_dbt]
 use_stateful = true
-local_run = true
 ```
 
 ```bash
@@ -82,15 +81,15 @@ If you want to run state-aware dbt Core code without managing state files and th
 
 ### S3 backend
 
-To store your dbt Core state in S3, install the optional dependency (`pip install 'dbt-orchestra[s3]'` or `uv sync --extra s3`). Credentials and region follow the usual [AWS SDK resolution](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html) (environment variables, shared config, IAM role, etc.). If the object does not exist yet, load starts with an empty state and save creates the object.
+To store your dbt Core state in S3, install the optional dependency (`pip install 'dbt-orchestra[s3]'` or `uv sync --extra s3`). Credentials and region follow the usual [AWS SDK resolution](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html) (environment variables, shared config, IAM role, etc.). If the object does not exist yet, load starts with an empty state and save creates the object. The state file parameter expects a `s3://bucket/key` URI.
 
 ## Daily usage
 
 Stateful orchestration only runs for `dbt build`, `dbt run`, and `dbt test`. Other dbt subcommands are passed through to dbt unchanged.
 
-### Runtime behavior by command and mode
+### Runtime behaviour by command and mode
 
-| Stateful enabled | dbt command | Behavior |
+| Stateful enabled | dbt command | Behaviour |
 | --- | --- | --- |
 | `false` | any command | `orc` passes through to dbt with no state load/save. |
 | `true` | `build`, `run`, `test` | `orc` loads state, computes reusable nodes, patches clean nodes, runs dbt, updates and saves state. |
@@ -107,6 +106,20 @@ When stateful orchestration is enabled, the CLI loads and saves [dbt Core state]
 
 For non-secret options, **if an environment variable is set, it overrides** values from `[tool.orchestra_dbt]`; otherwise the value from `pyproject.toml` is used, then the built-in default. The CLI discovers `pyproject.toml` by walking upward from the current working directory. `[tool.orchestra_dbt]` is read from that file when present.
 
+### Pyproject.toml and environment variables
+
+Each `[tool.orchestra_dbt]` key can be set in TOML, or omitted and supplied only via the matching variable. When both are present, the environment variable wins (see [Configuration precedence](#configuration-precedence) above). `ORCHESTRA_API_KEY` has no TOML equivalent; it selects the Orchestra HTTP backend when set.
+
+| `pyproject.toml` key | Environment variable |
+| --- | --- |
+| `state_file` | `ORCHESTRA_STATE_FILE` |
+| `use_stateful` | `ORCHESTRA_USE_STATEFUL` |
+| `local_run` | `ORCHESTRA_LOCAL_RUN` |
+| `debug` | `ORCHESTRA_DBT_DEBUG` |
+| `seed_state_orchestration` | `ORCHESTRA_SEED_STATE_ORCHESTRATION` |
+
+For boolean settings, if the environment variable is **set**, the merged value is `true` only when the value is exactly the string `true` (case-insensitive); otherwise it is `false`. If the variable is **unset**, `pyproject.toml` (or the default) applies.
+
 ### `[tool.orchestra_dbt]` options
 
 | Key | Type | Default | Purpose |
@@ -116,8 +129,7 @@ For non-secret options, **if an environment variable is set, it overrides** valu
 | `local_run` | bool | `true` | After reuse, revert patched files (typical for local iteration). |
 | `debug` | bool | `false` | Verbose logging. |
 | `integration_account_id` | string (optional) | — | When set, filter state keys to this integration account prefix. |
-
-Equivalent environment overrides (when set): `ORCHESTRA_USE_STATEFUL`, `ORCHESTRA_LOCAL_RUN`, `ORCHESTRA_DBT_DEBUG`, `ORCHESTRA_INTEGRATION_ACCOUNT_ID`.
+| `seed_state_orchestration` | bool | `false` | When `true`, seed nodes can be reused from state like models; when `false`, seeds are always treated as dirty for reuse. This feature should be considered experimental and may change in the future. |
 
 ### Resolving multiple backend state configurations
 
