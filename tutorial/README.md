@@ -12,7 +12,7 @@ This folder is a minimal [dbt Core](https://www.getdbt.com/) project that works 
 
 Use this tutorial project to exercise all supported stateful permutations:
 
-| Scenario | Config / command | Expected behavior |
+| Scenario | Config / command | Behavior |
 | --- | --- | --- |
 | Stateful disabled pass-through | `ORCHESTRA_USE_STATEFUL=false` then `orc dbt build` | Wrapper delegates directly to dbt; no state orchestration. |
 | Stateful with local file backend | `ORCHESTRA_USE_STATEFUL=true`, `ORCHESTRA_STATE_FILE=.orchestra/dbt_state.json`, no `ORCHESTRA_API_KEY` | State is loaded/saved from local JSON and clean nodes can be reused. |
@@ -49,8 +49,34 @@ Ensure `uv sync --extra dev --extra adapters` has been run.
 
    ```bash
    export PGHOST=127.0.0.1 PGPORT=5432 PGUSER=postgres PGPASSWORD=postgres PGDATABASE=tutorial DBT_SCHEMA=sao_tutorial DBT_PROFILES_DIR="$(pwd)"
+   ```
+
+1. Seed the database:
+
+   ```bash
+   orc dbt seed
+   ```
+
+   `orc dbt` commands other than `build`, `run` and `test` are passed through to `dbt`.
+
+1. Run a dbt build for the first time:
+
+   ```bash
    orc dbt build
    ```
+
+   Logs will show that stateful orchestration is enabled, and that because the state file has no state in it, no nodes are re-used.
+   The `.orchestra/dbt_state.json` file will have been populated for each node.
+
+1. Run a dbt build again, now that we've hydrated the state file:
+
+   ```bash
+   orc dbt build
+   ```
+
+   This time, logs show that state was collected, and if the re-run happened within 5 minutes of the previous run, 3 nodes were re-used, avoiding unnecessary computation.
+
+1. Amend the `models/schema.yaml` file's `config.freshness` blocks between `orc dbt build` runs, to see how this affects how models are re-used.
 
 1. (Optional) To remove the Postgres container after testing, run:
 
@@ -59,3 +85,7 @@ Ensure `uv sync --extra dev --extra adapters` has been run.
    ```
 
 `profiles.yml` uses only environment variables. Do not commit warehouse passwords.
+
+## Next steps
+
+To integrate this functionality into your dbt Core project, see the repo-level README.md.

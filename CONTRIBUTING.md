@@ -1,10 +1,68 @@
 # Contributing
 
-## Pull requests
+We welcome community contributions that improve this project's capabilities in helping teams optimise their dbt Core runs with confidence. To keep that impact broad and reliable, we will avoid introducing breaking changes wherever reasonable.
 
-Target `main`. Keep changes focused; add or update tests when behaviour changes. Describe what changed and why.
+## Contributor workflow
 
-Match local checks to CI where practical: `uv run ruff check .`, `uv run basedpyright`, and `uv run pytest`. Optional debug tooling is documented in `README.md` (`--extra debug`).
+1. Create a branch
+1. Make focused code changes, adding or updating unit tests when behaviour changes
+1. Ensure linting and unit testing passes, using `uv run ruff check .`, `uv run basedpyright` and `uv run pytest`
+1. Where possible, test behaviour locally
+1. Test in Orchestra with the branch
+1. Raise a pull request against the `main` branch, describing what changed and why
+
+Pull requests run GitHub Actions: unit tests, static checks, `dbt build` for `tutorial/dbt` against Postgres, and an Orchestra pipeline via the [Orchestra Run Pipeline Action](https://github.com/orchestra-hq/run-pipeline).
+
+## Debugging
+
+To debug pipelines, there are some local files and scripts.
+
+To install the required dependencies, run:
+
+```bash
+uv sync --extra dev --extra debug
+```
+
+Ask @ojc-orchestra for access to the scripts:
+
+- `dynamo_state.py`: loads state from DynamoDB into a local JSON file `local_state.json`
+- `visualise.py`: loads ops from `ops.json` and visualises them in a DAG structure. This can be loaded in a browser by opening the resulting HTML file, `ops_dag.html`.
+
+## Testing
+
+```bash
+pytest
+```
+
+Without Postgres, the tutorial `dbt build` integration test is skipped. To run it locally, start Postgres, set `PGHOST`, `PGDATABASE`, and related variables (see [`tutorial/README.md`](tutorial/README.md)), then run `pytest tests/integration/test_tutorial_dbt.py`.
+
+For the optional DAG integration test (`tests/integration/test_local.py`), place both `local_state.json` and `local_manifest.json` in the repository root. `local_state.json` can be created with `dynamo_state.py` (see above), and `local_manifest.json` can be downloaded from a representative dbt run.
+
+Run only unit or integration tests:
+
+```bash
+pytest tests/unit/
+pytest tests/integration/
+```
+
+Run a specific test module or case:
+
+```bash
+pytest tests/unit/test_state.py
+pytest tests/unit/test_state.py::TestLoadState::test_load_state_success
+```
+
+## Linting
+
+```bash
+ruff check . && ruff format --check . && basedpyright
+```
+
+To automatically fix issues:
+
+```bash
+ruff check --fix . && ruff format . && basedpyright
+```
 
 ## Source freshness: adding support for a new dbt adapter
 
