@@ -1,4 +1,4 @@
-# orchestra-dbt
+# dbt-orchestra
 
 ## Compatibility
 
@@ -17,7 +17,7 @@ uv sync --extra dev
 
 ## Tutorial dbt project
 
-A minimal dbt Core project lives under [`tutorial/`](tutorial/). This is used for testing and CI.
+A minimal dbt Core project lives under `[tutorial/](tutorial/)`. This is used for testing and CI.
 
 ## Development
 
@@ -41,14 +41,14 @@ For non-secret options, **if an environment variable is set, it overrides** valu
 
 ### `[tool.orchestra_dbt]` options
 
-| Key | Type | Default | Purpose |
-| --- | --- | --- | --- |
-| `state_file` | string (optional) | — | Local JSON path or `s3://bucket/key` for state (see backend table below). |
-| `use_stateful` | bool | `false` | Turn on stateful orchestration for supported dbt commands. |
-| `orchestra_env` | string | `app` | Orchestra deployment: `app`, `stage`, or `dev` (HTTP API host). |
-| `local_run` | bool | `true` | After reuse, revert patched files (typical for local iteration). |
-| `debug` | bool | `false` | Verbose `orchestra-dbt` debug logging. |
-| `integration_account_id` | string (optional) | — | When set, filter state keys to this integration account prefix. |
+| Key                      | Type              | Default | Purpose                                                                   |
+| ------------------------ | ----------------- | ------- | ------------------------------------------------------------------------- |
+| `state_file`             | string (optional) | —       | Local JSON path or `s3://bucket/key` for state (see backend table below). |
+| `use_stateful`           | bool              | `false` | Turn on stateful orchestration for supported dbt commands.                |
+| `orchestra_env`          | string            | `app`   | Orchestra deployment: `app`, `stage`, or `dev` (HTTP API host).           |
+| `local_run`              | bool              | `true`  | After reuse, revert patched files (typical for local iteration).          |
+| `debug`                  | bool              | `false` | Verbose debug logging.                                                    |
+| `integration_account_id` | string (optional) | —       | When set, filter state keys to this integration account prefix.           |
 
 Equivalent environment overrides (when set): `ORCHESTRA_USE_STATEFUL`, `ORCHESTRA_ENV`, `ORCHESTRA_LOCAL_RUN`, `ORCHESTRA_DBT_DEBUG`, `ORCHESTRA_INTEGRATION_ACCOUNT_ID`.
 
@@ -56,43 +56,43 @@ Equivalent environment overrides (when set): `ORCHESTRA_USE_STATEFUL`, `ORCHESTR
 
 The CLI discovers `pyproject.toml` by walking upward from the current working directory. `[tool.orchestra_dbt]` is read from that file when present.
 
-| Priority | Setting | Effect |
-| --- | --- | --- |
-| 1 | `ORCHESTRA_API_KEY` | Load/save state via Orchestra HTTP. The Orchestra environment is `orchestra_env` in pyproject (default `app`) or `ORCHESTRA_ENV` when set; must be one of `app`, `stage`, or `dev`. When the API key is set, `ORCHESTRA_STATE_FILE` and `state_file` in `pyproject.toml` are **ignored** for choosing the state backend. |
-| 2 | `ORCHESTRA_STATE_FILE` | Path to a JSON file, or `s3://bucket/key` for an object in S3. Relative file paths are resolved from the current working directory. Used only when `ORCHESTRA_API_KEY` is unset. |
-| 3 | `[tool.orchestra_dbt]` / `state_file` in `pyproject.toml` | Path to a JSON file, or `s3://bucket/key`. Relative file paths are resolved from the directory that contains the **discovered** `pyproject.toml`; absolute paths are used as-is. Used only when `ORCHESTRA_API_KEY` is unset and `ORCHESTRA_STATE_FILE` is unset. |
+| Priority | Setting                                                   | Effect                                                                                                                                                                                                                                                                                                                   |
+| -------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1        | `ORCHESTRA_API_KEY`                                       | Load/save state via Orchestra HTTP. The Orchestra environment is `orchestra_env` in pyproject (default `app`) or `ORCHESTRA_ENV` when set; must be one of `app`, `stage`, or `dev`. When the API key is set, `ORCHESTRA_STATE_FILE` and `state_file` in `pyproject.toml` are **ignored** for choosing the state backend. |
+| 2        | `ORCHESTRA_STATE_FILE`                                    | Path to a JSON file, or `s3://bucket/key` for an object in S3. Relative file paths are resolved from the current working directory. Used only when `ORCHESTRA_API_KEY` is unset.                                                                                                                                         |
+| 3        | `[tool.orchestra_dbt]` / `state_file` in `pyproject.toml` | Path to a JSON file, or `s3://bucket/key`. Relative file paths are resolved from the directory that contains the **discovered** `pyproject.toml`; absolute paths are used as-is. Used only when `ORCHESTRA_API_KEY` is unset and `ORCHESTRA_STATE_FILE` is unset.                                                        |
 
 If an effective local path or S3 URI is configured (rows 2 or 3), that **file** or **S3** backend is used and an API key is not required for state. If `ORCHESTRA_API_KEY` is set (row 1), the **HTTP backend** is used regardless of file settings.
 
-For S3, install the optional dependency (`pip install 'orchestra-dbt[s3]'` or `uv sync --extra s3`). Credentials and region follow the usual [AWS SDK resolution](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html) (environment variables, shared config, IAM role, etc.). If the object does not exist yet, load starts with an empty state and save creates the object.
+For S3, install the optional dependency (`pip install 'dbt-orchestra[s3]'` or `uv sync --extra s3`). Credentials and region follow the usual [AWS SDK resolution](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html) (environment variables, shared config, IAM role, etc.). If the object does not exist yet, load starts with an empty state and save creates the object.
 
 Stateful orchestration only runs for `dbt build`, `dbt run`, and `dbt test`. Other dbt subcommands are passed through to dbt unchanged.
 
 ### Warehouse adapters and implicit source freshness
 
-Stateful reuse uses `dbt source freshness` results. When a source defines **`loaded_at_field`** or **`loaded_at_query`**, dbt’s normal freshness logic runs on every adapter Orchestra supports through dbt Core.
+Stateful reuse uses `dbt source freshness` results. When a source defines `**loaded_at_field`** or `**loaded_at_query**`, dbt’s normal freshness logic runs on every adapter Orchestra supports through dbt Core.
 
 When **both** are omitted, Orchestra can still run **adapter-specific** SQL to infer `max_loaded_at` (see `src/orchestra_dbt/source_freshness/`). Only the adapters below register that path today; the mapping is keyed by `FreshnessRunner.adapter.type()`.
 
-| Warehouse | dbt adapter type (typical) | Implicit freshness (no `loaded_at_*`) |
-| --- | --- | --- |
-| **Databricks** | `databricks` | **Supported** — uses `DESCRIBE HISTORY` on the source relation. |
-| **Snowflake** | `snowflake` | **Use `loaded_at_field` or `loaded_at_query`** — no Orchestra fallback; standard dbt freshness. |
-| **Microsoft Fabric** | `fabric` | Same as Snowflake — configure `loaded_at_*`; no Orchestra fallback. |
-| **PostgreSQL** | `postgres` | Same as Snowflake — configure `loaded_at_*`; no Orchestra fallback. |
-| **DuckDB** | `duckdb` | **Not supported** |
-| **Other adapters** | varies | No Orchestra fallback unless listed above; use `loaded_at_*` or verify dbt’s default behavior for your warehouse. |
+| Warehouse            | dbt adapter type (typical) | Implicit freshness (no `loaded_at_*`)                                                                             |
+| -------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| **Databricks**       | `databricks`               | **Supported** — uses `DESCRIBE HISTORY` on the source relation.                                                   |
+| **Snowflake**        | `snowflake`                | **Use `loaded_at_field` or `loaded_at_query`** — no Orchestra fallback; standard dbt freshness.                   |
+| **Microsoft Fabric** | `fabric`                   | Same as Snowflake — configure `loaded_at_`*; no Orchestra fallback.                                               |
+| **PostgreSQL**       | `postgres`                 | Same as Snowflake — configure `loaded_at_`*; no Orchestra fallback.                                               |
+| **DuckDB**           | `duckdb`                   | **Not supported**                                                                                                 |
+| **Other adapters**   | varies                     | No Orchestra fallback unless listed above; use `loaded_at_`* or verify dbt’s default behavior for your warehouse. |
 
 For adapters without a registered fallback, if both `loaded_at` settings are missing, Orchestra follows dbt’s `FreshnessRunner` behavior (which may surface as warnings or a non-actionable result depending on dbt and the warehouse).
 
 ### Runtime behavior by command and mode
 
-| Stateful enabled | dbt command | Behavior |
-| --- | --- | --- |
-| `false` | any command | `orc` passes through to dbt with no state load/save. |
-| `true` | `build`, `run`, `test` | `orc` loads state, computes reusable nodes, patches clean nodes, runs dbt, updates and saves state. |
-| `true` | `build`, `run`, `test` + `--full-refresh` | `orc` skips reuse decisions for this invocation, runs dbt directly, then still updates/saves state after execution. |
-| `true` | other command (for example `seed`, `docs generate`) | `orc` passes through to dbt unchanged. |
+| Stateful enabled | dbt command                                         | Behavior                                                                                                            |
+| ---------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `false`          | any command                                         | `orc` passes through to dbt with no state load/save.                                                                |
+| `true`           | `build`, `run`, `test`                              | `orc` loads state, computes reusable nodes, patches clean nodes, runs dbt, updates and saves state.                 |
+| `true`           | `build`, `run`, `test` + `--full-refresh`           | `orc` skips reuse decisions for this invocation, runs dbt directly, then still updates/saves state after execution. |
+| `true`           | other command (for example `seed`, `docs generate`) | `orc` passes through to dbt unchanged.                                                                              |
 
 Example optional snippet in `pyproject.toml`:
 
@@ -166,7 +166,7 @@ Ask @ojc-orchestra for access to the scripts:
 pytest
 ```
 
-Without Postgres, the tutorial `dbt build` integration test is skipped. To run it locally, start Postgres, set `PGHOST`, `PGDATABASE`, and related variables (see [`tutorial/README.md`](tutorial/README.md)), then run `pytest tests/integration/test_tutorial_dbt.py`.
+Without Postgres, the tutorial `dbt build` integration test is skipped. To run it locally, start Postgres, set `PGHOST`, `PGDATABASE`, and related variables (see `[tutorial/README.md](tutorial/README.md)`), then run `pytest tests/integration/test_tutorial_dbt.py`.
 
 For the optional DAG integration test (`tests/integration/test_local.py`), place both `local_state.json` and `local_manifest.json` in the repository root. `local_state.json` can be created with `dynamo_state.py` (see above), and `local_manifest.json` can be downloaded from a representative dbt run.
 

@@ -7,13 +7,17 @@ import pytest
 _TUTORIAL_DBT = Path(__file__).resolve().parents[2] / "tutorial" / "dbt"
 
 
-def _postgres_configured() -> bool:
-    return bool(os.environ.get("PGHOST") and os.environ.get("PGDATABASE"))
+def _postgres_ci_configured() -> bool:
+    return bool(
+        os.environ.get("PGHOST")
+        and os.environ.get("PGDATABASE")
+        and os.environ.get("CI") == "true"
+    )
 
 
 @pytest.mark.skipif(
-    not _postgres_configured(),
-    reason="Set PGHOST and PGDATABASE to run (CI provides these).",
+    not _postgres_ci_configured(),
+    reason="Set PGHOST and PGDATABASE and CI=true to run (CI provides these).",
 )
 def test_tutorial_dbt_build_succeeds() -> None:
     env = os.environ.copy()

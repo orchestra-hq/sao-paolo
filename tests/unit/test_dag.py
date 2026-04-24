@@ -357,6 +357,7 @@ class TestConstructDag:
             lambda: OrchestraDbtSettings(
                 integration_account_id="acct",
                 seed_state_orchestration=True,
+                local_run=False,
             ),
         )
         asset_id = "acct.my_seed"
