@@ -2,7 +2,7 @@
 
 ## Introduction
 
-`orchestra-dbt` wraps dbt Core commands, use previous run state to reduce unnecessary work.
+`dbt-orchestra` wraps dbt Core commands, use previous run state to reduce unnecessary work.
 
 It is designed to be added to an existing dbt Core project, not used as a standalone dbt repository.
 
@@ -14,10 +14,10 @@ It is designed to be added to an existing dbt Core project, not used as a standa
 
 ## Installing
 
-1. Install `orchestra-dbt` in the same environment as your dbt project:
+1. Install `dbt-orchestra` in the same environment as your dbt project:
 
     ```bash
-    pip install orchestra-dbt
+    pip install dbt-orchestra
     ```
 
 1. Add a minimal config block to your dbt project's `pyproject.toml`:
@@ -65,7 +65,7 @@ orc dbt run
 
 ### Orchestra Cloud (managed)
 
-Managing your dbt Core state in Orchestra requires an Orchestra API key. When `ORCHESTRA_API_KEY` is set, `orchestra-dbt` selects this backend, and ignores file-related settings. Put non-secret defaults in `pyproject.toml` and only export the API key:
+Managing your dbt Core state in Orchestra requires an Orchestra API key. When `ORCHESTRA_API_KEY` is set, `dbt-orchestra` selects this backend, and ignores file-related settings. Put non-secret defaults in `pyproject.toml` and only export the API key:
 
 ```toml
 [tool.orchestra_dbt]
@@ -78,11 +78,11 @@ export ORCHESTRA_API_KEY=<API_KEY>
 orc dbt run
 ```
 
-If you want to run state-aware dbt Core code without managing state files and the `orchestra-dbt` CLI tool, try running your dbt Core in Orchestra. Orchestra users can enable state-aware orchestration using a simple toggle.
+If you want to run state-aware dbt Core code without managing state files and the `dbt-orchestra` CLI tool, try running your dbt Core in Orchestra. Orchestra users can enable state-aware orchestration using a simple toggle.
 
 ### S3 backend
 
-To store your dbt Core state in S3, install the optional dependency (`pip install 'orchestra-dbt[s3]'` or `uv sync --extra s3`). Credentials and region follow the usual [AWS SDK resolution](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html) (environment variables, shared config, IAM role, etc.). If the object does not exist yet, load starts with an empty state and save creates the object.
+To store your dbt Core state in S3, install the optional dependency (`pip install 'dbt-orchestra[s3]'` or `uv sync --extra s3`). Credentials and region follow the usual [AWS SDK resolution](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html) (environment variables, shared config, IAM role, etc.). If the object does not exist yet, load starts with an empty state and save creates the object.
 
 ## Daily usage
 
@@ -114,7 +114,7 @@ For non-secret options, **if an environment variable is set, it overrides** valu
 | `state_file` | string (optional) | — | Local JSON path or `s3://bucket/key` for state (see backend table below). |
 | `use_stateful` | bool | `false` | Turn on stateful orchestration for supported dbt commands. |
 | `local_run` | bool | `true` | After reuse, revert patched files (typical for local iteration). |
-| `debug` | bool | `false` | Verbose `orchestra-dbt` debug logging. |
+| `debug` | bool | `false` | Verbose logging. |
 | `integration_account_id` | string (optional) | — | When set, filter state keys to this integration account prefix. |
 
 Equivalent environment overrides (when set): `ORCHESTRA_USE_STATEFUL`, `ORCHESTRA_LOCAL_RUN`, `ORCHESTRA_DBT_DEBUG`, `ORCHESTRA_INTEGRATION_ACCOUNT_ID`.
