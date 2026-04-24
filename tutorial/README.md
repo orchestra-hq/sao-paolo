@@ -85,3 +85,7 @@ Ensure `uv sync --extra dev --extra adapters` has been run.
    ```
 
 `profiles.yml` uses only environment variables. Do not commit warehouse passwords.
+
+## Next steps
+
+To integrate this functionality into your dbt Core project, see the repo-level README.md.
