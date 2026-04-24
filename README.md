@@ -128,7 +128,6 @@ For boolean settings, if the environment variable is **set**, the merged value i
 | `use_stateful` | bool | `false` | Turn on stateful orchestration for supported dbt commands. |
 | `local_run` | bool | `true` | After reuse, revert patched files (typical for local iteration). |
 | `debug` | bool | `false` | Verbose logging. |
-| `integration_account_id` | string (optional) | — | When set, filter state keys to this integration account prefix. |
 | `seed_state_orchestration` | bool | `false` | When `true`, seed nodes can be reused from state like models; when `false`, seeds are always treated as dirty for reuse. This feature should be considered experimental and may change in the future. |
 
 ### Resolving multiple backend state configurations
