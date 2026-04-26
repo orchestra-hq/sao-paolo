@@ -1,6 +1,20 @@
 # sao-paolo
 
-## Installing
+## Introduction to State-Aware Orchestration for dbt ("Sao Paolo")
+
+This repo contains the logic for running State-Aware Orchestration for dbt, or "Sao Paolo" for short.
+
+There are a few core reasons to us Sao Paolo
+
+- Easier Scheduling: Orchestra SAO means you don’t need to manually tag models, you just need to say when the models should be updated and Orchestra handles the dependencies
+- Save cost: Orchestra SAO detects when there is new data and only updates models and their downstream deps if there is new data, saving money and reducing time
+- Works out the box: no need to upgrade dbt versions to take advantage of Orchestra SAO. Where you want to run SAO yourself, you can leverage the Sao Paolo repo which is open-source under Elastic V2 License.
+
+## Getting Started with Sao Paolo
+
+Head over to the [Sao Paolo pypi](https://pypi.org/project/dbt-orchestra/) package and `pip install dbt-orchestra`. 
+
+## Installing and controbuting to this repo
 
 ```bash
 python3 -m venv .venv
