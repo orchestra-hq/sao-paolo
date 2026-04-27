@@ -7,7 +7,7 @@ pipeline:
         integration: DBT_CORE
         integration_job: DBT_CORE_EXECUTE
         parameters:
-          commands: dbt build
+          commands: dbt build --target dev
           package_manager: UV
           python_version: "3.12"
           use_state_orchestration: true
@@ -19,6 +19,7 @@ pipeline:
             \ }}\"\n}"
         depends_on: []
         name: CI Smoke Test Execution
+        connection: sao_test_56256
     depends_on: []
     name: CI Smoke Test Task Group
 webhook:
