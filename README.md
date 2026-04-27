@@ -4,7 +4,7 @@
 
 This repo contains the logic for running State-Aware Orchestration for dbt, or "Sao Paolo" for short.
 
-There are a few core reasons to us Sao Paolo
+There are a few core reasons to use Sao Paolo:
 
 - Easier Scheduling: Orchestra SAO means you don’t need to manually tag models, you just need to say when the models should be updated and Orchestra handles the dependencies
 - Save cost: Orchestra SAO detects when there is new data and only updates models and their downstream deps if there is new data, saving money and reducing time
