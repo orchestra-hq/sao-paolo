@@ -4,6 +4,12 @@
 
 `dbt-orchestra` wraps dbt Core commands, using previous run state to reduce unnecessary work. It is designed to be added to an existing dbt Core project, not used as a standalone dbt repository.
 
+There are a few core reasons to use this project:
+
+- Easier Scheduling: Orchestra SAO (State Aware Orchestration) means you don’t need to manually tag models, you just need to say when the models should be updated and Orchestra handles the dependencies.
+- Save cost: Orchestra SAO detects when there is new data and only updates models and their downstream deps if there is new data, saving money and reducing time.
+- Works out of the box: no need to upgrade dbt versions to take advantage of Orchestra SAO. Where you want to run SAO yourself, you can leverage this open-source repo which is under Elastic V2 License.
+
 ## Compatibility and prerequisites
 
 - **Python:** 3.11, 3.12, and 3.13 only (see `requires-python` in `pyproject.toml`).
