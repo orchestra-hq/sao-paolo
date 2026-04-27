@@ -14,7 +14,7 @@ There are a few core reasons to us Sao Paolo
 
 Head over to the [Sao Paolo pypi](https://pypi.org/project/dbt-orchestra/) package and `pip install dbt-orchestra`. 
 
-## Installing and controbuting to this repo
+## Installing and contributing to this repo
 
 ```bash
 python3 -m venv .venv
