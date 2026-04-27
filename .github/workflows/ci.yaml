@@ -66,7 +66,6 @@ jobs:
           ORCHESTRA_API_KEY: ""
         run: uv run pytest tests/integration/test_tutorial_dbt.py -sv
 
-  # Move YAML to this repo and reference.
   orchestra:
     runs-on: ubuntu-latest
     needs: [ test, tutorial-dbt ]
