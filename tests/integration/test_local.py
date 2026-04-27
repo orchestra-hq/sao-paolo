@@ -1,9 +1,11 @@
 import json
+from pathlib import Path
 from typing import cast
-from unittest.mock import patch
 
 import pytest
 
+import src.orchestra_dbt.dag as dag_module
+from src.orchestra_dbt.config import OrchestraDbtSettings
 from src.orchestra_dbt.dag import construct_dag
 from src.orchestra_dbt.logger import log_reused_nodes
 from src.orchestra_dbt.models import (
@@ -16,19 +18,24 @@ from src.orchestra_dbt.models import (
 from src.orchestra_dbt.sao import calculate_nodes_to_run
 
 
-@patch("src.orchestra_dbt.dag.get_integration_account_id_from_env")
-def test_e2e(mock_get_integration_account_id_from_env):
-    try:
-        local_state = open("local_state.json", "r").read()
-    except FileNotFoundError:
+def test_e2e(monkeypatch: pytest.MonkeyPatch) -> None:
+    local_state_path = Path("local_state.json")
+    if not local_state_path.exists():
         pytest.skip("local_state.json not found")
+    local_state = local_state_path.read_text(encoding="utf-8")
 
-    try:
-        open("local_manifest.json", "r").read()
-    except FileNotFoundError:
+    local_manifest_path = Path("local_manifest.json")
+    if not local_manifest_path.exists():
         pytest.skip("local_manifest.json not found")
 
-    mock_get_integration_account_id_from_env.return_value = "TO_BE_COMPLETED"
+    monkeypatch.setattr(
+        dag_module,
+        "load_orchestra_dbt_settings",
+        lambda: OrchestraDbtSettings(
+            integration_account_id="TO_BE_COMPLETED",
+            local_run=False,
+        ),
+    )
 
     parsed_dag = construct_dag(
         source_freshness=SourceFreshness(sources={}),

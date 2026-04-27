@@ -1,6 +1,9 @@
 from datetime import datetime
-from unittest.mock import patch
 
+import pytest
+
+import src.orchestra_dbt.dag as dag_module
+from src.orchestra_dbt.config import OrchestraDbtSettings
 from src.orchestra_dbt.dag import calculate_freshness_on_node, construct_dag
 from src.orchestra_dbt.models import (
     Edge,
@@ -25,6 +28,7 @@ class TestCalculateFreshnessOnNode:
             track_state=True,
             from_external_package=False,
             depends_on_nodes=[],
+            seed_state_orchestration=False,
         ) == (Freshness.DIRTY, "Snapshot is always dirty.")
 
     def test_calculate_freshness_on_node_not_tracking_state(self):
@@ -36,7 +40,55 @@ class TestCalculateFreshnessOnNode:
             track_state=False,
             from_external_package=False,
             depends_on_nodes=[],
+            seed_state_orchestration=False,
         ) == (Freshness.DIRTY, "State orchestration for this node is disabled.")
+
+    def test_calculate_freshness_on_node_seed_disabled(self):
+        assert calculate_freshness_on_node(
+            asset_external_id="test.seed.a.b",
+            checksum="123",
+            state=StateApiModel(state={}),
+            resource_type="seed",
+            track_state=True,
+            from_external_package=False,
+            depends_on_nodes=[],
+            seed_state_orchestration=False,
+        ) == (
+            Freshness.DIRTY,
+            "State orchestration for seeds currently disabled.",
+        )
+
+    def test_calculate_freshness_on_node_seed_enabled_not_in_state(self):
+        assert calculate_freshness_on_node(
+            asset_external_id="test.seed.a.b",
+            checksum="123",
+            state=StateApiModel(state={}),
+            resource_type="seed",
+            track_state=True,
+            from_external_package=False,
+            depends_on_nodes=[],
+            seed_state_orchestration=True,
+        ) == (Freshness.DIRTY, "Seed not previously seen in state.")
+
+    def test_calculate_freshness_on_node_seed_enabled_clean(self):
+        assert calculate_freshness_on_node(
+            asset_external_id="test.seed.a.b",
+            checksum="123",
+            state=StateApiModel(
+                state={
+                    "test.seed.a.b": StateItem(
+                        last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                        checksum="123",
+                        sources={},
+                    ),
+                }
+            ),
+            resource_type="seed",
+            track_state=True,
+            from_external_package=False,
+            depends_on_nodes=[],
+            seed_state_orchestration=True,
+        ) == (Freshness.CLEAN, "Seed in same state as last run.")
 
     def test_calculate_freshness_on_node_not_in_state(self):
         assert calculate_freshness_on_node(
@@ -47,6 +99,7 @@ class TestCalculateFreshnessOnNode:
             track_state=True,
             from_external_package=False,
             depends_on_nodes=[],
+            seed_state_orchestration=False,
         ) == (Freshness.DIRTY, "Model not previously seen in state.")
 
     def test_calculate_freshness_on_node_checksum_changed(self):
@@ -66,6 +119,7 @@ class TestCalculateFreshnessOnNode:
             track_state=True,
             from_external_package=False,
             depends_on_nodes=[],
+            seed_state_orchestration=False,
         ) == (Freshness.DIRTY, "Checksum changed since last run.")
 
     def test_calculate_freshness_on_node_checksum_matches(self):
@@ -85,6 +139,7 @@ class TestCalculateFreshnessOnNode:
             track_state=True,
             from_external_package=False,
             depends_on_nodes=[],
+            seed_state_orchestration=False,
         ) == (Freshness.CLEAN, "Model in same state as last run.")
 
     def test_calculate_freshness_on_model_from_external_package_without_dependencies(
@@ -106,6 +161,7 @@ class TestCalculateFreshnessOnNode:
             track_state=True,
             from_external_package=True,
             depends_on_nodes=[],
+            seed_state_orchestration=False,
         ) == (
             Freshness.DIRTY,
             "Model from external package without parent dependencies - skipping state orchestration.",
@@ -113,13 +169,18 @@ class TestCalculateFreshnessOnNode:
 
 
 class TestConstructDag:
-    @patch("src.orchestra_dbt.dag.load_json")
-    @patch("src.orchestra_dbt.dag.get_integration_account_id_from_env")
     def test_construct_dag_with_sources(
-        self, mock_get_integration_account_id_from_env, mock_load_json, sample_manifest
-    ):
-        mock_get_integration_account_id_from_env.return_value = "integration_account_id"
-        mock_load_json.return_value = sample_manifest
+        self, monkeypatch: pytest.MonkeyPatch, sample_manifest: dict
+    ) -> None:
+        monkeypatch.setattr(dag_module, "load_json", lambda _: sample_manifest)
+        monkeypatch.setattr(
+            dag_module,
+            "load_orchestra_dbt_settings",
+            lambda: OrchestraDbtSettings(
+                integration_account_id="integration_account_id",
+                local_run=False,
+            ),
+        )
 
         source_freshness = SourceFreshness(
             sources={
@@ -204,9 +265,10 @@ class TestConstructDag:
             ],
         )
 
-    @patch("src.orchestra_dbt.dag.load_json")
-    def test_construct_dag_dirty_model(self, mock_load_json, sample_manifest):
-        mock_load_json.return_value = sample_manifest
+    def test_construct_dag_dirty_model(
+        self, monkeypatch: pytest.MonkeyPatch, sample_manifest: dict
+    ) -> None:
+        monkeypatch.setattr(dag_module, "load_json", lambda _: sample_manifest)
 
         source_freshness = SourceFreshness(
             sources={
@@ -233,3 +295,84 @@ class TestConstructDag:
         # Model should be DIRTY since checksum doesn't match
         assert isinstance(dag.nodes["model.test_project.model_a"], MaterialisationNode)
         assert dag.nodes["model.test_project.model_a"].freshness == Freshness.DIRTY
+
+    def test_construct_dag_seed_state_disabled(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        manifest = {
+            "metadata": {"project_name": "test_project"},
+            "nodes": {
+                "seed.test_project.my_seed": {
+                    "resource_type": "seed",
+                    "checksum": {"checksum": "abc"},
+                    "config": {},
+                    "package_name": "test_project",
+                    "original_file_path": "seeds/my_seed.csv",
+                    "relation_name": "my_seed",
+                    "depends_on": {"nodes": []},
+                },
+            },
+            "child_map": {},
+        }
+        monkeypatch.setattr(dag_module, "load_json", lambda _: manifest)
+        monkeypatch.setattr(dag_module, "calculate_checksum", lambda *a, **k: "stable")
+        monkeypatch.setattr(
+            dag_module,
+            "load_orchestra_dbt_settings",
+            lambda: OrchestraDbtSettings(
+                integration_account_id="acct",
+                seed_state_orchestration=False,
+            ),
+        )
+
+        dag = construct_dag(SourceFreshness(sources={}), StateApiModel(state={}))
+        node = dag.nodes["seed.test_project.my_seed"]
+        assert isinstance(node, MaterialisationNode)
+        assert node.freshness == Freshness.DIRTY
+        assert node.reason == "State orchestration for seeds currently disabled."
+
+    def test_construct_dag_seed_state_enabled(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        manifest = {
+            "metadata": {"project_name": "test_project"},
+            "nodes": {
+                "seed.test_project.my_seed": {
+                    "resource_type": "seed",
+                    "checksum": {"checksum": "abc"},
+                    "config": {},
+                    "package_name": "test_project",
+                    "original_file_path": "seeds/my_seed.csv",
+                    "relation_name": "my_seed",
+                    "depends_on": {"nodes": []},
+                },
+            },
+            "child_map": {},
+        }
+        monkeypatch.setattr(dag_module, "load_json", lambda _: manifest)
+        monkeypatch.setattr(dag_module, "calculate_checksum", lambda *a, **k: "stable")
+        monkeypatch.setattr(
+            dag_module,
+            "load_orchestra_dbt_settings",
+            lambda: OrchestraDbtSettings(
+                integration_account_id="acct",
+                seed_state_orchestration=True,
+                local_run=False,
+            ),
+        )
+        asset_id = "acct.my_seed"
+        state = StateApiModel(
+            state={
+                asset_id: StateItem(
+                    last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                    checksum="stable",
+                    sources={},
+                ),
+            }
+        )
+
+        dag = construct_dag(SourceFreshness(sources={}), state)
+        node = dag.nodes["seed.test_project.my_seed"]
+        assert isinstance(node, MaterialisationNode)
+        assert node.freshness == Freshness.CLEAN
+        assert node.reason == "Seed in same state as last run."

@@ -1,13 +1,19 @@
-import json
-import os
 from datetime import datetime
 from functools import lru_cache
 from typing import cast
 
-import httpx
-from pydantic import ValidationError
+from .state_backends import resolved_state_backend
+from .state_errors import StateLoadError, StateSaveError
+from .logger import log_warn
 
-from .logger import log_error, log_info, log_warn
+__all__ = [
+    "StateLoadError",
+    "StateSaveError",
+    "get_last_updated_from_run_results",
+    "load_state",
+    "save_state",
+    "update_state",
+]
 from .models import (
     MaterialisationNode,
     NodeType,
@@ -16,46 +22,15 @@ from .models import (
     StateApiModel,
     StateItem,
 )
-from .utils import get_integration_account_id_from_env, load_json
-
-
-def _get_base_api_url() -> str:
-    return f"https://{os.getenv('ORCHESTRA_ENV', 'app').lower()}.getorchestra.io/api/engine/public"
-
-
-def _get_headers() -> dict:
-    return {
-        "Authorization": f"Bearer {os.getenv('ORCHESTRA_API_KEY')}",
-    }
+from .utils import load_json
 
 
 def load_state() -> StateApiModel:
-    try:
-        response = httpx.get(
-            headers={
-                **_get_headers(),
-                "Accept": "application/json",
-            },
-            url=f"{_get_base_api_url()}/state/DBT_CORE",
-        )
-        response.raise_for_status()
-    except httpx.HTTPStatusError as e:
-        log_warn(f"Failed to load state ({e.response.status_code}): {e.response.text}")
-        return StateApiModel(state={})
+    return resolved_state_backend().load()
 
-    try:
-        state = StateApiModel.model_validate(response.json())
-        if integration_account_id := get_integration_account_id_from_env():
-            for key in list(state.state):
-                if not key.startswith(integration_account_id):
-                    state.state.pop(key)
-        log_info(
-            f"State loaded. Retrieved {len(state.state)} items.",
-        )
-        return state
-    except (ValidationError, ValueError) as e:
-        log_error(f"Failed to validate state: {e}")
-        return StateApiModel(state={})
+
+def save_state(state: StateApiModel) -> None:
+    resolved_state_backend().save(state)
 
 
 @lru_cache
@@ -88,7 +63,6 @@ def update_state(
         if not last_updated_from_run_results:
             continue
 
-        # Build sources dict from parent nodes that are sources
         sources_dict: dict[str, datetime] = {}
         for edge in parsed_dag.edges:
             if edge.to_ == node_id:
@@ -105,22 +79,3 @@ def update_state(
             last_updated=last_updated_from_run_results,
             sources=sources_dict,
         )
-
-
-def save_state(state: StateApiModel) -> None:
-    try:
-        response = httpx.patch(
-            headers={
-                **_get_headers(),
-                "Content-Type": "application/json",
-            },
-            json=json.loads(state.model_dump_json(exclude_none=True)),
-            url=f"{_get_base_api_url()}/state/DBT_CORE",
-            timeout=httpx.Timeout(timeout=30),
-        )
-        response.raise_for_status()
-        log_info("State saved")
-    except httpx.HTTPStatusError as e:
-        log_warn(f"Failed to save state ({e.response.status_code}): {e.response.text}")
-    except httpx.TimeoutException as e:
-        log_warn(f"Failed to save state due to timeout: {e}")

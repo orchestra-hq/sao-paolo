@@ -1,34 +1,60 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "orchestra-dbt"
-version = "0.3.0"
-description = "Stateful orchestration for dbt Core projects in Orchestra."
-authors = [{ name = "Oliver Crawford" }]
-readme = "README.md"
-requires-python = ">=3.11"
-dependencies = ["click", "httpx", "pydantic", "pyyaml"]
+name = "dbt-orchestra"
+version = "1.0.0"
+description = "Orchestra wrapper for dbt Core - allows for stateful orchestration of dbt Core projects."
+authors = [{ name = "Orchestra Technologies" }]
+license = "Elastic-2.0"
+license-files = ["LICENSE"]
+readme = { file = "README.md", content-type = "text/markdown" }
+requires-python = ">=3.11,<3.14"
+dependencies = ["click", "httpx", "packaging", "pydantic", "pytz", "pyyaml"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Build Tools",
+]
+
+[project.urls]
+Repository = "https://github.com/orchestra-hq/sao-paolo"
+Issues = "https://github.com/orchestra-hq/sao-paolo/issues"
+Changelog = "https://github.com/orchestra-hq/sao-paolo/blob/main/CHANGELOG.md"
+Security = "https://github.com/orchestra-hq/sao-paolo/security/policy"
 
 [project.optional-dependencies]
 dev = [
     "basedpyright",
-    "dbt-core",
-    "dbt-databricks",
-    "dbt-snowflake", # Change/add adapters for local development requirements.
+    "boto3",
+    "dbt-core>=1.10,<1.12",
+    "moto[s3]",
     "pytest-httpx",
     "pytest",
     "ruff",
 ]
 
-debug = [
-    "awscrt",
-    "boto3",
-    "graphviz",
-]
+# Warehouse adapters (optional). Not required for tests.
+adapters = ["dbt-postgres"]
+
+# Debug dependencies (optional).
+debug = ["awscrt", "boto3", "graphviz"]
+
+# S3-backed state (optional; boto3 loaded only when S3 URI is configured)
+s3 = ["boto3"]
 
 [project.scripts]
-orchestra-dbt = "orchestra_dbt.cli:main"
+orc = "orchestra_dbt.cli:main"
 
 [tool.basedpyright]
 typeCheckingMode = "basic"
+include = ["src", "tests"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

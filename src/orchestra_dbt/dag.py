@@ -1,6 +1,7 @@
 from .asset_external_id import generate_asset_external_id
 from .build_after import parse_freshness_config
 from .checksum import calculate_checksum
+from .config import load_orchestra_dbt_settings, resolve_state_backend_config
 from .logger import log_warn
 from .models import (
     Edge,
@@ -12,7 +13,8 @@ from .models import (
     SourceNode,
     StateApiModel,
 )
-from .utils import get_integration_account_id_from_env, load_json
+from .state_types import StateBackendKind
+from .utils import load_json
 
 
 def calculate_freshness_on_node(
@@ -23,6 +25,7 @@ def calculate_freshness_on_node(
     track_state: bool,
     from_external_package: bool,
     depends_on_nodes: list[str] | None,
+    seed_state_orchestration: bool = False,
 ) -> tuple[Freshness, str]:
     if resource_type == "snapshot":
         # Note: currently, we always run snapshots. Need to configure how to propagate
@@ -38,7 +41,7 @@ def calculate_freshness_on_node(
             "Model from external package without parent dependencies - skipping state orchestration.",
         )
 
-    if resource_type == "seed":
+    if resource_type == "seed" and not seed_state_orchestration:
         return Freshness.DIRTY, "State orchestration for seeds currently disabled."
 
     if asset_external_id not in state.state:
@@ -62,8 +65,10 @@ def construct_dag(
     edges: list[Edge] = []
 
     project_name_from_manifest = manifest["metadata"]["project_name"]
-    integration_account_id = get_integration_account_id_from_env()
-    if not integration_account_id:
+    settings = load_orchestra_dbt_settings()
+    integration_account_id = settings.integration_account_id
+    state_backend_kind = resolve_state_backend_config().kind
+    if not integration_account_id and state_backend_kind == StateBackendKind.HTTP:
         log_warn(
             "No integration account ID found. Will use node ID as the asset external ID."
         )
@@ -84,6 +89,7 @@ def construct_dag(
                     node_id=node_id,
                     relation_name=node.get("relation_name"),
                     integration_account_id=integration_account_id,
+                    local_run=settings.local_run,
                 )
 
                 dbt_path = str(node["original_file_path"])
@@ -114,6 +120,7 @@ def construct_dag(
                     track_state,
                     from_external_package,
                     depends_on_nodes,
+                    settings.seed_state_orchestration,
                 )
 
                 nodes[node_id] = MaterialisationNode(

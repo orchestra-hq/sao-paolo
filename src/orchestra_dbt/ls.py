@@ -1,3 +1,4 @@
+from .compatibility import dbt_core_import_error_message
 from .constants import RESOURCE_TYPES_TO_LS
 from .logger import log_debug, log_error, log_info, log_warn
 
@@ -14,14 +15,12 @@ def get_args_for_ls(user_args: tuple) -> list[str]:
 
 def get_paths_to_run(args: tuple) -> list[str] | None:
     try:
-        from dbt.cli.main import (  # pyright: ignore[reportMissingImports]
+        from dbt.cli.main import (
             dbtRunner,
             dbtRunnerResult,
         )
     except ImportError as missing_dbt_core_error:
-        log_error(
-            f"dbt-core is not installed. Please install it. Issue: {missing_dbt_core_error}"
-        )
+        log_error(dbt_core_import_error_message(missing_dbt_core_error))
         raise missing_dbt_core_error
 
     log_info("Finding node paths to be executed:")

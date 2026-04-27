@@ -1,8 +1,10 @@
 from datetime import datetime
 from unittest.mock import patch
 
+import boto3
 import httpx
 import pytest
+from moto import mock_aws
 from pytest_httpx import HTTPXMock
 
 from src.orchestra_dbt.models import (
@@ -17,6 +19,7 @@ from src.orchestra_dbt.models import (
     StateItem,
 )
 from src.orchestra_dbt.state import (
+    StateLoadError,
     _load_run_results,
     load_state,
     save_state,
@@ -25,14 +28,14 @@ from src.orchestra_dbt.state import (
 
 
 class TestLoadState:
-    @patch("src.orchestra_dbt.state.get_integration_account_id_from_env")
+    @patch("src.orchestra_dbt.state_filters.get_integration_account_id")
     @pytest.mark.parametrize(
         "integration_account_id, expected_state_len",
         [(None, 3), ("a", 1), ("b", 1)],
     )
     def test_load_state_success(
         self,
-        mock_get_integration_account_id_from_env,
+        mock_get_integration_account_id,
         httpx_mock: HTTPXMock,
         integration_account_id: str | None,
         expected_state_len: int,
@@ -70,7 +73,7 @@ class TestLoadState:
             },
         )
 
-        mock_get_integration_account_id_from_env.return_value = integration_account_id
+        mock_get_integration_account_id.return_value = integration_account_id
         loaded_state = load_state()
         assert len(loaded_state.state) == expected_state_len
         assert list(loaded_state.state.values())[0] == StateItem(
@@ -100,6 +103,18 @@ class TestLoadState:
                 "Authorization": "Bearer test-api-key",
             },
             json={"invalid": "data"},
+        )
+        assert load_state() == StateApiModel(state={})
+
+    def test_load_state_request_error(self, httpx_mock: HTTPXMock):
+        httpx_mock.add_exception(
+            httpx.ConnectError("Connection failed"),
+            method="GET",
+            url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
+            match_headers={
+                "Accept": "application/json",
+                "Authorization": "Bearer test-api-key",
+            },
         )
         assert load_state() == StateApiModel(state={})
 
@@ -736,3 +751,116 @@ class TestUpdateState:
         update_state(state, parsed_dag, source_freshness)
 
         assert state.state == {}
+
+
+class TestLoadStateFile:
+    def test_load_state_file_missing(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(tmp_path / "missing.json"))
+
+        with pytest.raises(StateLoadError, match="State file not found"):
+            load_state()
+
+    def test_load_state_file_empty_state(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        p = tmp_path / "st.json"
+        p.write_text('{"state": {}}', encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(p))
+
+        assert load_state() == StateApiModel(state={})
+
+    def test_load_state_file_invalid_json(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        p = tmp_path / "st.json"
+        p.write_text("not json", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(p))
+
+        with pytest.raises(StateLoadError, match="not valid JSON"):
+            load_state()
+
+
+class TestSaveStateFile:
+    def test_save_state_file_round_trip(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        p = tmp_path / "st.json"
+        p.write_text('{"state": {}}', encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(p))
+        state = StateApiModel(
+            state={
+                "model.test": StateItem(
+                    last_updated=datetime(2024, 1, 1, 14, 0, 0),
+                    checksum="123",
+                    sources={"source.test": datetime(2024, 1, 1, 11, 0, 0)},
+                )
+            }
+        )
+        save_state(state)
+        loaded = load_state()
+        assert loaded.state["model.test"].checksum == "123"
+
+
+class TestLoadStateS3:
+    @mock_aws
+    def test_load_state_s3_missing_object_starts_empty(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        conn = boto3.client("s3", region_name="us-east-1")
+        conn.create_bucket(Bucket="test-bucket")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", "s3://test-bucket/prefix/state.json")
+
+        assert load_state() == StateApiModel(state={})
+
+    @mock_aws
+    def test_load_state_s3_success(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
+        conn = boto3.client("s3", region_name="us-east-1")
+        conn.create_bucket(Bucket="test-bucket-s3")
+        payload = (
+            b'{"state": {"model.x": {"checksum": "c", '
+            b'"last_updated": "2024-01-01T12:00:00", "sources": {}}}}'
+        )
+        conn.put_object(Bucket="test-bucket-s3", Key="k.json", Body=payload)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", "s3://test-bucket-s3/k.json")
+
+        loaded = load_state()
+        assert "model.x" in loaded.state
+        assert loaded.state["model.x"].checksum == "c"
+
+
+class TestSaveStateS3:
+    @mock_aws
+    def test_save_state_s3_put_object(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
+        conn = boto3.client("s3", region_name="us-east-1")
+        conn.create_bucket(Bucket="bucket")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", "s3://bucket/dir/f.json")
+
+        save_state(
+            StateApiModel(
+                state={
+                    "m": StateItem(
+                        last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                        checksum="1",
+                        sources={},
+                    )
+                }
+            )
+        )
+
+        obj = conn.get_object(Bucket="bucket", Key="dir/f.json")
+        body = obj["Body"].read()
+        assert b'"checksum"' in body

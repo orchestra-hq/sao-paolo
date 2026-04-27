@@ -1,14 +1,14 @@
-import os
-from datetime import datetime
+from datetime import UTC, datetime
 
 import click
 
+from .config import load_orchestra_dbt_settings
 from .constants import SERVICE_NAME
 from .models import MaterialisationNode
 
 
 def _log(msg: str, fg: str | None, error: bool = False) -> None:
-    text = str(datetime.now().strftime("%H:%M:%S")) + " "
+    text = str(datetime.now(UTC).strftime("%H:%M:%S")) + " "
     if error:
         text += " [ERROR]"
     text += f" [{SERVICE_NAME}] {msg}"
@@ -16,7 +16,7 @@ def _log(msg: str, fg: str | None, error: bool = False) -> None:
 
 
 def log_debug(msg) -> None:
-    if os.getenv("ORCHESTRA_DBT_DEBUG"):
+    if load_orchestra_dbt_settings().debug:
         _log(msg, None)
 
 
