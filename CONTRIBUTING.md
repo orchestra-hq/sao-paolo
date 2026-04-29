@@ -1,6 +1,6 @@
 # Contributing
 
-We welcome community contributions that improve this project's capabilities in helping teams optimise their dbt Core runs with confidence. To keep that impact broad and reliable, we will avoid introducing breaking changes wherever reasonable.
+We welcome community contributions that improve this project's capabilities in helping teams optimise their pipeline runs with confidence. To keep that impact broad and reliable, we will avoid introducing breaking changes wherever reasonable.
 
 ## Contributor workflow
 
@@ -88,6 +88,6 @@ Today, non-HTTP persistence is selected from `state_file` / `ORCHESTRA_STATE_FIL
 3. Wire the backend in `resolved_state_backend()` in `state_backends/factory.py` (`match` on `StateBackendKind`). Prefer **lazy imports** inside the branch if the backend needs optional third-party packages, and declare those under `[project.optional-dependencies]` in `pyproject.toml` (the S3 backend uses the `s3` extra and `boto3` this way).
 4. Add tests for config parsing and backend behaviour under `tests/unit/` (config tests already cover S3 URI parsing in `test_config.py`).
 
-## License
+© 2026 Orchestra Technologies Limited. All rights reserved.
 
-This project is under the [Elastic License 2.0](LICENSE).
+This source code is the property of Orchestra Technologies Limited. Unauthorized use, copying, modification, or distribution is prohibited.

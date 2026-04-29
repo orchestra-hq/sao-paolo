@@ -5,10 +5,8 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "dbt-orchestra"
 version = "1.0.0"
-description = "Orchestra wrapper for dbt Core - allows for stateful orchestration of dbt Core projects."
+description = "Orchestra wrapper for dbt Core (including state aware orchestration)."
 authors = [{ name = "Orchestra Technologies" }]
-license = "Elastic-2.0"
-license-files = ["LICENSE"]
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.11,<3.14"
 dependencies = ["click", "httpx", "packaging", "pydantic", "pytz", "pyyaml"]
