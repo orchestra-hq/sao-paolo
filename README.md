@@ -8,7 +8,7 @@ There are a few core reasons to use this project:
 
 - Easier Scheduling: Orchestra SAO (State Aware Orchestration) means you don’t need to manually tag models, you just need to say when the models should be updated and Orchestra handles the dependencies.
 - Save cost: Orchestra SAO detects when there is new data and only updates models and their downstream deps if there is new data, saving money and reducing time.
-- Works out of the box: no need to upgrade dbt versions to take advantage of Orchestra SAO. Where you want to run SAO yourself, you can leverage this open-source repo which is under Elastic V2 License.
+- Works out of the box: no need to upgrade dbt versions to take advantage of Orchestra SAO
 
 ## Compatibility and prerequisites
 
@@ -24,7 +24,7 @@ There are a few core reasons to use this project:
     pip install dbt-orchestra
     ```
 
-2. Add a minimal config block to your dbt project's `pyproject.toml`:
+2. Add a minimal config block to your project's `pyproject.toml`:
 
     ```toml
     [tool.orchestra_dbt]
@@ -180,3 +180,7 @@ Add `.orchestra/` (or your chosen path) to `.gitignore` if the file should not b
 ## Development and contributing
 
 For contributor guidance, see [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+© 2026 Orchestra Technologies Limited. All rights reserved.
+
+This source code is the property of Orchestra Technologies Limited. Unauthorized use, copying, modification, or distribution is prohibited.
