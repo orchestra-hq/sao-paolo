@@ -2,9 +2,11 @@ from collections.abc import Callable
 from typing import Any
 
 from .databricks import try_databricks_fallback
+from .snowflake import try_snowflake_fallback
 
 FALLBACK_BY_ADAPTER_TYPE: dict[str, Callable[..., Any]] = {
     "databricks": try_databricks_fallback,
+    "snowflake": try_snowflake_fallback,
 }
 
 

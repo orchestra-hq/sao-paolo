@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 import pytz
 
+from src.orchestra_dbt.source_freshness.fallbacks import snowflake as snowflake_fallback
 from src.orchestra_dbt.source_freshness.fallbacks.common import (
     build_source_freshness_result_from_loaded_at,
     parse_query_timestamp_cell,
@@ -43,10 +44,11 @@ def test_parse_query_timestamp_cell_rejects_invalid(value: object, match: str) -
         parse_query_timestamp_cell(value)
 
 
-def test_registry_has_databricks_and_unknown_adapter_is_noop() -> None:
+def test_registry_has_databricks_snowflake_and_unknown_adapter_is_noop() -> None:
     assert "databricks" in FALLBACK_BY_ADAPTER_TYPE
+    assert "snowflake" in FALLBACK_BY_ADAPTER_TYPE
     mocks = (MagicMock(), MagicMock(), MagicMock())
-    assert try_registered_fallback("snowflake", *mocks) is None
+    assert try_registered_fallback("unknown", *mocks) is None
 
 
 @pytest.mark.parametrize(
@@ -78,3 +80,54 @@ def test_build_source_freshness_result_from_loaded_at_no_freshness_config() -> N
     assert result.status == FreshnessStatus.Pass
     assert result.max_loaded_at == dt
     assert result.node is node
+
+
+def test_snowflake_fallback_uses_last_altered_metadata(monkeypatch) -> None:
+    runner = MagicMock()
+    relation = SimpleNamespace(
+        database="analytics",
+        schema="public",
+        identifier="orders",
+        quote_policy={},
+    )
+    runner.adapter.Relation.create_from.return_value = relation
+    runner.adapter.connection_named.return_value.__enter__.return_value = None
+    runner.adapter.connection_named.return_value.__exit__.return_value = None
+
+    adapter_response = MagicMock()
+    timestamp = datetime(2024, 6, 1, 10, 0, 0, tzinfo=timezone.utc)
+    runner.adapter.execute.return_value = (
+        adapter_response,
+        SimpleNamespace(rows=[(timestamp,)]),
+    )
+    expected_result = object()
+    build_result = MagicMock(return_value=expected_result)
+    monkeypatch.setattr(
+        snowflake_fallback,
+        "build_source_freshness_result_from_loaded_at",
+        build_result,
+    )
+
+    compiled_node = SimpleNamespace(unique_id="source.test.orders")
+
+    result = snowflake_fallback.try_snowflake_fallback(
+        runner, compiled_node, MagicMock()
+    )
+
+    assert result is expected_result
+    runner.adapter.execute.assert_called_once_with(
+        sql=(
+            "SELECT LAST_ALTERED "
+            "FROM ANALYTICS.INFORMATION_SCHEMA.TABLES "
+            "WHERE TABLE_SCHEMA = 'PUBLIC' "
+            "AND TABLE_NAME = 'ORDERS' "
+            "LIMIT 1"
+        ),
+        auto_begin=False,
+        fetch=True,
+    )
+    build_result.assert_called_once_with(
+        max_loaded_at=timestamp,
+        compiled_node=compiled_node,
+        adapter_response=adapter_response,
+    )
