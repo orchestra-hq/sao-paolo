@@ -7,7 +7,7 @@ pipeline:
         integration: DBT_CORE
         integration_job: DBT_CORE_EXECUTE
         parameters:
-          commands: dbt build --target dev --no-partial-parse
+          commands: dbt build --target dev --exclude resource_type:function
           package_manager: UV
           python_version: '3.12'
           use_state_orchestration: true
