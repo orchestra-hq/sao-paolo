@@ -16,6 +16,8 @@ from .models import (
 from .state_types import StateBackendKind
 from .utils import load_json
 
+_IGNORED_PREFIXES = ("function.",)
+
 
 def calculate_freshness_on_node(
     asset_external_id: str,
@@ -146,7 +148,10 @@ def construct_dag(
                 )
 
                 for dep in depends_on_nodes:
-                    edges.append(Edge(from_=str(dep), to_=node_id))
+                    dep = str(dep)
+                    if dep.startswith(_IGNORED_PREFIXES):
+                        continue
+                    edges.append(Edge(from_=dep, to_=node_id))
             case _:
                 continue
 
