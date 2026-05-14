@@ -64,6 +64,7 @@ jobs:
           PGDATABASE: tutorial
           DBT_SCHEMA: sao_tutorial
           ORCHESTRA_API_KEY: ""
+          ORCHESTRA_STATE_FILE: ".orchestra/dbt_state.json"
         run: uv run pytest tests/integration/test_tutorial_dbt.py -sv
 
   orchestra:
