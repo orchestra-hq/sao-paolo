@@ -31,7 +31,6 @@ jobs:
   tutorial-dbt:
     runs-on: ubuntu-latest
     needs: [test]
-    environment: ci-test
     services:
       postgres:
         image: postgres:18
