@@ -9,13 +9,12 @@ pipeline:
         parameters:
           commands: dbt build --target dev
           package_manager: UV
-          python_version: "3.12"
+          python_version: '3.12'
           use_state_orchestration: true
           branch: ${{ inputs.ci_branch }}
           project_dir: tutorial/dbt
           shallow_clone_dirs: tutorial
-          environment_variables:
-            "{\n  \"ORCHESTRA_DBT_BRANCH\": \"${{ inputs.ci_branch\
+          environment_variables: "{\n  \"ORCHESTRA_DBT_BRANCH\": \"${{ inputs.ci_branch\
             \ }}\"\n}"
         depends_on: []
         name: CI Smoke Test Execution

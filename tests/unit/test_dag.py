@@ -376,3 +376,45 @@ class TestConstructDag:
         assert isinstance(node, MaterialisationNode)
         assert node.freshness == Freshness.CLEAN
         assert node.reason == "Seed in same state as last run."
+
+    def test_construct_dag_skips_function_dependency(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        manifest = {
+            "metadata": {"project_name": "test_project"},
+            "nodes": {
+                "model.test_project.my_model": {
+                    "resource_type": "model",
+                    "checksum": {"checksum": "abc123"},
+                    "config": {},
+                    "package_name": "test_project",
+                    "original_file_path": "models/my_model.sql",
+                    "relation_name": "my_model",
+                    "depends_on": {
+                        "nodes": [
+                            "source.test_db.raw.events",
+                            "function.test_project.is_positive_int",
+                        ],
+                    },
+                },
+            },
+            "child_map": {
+                "source.test_db.raw.events": ["model.test_project.my_model"],
+            },
+        }
+        monkeypatch.setattr(dag_module, "load_json", lambda _: manifest)
+        monkeypatch.setattr(dag_module, "calculate_checksum", lambda *a, **k: "stable")
+        monkeypatch.setattr(
+            dag_module,
+            "load_orchestra_dbt_settings",
+            lambda: OrchestraDbtSettings(
+                integration_account_id="acct",
+                local_run=False,
+            ),
+        )
+
+        dag = construct_dag(SourceFreshness(sources={}), StateApiModel(state={}))
+
+        edge_froms = [e.from_ for e in dag.edges]
+        assert "source.test_db.raw.events" in edge_froms
+        assert "function.test_project.is_positive_int" not in edge_froms
