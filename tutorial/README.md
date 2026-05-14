@@ -22,6 +22,52 @@ Use this tutorial project to exercise all supported stateful permutations:
 | Supported stateful commands | `orc dbt run`, `orc dbt test` | Same orchestration flow as build: compute freshness, patch reusable nodes, update state. |
 | Unsupported stateful command | `orc dbt seed` | Pass-through to dbt even when `use_stateful=true`. |
 
+## Functions
+
+To test functions in Postgres:
+
+1. Create a `functions` folder
+1. Create a `schema.yml` file (content below)
+1. Create a `{{function_name}}.sql` file (content below)
+1. Reference the function in a model
+
+Schema.yml:
+
+```yaml[schema.yml]
+functions:
+  - name: is_positive_int # required
+    description: My UDF that returns 1 if a string represents a naked positive integer (like "10", "+8" is not allowed). # optional
+    config:
+      schema: raw
+      database: "{{ target.database }}"
+      volatility: deterministic
+    arguments: # optional
+      - name: a_string # required if arguments is specified
+        data_type: text # required if arguments is specified
+        description: The string that I want to check if it's representing a positive integer (like "10")
+        default_value: "'1'" # optional, available in Snowflake and Postgres
+    returns: # required
+      data_type: integer # required
+```
+
+Function.sql:
+
+```sql[is_positive_int.sql]
+SELECT CASE WHEN a_string ~ '^[0-9]+$' THEN 1 ELSE 0 END
+```
+
+Reference the function in a model:
+
+```sql[stg_events.sql]
+select
+    id,
+    amount,
+    {{ function('is_positive_int') }}(amount::text) as is_positive_amount,
+    event_at,
+    customer_id
+from {{ ref('raw_events') }}
+```
+
 ## Local run (Postgres)
 
 Ensure `uv sync --extra dev --extra adapters` has been run.

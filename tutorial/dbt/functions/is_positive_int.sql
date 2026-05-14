@@ -1,1 +1,0 @@
-SELECT CASE WHEN a_string ~ '^[0-9]+$' THEN 1 ELSE 0 END
