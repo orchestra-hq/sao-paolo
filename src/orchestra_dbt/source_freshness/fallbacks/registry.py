@@ -10,7 +10,7 @@ FALLBACK_BY_ADAPTER_TYPE: dict[str, Callable[..., Any]] = {
 
 def loaded_at_fields_unset(compiled_node: Any) -> bool:
     return (
-        compiled_node.loaded_at_query is None and compiled_node.loaded_at_field is None
+        hasattr(compiled_node, 'loaded_at_query') and compiled_node.loaded_at_query is None and compiled_node.loaded_at_field is None
     )
 
 
