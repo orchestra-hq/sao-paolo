@@ -88,6 +88,4 @@ Today, non-HTTP persistence is selected from `state_file` / `ORCHESTRA_STATE_FIL
 3. Wire the backend in `resolved_state_backend()` in `state_backends/factory.py` (`match` on `StateBackendKind`). Prefer **lazy imports** inside the branch if the backend needs optional third-party packages, and declare those under `[project.optional-dependencies]` in `pyproject.toml` (the S3 backend uses the `s3` extra and `boto3` this way).
 4. Add tests for config parsing and backend behaviour under `tests/unit/` (config tests already cover S3 URI parsing in `test_config.py`).
 
-© 2026 Orchestra Technologies Limited. All rights reserved.
-
-This source code is the property of Orchestra Technologies Limited. Unauthorized use, copying, modification, or distribution is prohibited.
+By contributing, you agree that your contributions will be licensed under the [Apache License 2.0](LICENSE).
