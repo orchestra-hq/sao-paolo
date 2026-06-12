@@ -181,6 +181,6 @@ Add `.orchestra/` (or your chosen path) to `.gitignore` if the file should not b
 
 For contributor guidance, see [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
-© 2026 Orchestra Technologies Limited. All rights reserved.
+## License
 
-This source code is the property of Orchestra Technologies Limited. Unauthorized use, copying, modification, or distribution is prohibited.
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.
