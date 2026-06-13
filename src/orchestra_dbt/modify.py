@@ -77,28 +77,21 @@ def _split_selection_args(
     includes: list[str] = []
     excludes: list[str] = []
 
-    index = 0
-    while index < len(args):
-        token = args[index]
+    collecting: list[str] | None = None
+    for token in args:
         flag = token.split("=", 1)[0]
-        if flag in _SELECT_FLAGS:
-            target = includes
-        elif flag in _EXCLUDE_FLAGS:
-            target = excludes
-        else:
+        if flag in _SELECT_FLAGS or flag in _EXCLUDE_FLAGS:
+            collecting = includes if flag in _SELECT_FLAGS else excludes
+            if "=" in token:
+                collecting.extend(token.split("=", 1)[1].split())
+                collecting = None
+        elif token.startswith("-"):
             passthrough.append(token)
-            index += 1
-            continue
-
-        if "=" in token:
-            target.extend(token.split("=", 1)[1].split())
-            index += 1
-            continue
-
-        index += 1
-        while index < len(args) and not args[index].startswith("-"):
-            target.extend(args[index].split())
-            index += 1
+            collecting = None
+        elif collecting is None:
+            passthrough.append(token)
+        else:
+            collecting.extend(token.split())
 
     return passthrough, includes, excludes
 
@@ -140,10 +133,6 @@ def _command_runs_tests(cmd: list[str]) -> bool:
     return len(cmd) > 1 and cmd[1] in _TEST_RUNNING_SUBCOMMANDS
 
 
-def _has_indirect_selection_flag(cmd: list[str]) -> bool:
-    return any(arg.split("=", 1)[0] == "--indirect-selection" for arg in cmd)
-
-
 def modify_dbt_command(cmd: list[str]) -> list[str]:
     if "--selector" in cmd:
         success_updating_selectors = False
@@ -172,10 +161,14 @@ def modify_dbt_command(cmd: list[str]) -> list[str]:
         )
 
     cmd += ["--exclude", f"tag:{ORCHESTRA_REUSED_NODE}"]
+    user_set_indirect_selection = any(
+        arg == "--indirect-selection" or arg.startswith("--indirect-selection=")
+        for arg in cmd
+    )
     if (
         _command_runs_tests(cmd)
         and not user_has_selection
-        and not _has_indirect_selection_flag(cmd)
+        and not user_set_indirect_selection
     ):
         cmd += ["--indirect-selection", INDIRECT_SELECTION_CAUTIOUS]
 

@@ -191,13 +191,19 @@ class TestModifyDbtCommand:
             "cautious",
         ]
 
-    def test_bare_build_respects_user_indirect_selection(self):
-        result = modify_dbt_command(["dbt", "build", "--indirect-selection", "eager"])
+    @pytest.mark.parametrize(
+        "user_args",
+        [
+            ["--indirect-selection", "eager"],
+            ["--indirect-selection=eager"],
+        ],
+    )
+    def test_bare_build_respects_user_indirect_selection(self, user_args):
+        result = modify_dbt_command(["dbt", "build", *user_args])
         assert result == [
             "dbt",
             "build",
-            "--indirect-selection",
-            "eager",
+            *user_args,
             "--exclude",
             f"tag:{ORCHESTRA_REUSED_NODE}",
         ]
