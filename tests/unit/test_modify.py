@@ -286,6 +286,45 @@ class TestModifyDbtCommand:
             f"tag:{ORCHESTRA_REUSED_NODE}",
         ]
 
+    def test_generated_selector_handles_empty_selectors_file(self):
+        # An empty selectors.yml loads as None; must not crash.
+        with patch("src.orchestra_dbt.modify.load_yaml", return_value=None):
+            with patch("src.orchestra_dbt.modify.save_yaml") as mock_save:
+                result = modify_dbt_command(["dbt", "build", "--select", "a"])
+        assert result[-2] == "--selector"
+        saved_selector = mock_save.call_args[0][1]["selectors"][-1]
+        assert saved_selector["definition"] == {
+            "union": ["a", {"exclude": [_REUSED_EXCLUSION_CRITERIA]}]
+        }
+
+    def test_generated_selector_preserves_existing_selectors(self):
+        existing = {
+            "selectors": [{"name": "nightly", "definition": {"tag": "nightly"}}]
+        }
+        with patch("src.orchestra_dbt.modify.load_yaml", return_value=existing):
+            with patch("src.orchestra_dbt.modify.save_yaml") as mock_save:
+                result = modify_dbt_command(["dbt", "build", "--select", "a"])
+        saved = mock_save.call_args[0][1]["selectors"]
+        assert [s["name"] for s in saved] == ["nightly", result[-1]]
+
+    def test_malformed_selectors_file_falls_back_to_tag_exclusion(self):
+        with patch(
+            "src.orchestra_dbt.modify.load_yaml", return_value={"selectors": "oops"}
+        ):
+            with patch("src.orchestra_dbt.modify.save_yaml") as mock_save:
+                with patch("src.orchestra_dbt.modify.log_error"):
+                    with patch("src.orchestra_dbt.modify.log_warn"):
+                        result = modify_dbt_command(["dbt", "build", "--select", "a"])
+        mock_save.assert_not_called()
+        assert result == [
+            "dbt",
+            "build",
+            "--select",
+            "a",
+            "--exclude",
+            f"tag:{ORCHESTRA_REUSED_NODE}",
+        ]
+
     @pytest.mark.parametrize("success", [True, False])
     def test_modify_dbt_command_with_selector_success(self, success):
         cmd = ["dbt", "run", "--selector", "test_selector"]

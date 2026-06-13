@@ -108,20 +108,26 @@ def _append_generated_selector(definition: dict[str, Any]) -> str | None:
     try:
         selectors_yml = load_yaml("selectors.yml")
     except FileNotFoundError:
-        selectors_yml = {"selectors": []}
+        selectors_yml = None
     except Exception as e:
         log_error(f"Error loading selectors.yml: {e}")
         return None
 
-    selectors = selectors_yml.get("selectors")
+    if selectors_yml is None:  # missing or empty file
+        selectors_yml = {}
+    selectors = (
+        selectors_yml.get("selectors", []) if isinstance(selectors_yml, dict) else None
+    )
     if not isinstance(selectors, list):
-        selectors = []
+        log_error("`selectors.yml` is malformed; leaving it untouched.")
+        return None
 
     name = f"orchestra_reused_{str(uuid.uuid4()).replace('-', '_')}"
     selectors.append({"name": name, "definition": definition})
+    selectors_yml["selectors"] = selectors
 
     try:
-        save_yaml("selectors.yml", {"selectors": selectors})
+        save_yaml("selectors.yml", selectors_yml)
     except Exception as e:
         log_error(f"Error saving selectors.yml: {e}")
         return None
