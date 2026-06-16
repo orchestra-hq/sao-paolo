@@ -335,6 +335,23 @@ class TestModifyDbtCommand:
             assert result == cmd
         mock_update.assert_called_once_with("test_selector")
 
+    @pytest.mark.parametrize("subcommand", ["build", "test"])
+    def test_modify_dbt_command_with_selector_does_not_generate_selector(
+        self, subcommand
+    ):
+        cmd = ["dbt", subcommand, "--selector", "test_selector"]
+        with patch(
+            "src.orchestra_dbt.modify.update_selectors_yaml", return_value=True
+        ) as mock_update:
+            with patch("src.orchestra_dbt.modify.save_yaml") as mock_save_yaml:
+                result = modify_dbt_command(cmd)
+
+        assert result == cmd
+        assert "--exclude" not in result
+        assert "--selector" in result
+        mock_update.assert_called_once_with("test_selector")
+        mock_save_yaml.assert_not_called()
+
     def test_modify_dbt_command_with_selector_no_tag(self):
         with patch("src.orchestra_dbt.modify.log_error") as mock_log_error:
             modify_dbt_command(["dbt", "run", "--selector"])
