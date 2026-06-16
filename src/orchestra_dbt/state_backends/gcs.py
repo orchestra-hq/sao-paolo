@@ -33,6 +33,15 @@ class GCSStateBackend:
             blob = client.bucket(bucket).blob(key)
             raw = blob.download_as_text(encoding="utf-8")
         except NotFound:
+            # Distinguish missing blob (expected on first run) from missing bucket
+            # (config error). Both return 404 from the GCS API, so verify the bucket
+            # exists before treating this as an empty-state case.
+            try:
+                client.get_bucket(bucket)
+            except NotFound as bucket_err:
+                raise StateLoadError(
+                    f"GCS bucket 'gs://{bucket}' does not exist: {bucket_err}"
+                ) from bucket_err
             log_info(
                 f"No state object at gs://{bucket}/{key}; starting with empty state."
             )

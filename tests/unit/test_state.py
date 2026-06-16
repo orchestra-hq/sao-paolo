@@ -877,10 +877,15 @@ class TestLoadStateGCS:
         monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
         monkeypatch.setenv("ORCHESTRA_STATE_FILE", "gs://test-bucket/prefix/state.json")
 
+        # cloud-storage-mocker doesn't implement get_bucket; patch it to confirm
+        # the bucket exists so the missing-blob path is exercised.
+        from cloud_storage_mocker._core import Client as MockClient
+
         with gcs_patch(
             mounts=[Mount("test-bucket", tmp_path / "gcs", readable=True, writable=True)]
         ):
-            assert load_state() == StateApiModel(state={})
+            with patch.object(MockClient, "get_bucket", return_value=None, create=True):
+                assert load_state() == StateApiModel(state={})
 
     def test_load_state_gcs_success(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path
