@@ -42,6 +42,15 @@ class GCSStateBackend:
                 raise StateLoadError(
                     f"GCS bucket 'gs://{bucket}' does not exist: {bucket_err}"
                 ) from bucket_err
+            except (Forbidden, Unauthorized) as e:
+                raise StateLoadError(
+                    f"Permission denied reading gs://{bucket}/{key}. "
+                    f"Ensure the service account has storage.objects.get permission: {e}"
+                ) from e
+            except Exception as e:
+                raise StateLoadError(
+                    f"Failed to load state from gs://{bucket}/{key}: {e}"
+                ) from e
             log_info(
                 f"No state object at gs://{bucket}/{key}; starting with empty state."
             )
