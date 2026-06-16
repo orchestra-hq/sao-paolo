@@ -3,12 +3,13 @@ from typing import Literal
 from ..logger import log_info
 from ..models import StateApiModel
 
-StateBackendLabel = Literal["http", "local_file", "s3"]
+StateBackendLabel = Literal["http", "local_file", "s3", "gcs"]
 
 _LOAD_MESSAGE_LABEL: dict[StateBackendLabel, str] = {
     "http": "Orchestra HTTP",
     "local_file": "local file",
     "s3": "S3",
+    "gcs": "GCS",
 }
 
 
@@ -18,7 +19,7 @@ def log_state_loaded(backend: StateBackendLabel, state: StateApiModel) -> None:
 
 
 def log_state_saved(backend: StateBackendLabel) -> None:
-    if backend == "s3":
-        log_info("State saved to S3")
+    if backend in ("s3", "gcs"):
+        log_info(f"State saved to {_LOAD_MESSAGE_LABEL[backend]}")
     else:
         log_info("State saved")

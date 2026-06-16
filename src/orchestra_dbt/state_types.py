@@ -8,6 +8,7 @@ class StateBackendKind(str, Enum):
     HTTP = "http"
     LOCAL_FILE = "local_file"
     S3 = "s3"
+    GCS = "gcs"
 
 
 class StateBackendConfig(BaseModel):
@@ -17,6 +18,8 @@ class StateBackendConfig(BaseModel):
     local_path: Path | None = None
     s3_bucket: str | None = None
     s3_key: str | None = None
+    gcs_bucket: str | None = None
+    gcs_key: str | None = None
 
 
 def parse_s3_uri(uri: str) -> tuple[str, str]:
@@ -37,6 +40,24 @@ def parse_s3_uri(uri: str) -> tuple[str, str]:
     return bucket, key
 
 
+def parse_gcs_uri(uri: str) -> tuple[str, str]:
+    prefix = "gs://"
+    if not uri.lower().startswith(prefix):
+        msg = f"Expected GCS URI starting with {prefix!r}, got: {uri!r}"
+        raise ValueError(msg)
+    rest = uri[len(prefix) :]
+    if "/" not in rest:
+        msg = f"GCS URI must include a key after the bucket: {uri!r}"
+        raise ValueError(msg)
+    bucket, _, key = rest.partition("/")
+    bucket = bucket.strip()
+    key = key.lstrip("/")
+    if not bucket or not key:
+        msg = f"Invalid GCS URI (bucket and key required): {uri!r}"
+        raise ValueError(msg)
+    return bucket, key
+
+
 def backend_config_from_state_location(
     raw: str, resolve_relative_from: Path
 ) -> StateBackendConfig:
@@ -47,6 +68,13 @@ def backend_config_from_state_location(
             kind=StateBackendKind.S3,
             s3_bucket=bucket,
             s3_key=key,
+        )
+    if stripped.lower().startswith("gs://"):
+        bucket, key = parse_gcs_uri(stripped)
+        return StateBackendConfig(
+            kind=StateBackendKind.GCS,
+            gcs_bucket=bucket,
+            gcs_key=key,
         )
     p = Path(stripped).expanduser()
     if p.is_absolute():

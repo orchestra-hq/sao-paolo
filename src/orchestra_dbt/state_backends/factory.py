@@ -60,3 +60,11 @@ def resolved_state_backend(cwd: Path | None = None) -> StateBackend:
                     "State backend config is S3 but s3_bucket or s3_key is missing"
                 )
             return S3StateBackend(cfg.s3_bucket, cfg.s3_key)
+        case StateBackendKind.GCS:
+            from .gcs import GCSStateBackend
+
+            if cfg.gcs_bucket is None or cfg.gcs_key is None:
+                raise RuntimeError(
+                    "State backend config is GCS but gcs_bucket or gcs_key is missing"
+                )
+            return GCSStateBackend(cfg.gcs_bucket, cfg.gcs_key)
