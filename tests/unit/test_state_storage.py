@@ -1,6 +1,11 @@
 import pytest
 
-from src.orchestra_dbt.state_types import parse_gcs_uri, parse_s3_uri
+from src.orchestra_dbt.state_backends.factory import resolve_state_backend_config
+from src.orchestra_dbt.state_types import (
+    StateBackendKind,
+    parse_gcs_uri,
+    parse_s3_uri,
+)
 
 
 @pytest.mark.parametrize(
@@ -53,10 +58,6 @@ def test_parse_gcs_uri_ok(uri: str, bucket: str, key: str) -> None:
 def test_parse_gcs_uri_invalid(uri: str) -> None:
     with pytest.raises(ValueError):
         parse_gcs_uri(uri)
-
-
-from src.orchestra_dbt.state_backends.factory import resolve_state_backend_config
-from src.orchestra_dbt.state_types import StateBackendKind
 
 
 def test_gs_uri_routes_to_gcs_backend(
