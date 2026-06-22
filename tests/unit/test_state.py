@@ -4,6 +4,8 @@ from unittest.mock import patch
 import boto3
 import httpx
 import pytest
+from cloud_storage_mocker import Mount
+from cloud_storage_mocker import patch as gcs_patch
 from moto import mock_aws
 from pytest_httpx import HTTPXMock
 
@@ -20,6 +22,7 @@ from src.orchestra_dbt.models import (
 )
 from src.orchestra_dbt.state import (
     StateLoadError,
+    StateSaveError,
     _load_run_results,
     load_state,
     save_state,
@@ -864,3 +867,105 @@ class TestSaveStateS3:
         obj = conn.get_object(Bucket="bucket", Key="dir/f.json")
         body = obj["Body"].read()
         assert b'"checksum"' in body
+
+
+class TestLoadStateGCS:
+    def test_load_state_gcs_missing_blob_starts_empty(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", "gs://test-bucket/prefix/state.json")
+
+        # cloud-storage-mocker doesn't implement get_bucket; patch it to confirm
+        # the bucket exists so the missing-blob path is exercised.
+        from cloud_storage_mocker._core import Client as MockClient
+
+        with gcs_patch(
+            mounts=[Mount("test-bucket", tmp_path / "gcs", readable=True, writable=True)]
+        ):
+            with patch.object(MockClient, "get_bucket", return_value=None, create=True):
+                assert load_state() == StateApiModel(state={})
+
+    def test_load_state_gcs_success(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        bucket_dir = tmp_path / "gcs"
+        blob_path = bucket_dir / "k.json"
+        bucket_dir.mkdir()
+        blob_path.write_text(
+            '{"state": {"model.x": {"checksum": "c", '
+            '"last_updated": "2024-01-01T12:00:00", "sources": {}}}}'
+        )
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", "gs://test-bucket/k.json")
+
+        with gcs_patch(
+            mounts=[Mount("test-bucket", bucket_dir, readable=True, writable=True)]
+        ):
+            loaded = load_state()
+
+        assert "model.x" in loaded.state
+        assert loaded.state["model.x"].checksum == "c"
+
+    def test_load_state_gcs_credential_error_raises_state_load_error(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", "gs://bucket/state.json")
+
+        from google.auth.exceptions import DefaultCredentialsError
+
+        with patch(
+            "orchestra_dbt.state_backends.gcs.storage.Client",
+            side_effect=DefaultCredentialsError("no credentials"),
+        ):
+            with pytest.raises(StateLoadError):
+                load_state()
+
+
+class TestSaveStateGCS:
+    def test_save_state_gcs_uploads_blob(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        bucket_dir = tmp_path / "gcs"
+        bucket_dir.mkdir()
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", "gs://bucket/dir/f.json")
+
+        with gcs_patch(
+            mounts=[Mount("bucket", bucket_dir, readable=True, writable=True)]
+        ):
+            save_state(
+                StateApiModel(
+                    state={
+                        "m": StateItem(
+                            last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                            checksum="1",
+                            sources={},
+                        )
+                    }
+                )
+            )
+
+        body = (bucket_dir / "dir" / "f.json").read_text()
+        assert '"checksum"' in body
+
+    def test_save_state_gcs_credential_error_raises_state_save_error(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", "gs://bucket/state.json")
+
+        from google.auth.exceptions import DefaultCredentialsError
+
+        with patch(
+            "orchestra_dbt.state_backends.gcs.storage.Client",
+            side_effect=DefaultCredentialsError("no credentials"),
+        ):
+            with pytest.raises(StateSaveError):
+                save_state(StateApiModel(state={}))
