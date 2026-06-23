@@ -9,6 +9,7 @@ class StateBackendKind(str, Enum):
     LOCAL_FILE = "local_file"
     S3 = "s3"
     GCS = "gcs"
+    AZURE = "azure"
 
 
 class StateBackendConfig(BaseModel):
@@ -20,6 +21,9 @@ class StateBackendConfig(BaseModel):
     s3_key: str | None = None
     gcs_bucket: str | None = None
     gcs_key: str | None = None
+    azure_account: str | None = None
+    azure_container: str | None = None
+    azure_key: str | None = None
 
 
 def parse_s3_uri(uri: str) -> tuple[str, str]:
@@ -58,6 +62,35 @@ def parse_gcs_uri(uri: str) -> tuple[str, str]:
     return bucket, key
 
 
+def parse_abfs_uri(uri: str) -> tuple[str, str, str]:
+    lower = uri.lower()
+    if lower.startswith("abfss://"):
+        prefix = "abfss://"
+    elif lower.startswith("abfs://"):
+        prefix = "abfs://"
+    else:
+        msg = f"Expected ABFS URI starting with 'abfs://' or 'abfss://', got: {uri!r}"
+        raise ValueError(msg)
+    rest = uri[len(prefix) :]
+    # authority is container@account.dfs.core.windows.net
+    if "/" not in rest:
+        msg = f"ABFS URI must include a path after the authority: {uri!r}"
+        raise ValueError(msg)
+    authority, _, key = rest.partition("/")
+    key = key.lstrip("/")
+    if "@" not in authority:
+        msg = f"ABFS URI authority must be container@account.dfs.core.windows.net: {uri!r}"
+        raise ValueError(msg)
+    container, _, host = authority.partition("@")
+    account = host.split(".")[0]
+    container = container.strip()
+    account = account.strip()
+    if not container or not account or not key:
+        msg = f"Invalid ABFS URI (container, account, and path required): {uri!r}"
+        raise ValueError(msg)
+    return account, container, key
+
+
 def backend_config_from_state_location(
     raw: str, resolve_relative_from: Path
 ) -> StateBackendConfig:
@@ -75,6 +108,14 @@ def backend_config_from_state_location(
             kind=StateBackendKind.GCS,
             gcs_bucket=bucket,
             gcs_key=key,
+        )
+    if stripped.lower().startswith(("abfs://", "abfss://")):
+        account, container, key = parse_abfs_uri(stripped)
+        return StateBackendConfig(
+            kind=StateBackendKind.AZURE,
+            azure_account=account,
+            azure_container=container,
+            azure_key=key,
         )
     p = Path(stripped).expanduser()
     if p.is_absolute():

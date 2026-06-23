@@ -89,6 +89,36 @@ If you want to run state-aware dbt Core code without managing state files and th
 
 To store your dbt Core state in S3, install the optional dependency (`pip install 'dbt-orchestra[s3]'` or `uv sync --extra s3`). Credentials and region follow the usual [AWS SDK resolution](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html) (environment variables, shared config, IAM role, etc.). If the object does not exist yet, load starts with an empty state and save creates the object. The state file parameter expects a `s3://bucket/key` URI.
 
+### GCS backend
+
+To store your dbt Core state in Google Cloud Storage, install the optional dependency (`pip install 'dbt-orchestra[gcs]'` or `uv sync --extra gcs`). Credentials follow [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/application-default-credentials) — run `gcloud auth application-default login` for local development, or set `GOOGLE_APPLICATION_CREDENTIALS` to a service account key file, or rely on the attached service account when running on GCP. The bucket must already exist; if the object does not exist yet, load starts with an empty state and save creates the object. The state file parameter expects a `gs://bucket/key` URI.
+
+```toml
+[tool.orchestra_dbt]
+use_stateful = true
+state_file = "gs://my-bucket/dbt_state.json"
+```
+
+```bash
+gcloud auth application-default login   # once, for local dev
+orc dbt run
+```
+
+### ABS backend
+
+To store your dbt Core state in Azure Blob Storage, install the optional dependency (`pip install 'dbt-orchestra[azure]'` or `uv sync --extra azure`). Credentials follow [DefaultAzureCredential](https://learn.microsoft.com/en-us/azure/developer/python/sdk/authentication/credential-chains#defaultazurecredential-overview) — run `az login` for local development, or configure a service principal via `AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET` / `AZURE_TENANT_ID`, or rely on the attached managed identity when running on Azure. Alternatively, set `AZURE_STORAGE_CONNECTION_STRING` for simpler setups. The container must already exist; if the blob does not exist yet, load starts with an empty state and save creates the blob. The state file parameter expects an `abfs://` or `abfss://` URI of the form `abfss://container@account.dfs.core.windows.net/path`. Both schemes always connect via TLS.
+
+```toml
+[tool.orchestra_dbt]
+use_stateful = true
+state_file = "abfss://my-container@my-account.dfs.core.windows.net/dbt_state.json"
+```
+
+```bash
+az login   # once, for local dev
+orc dbt run
+```
+
 ## Daily usage
 
 Stateful orchestration only runs for `dbt build`, `dbt run`, and `dbt test`. Other dbt subcommands are passed through to dbt unchanged.
@@ -130,7 +160,7 @@ For boolean settings, if the environment variable is **set**, the merged value i
 
 | Key | Type | Default | Purpose |
 | --- | --- | --- | --- |
-| `state_file` | string (optional) | — | Local JSON path or `s3://bucket/key` for state (see backend table below). |
+| `state_file` | string (optional) | — | Local JSON path, `s3://bucket/key`, `gs://bucket/key`, or `abfss://container@account.dfs.core.windows.net/key` for state (see [backend table](#state-backends) above). |
 | `use_stateful` | bool | `false` | Turn on stateful orchestration for supported dbt commands. |
 | `local_run` | bool | `true` | After reuse, revert patched files (typical for local iteration). |
 | `debug` | bool | `false` | Verbose logging. |
@@ -141,10 +171,10 @@ For boolean settings, if the environment variable is **set**, the merged value i
 | Priority | Setting | Effect |
 | --- | --- | --- |
 | 1 | `ORCHESTRA_API_KEY` | Load/save state via Orchestra HTTP. When the API key is set, `ORCHESTRA_STATE_FILE` and `state_file` in `pyproject.toml` are **ignored** for choosing the state backend. |
-| 2 | `ORCHESTRA_STATE_FILE` | Path to a JSON file, or `s3://bucket/key` for an object in S3. Relative file paths are resolved from the current working directory. Used only when `ORCHESTRA_API_KEY` is unset. |
-| 3 | `[tool.orchestra_dbt]` / `state_file` in `pyproject.toml` | Path to a JSON file, or `s3://bucket/key`. Relative file paths are resolved from the directory that contains the **discovered** `pyproject.toml`; absolute paths are used as-is. Used only when `ORCHESTRA_API_KEY` is unset and `ORCHESTRA_STATE_FILE` is unset. |
+| 2 | `ORCHESTRA_STATE_FILE` | Path to a JSON file, or `s3://bucket/key`, `gs://bucket/key`, or `abfss://container@account.dfs.core.windows.net/key`. Relative file paths are resolved from the current working directory. Used only when `ORCHESTRA_API_KEY` is unset. |
+| 3 | `[tool.orchestra_dbt]` / `state_file` in `pyproject.toml` | Path to a JSON file, or `s3://bucket/key`, `gs://bucket/key`, or `abfss://container@account.dfs.core.windows.net/key`. Relative file paths are resolved from the directory that contains the **discovered** `pyproject.toml`; absolute paths are used as-is. Used only when `ORCHESTRA_API_KEY` is unset and `ORCHESTRA_STATE_FILE` is unset. |
 
-If an effective local path or S3 URI is configured (rows 2 or 3), that **file** or **S3** backend is used and an API key is not required for state. If `ORCHESTRA_API_KEY` is set (row 1), the **HTTP backend** is used regardless of file settings.
+If an effective local path, S3, GCS, or ABS URI is configured (rows 2 or 3), that backend is used and an API key is not required for state. If `ORCHESTRA_API_KEY` is set (row 1), the **HTTP backend** is used regardless of file settings.
 
 ### Warehouse adapters and implicit source freshness
 

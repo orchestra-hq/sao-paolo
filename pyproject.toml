@@ -53,6 +53,9 @@ s3 = ["boto3"]
 # GCS-backed state (optional; google-cloud-storage loaded only when GCS URI is configured)
 gcs = ["google-cloud-storage"]
 
+# Azure Blob Storage-backed state (optional; azure-storage-blob and azure-identity loaded only when ABFSS URI is configured)
+azure = ["azure-storage-blob", "azure-identity"]
+
 [project.scripts]
 orc = "orchestra_dbt.cli:main"
 
@@ -69,3 +72,9 @@ where = ["src"]
 
 [tool.uv]
 package = true
+
+[dependency-groups]
+dev = [
+    "azure-identity>=1.25.3",
+    "azure-storage-blob>=12.30.0",
+]

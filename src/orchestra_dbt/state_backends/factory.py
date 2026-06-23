@@ -68,3 +68,11 @@ def resolved_state_backend(cwd: Path | None = None) -> StateBackend:
                     "State backend config is GCS but gcs_bucket or gcs_key is missing"
                 )
             return GCSStateBackend(cfg.gcs_bucket, cfg.gcs_key)
+        case StateBackendKind.AZURE:
+            from .azure import AzureStateBackend
+
+            if cfg.azure_account is None or cfg.azure_container is None or cfg.azure_key is None:
+                raise RuntimeError(
+                    "State backend config is AZURE but azure_account, azure_container, or azure_key is missing"
+                )
+            return AzureStateBackend(cfg.azure_account, cfg.azure_container, cfg.azure_key)
