@@ -89,6 +89,21 @@ If you want to run state-aware dbt Core code without managing state files and th
 
 To store your dbt Core state in S3, install the optional dependency (`pip install 'dbt-orchestra[s3]'` or `uv sync --extra s3`). Credentials and region follow the usual [AWS SDK resolution](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html) (environment variables, shared config, IAM role, etc.). If the object does not exist yet, load starts with an empty state and save creates the object. The state file parameter expects a `s3://bucket/key` URI.
 
+### GCS backend
+
+To store your dbt Core state in Google Cloud Storage, install the optional dependency (`pip install 'dbt-orchestra[gcs]'` or `uv sync --extra gcs`). Credentials follow [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/application-default-credentials) — run `gcloud auth application-default login` for local development, or set `GOOGLE_APPLICATION_CREDENTIALS` to a service account key file, or rely on the attached service account when running on GCP. The bucket must already exist; if the object does not exist yet, load starts with an empty state and save creates the object. The state file parameter expects a `gs://bucket/key` URI.
+
+```toml
+[tool.orchestra_dbt]
+use_stateful = true
+state_file = "gs://my-bucket/dbt_state.json"
+```
+
+```bash
+gcloud auth application-default login   # once, for local dev
+orc dbt run
+```
+
 ## Daily usage
 
 Stateful orchestration only runs for `dbt build`, `dbt run`, and `dbt test`. Other dbt subcommands are passed through to dbt unchanged.
@@ -130,7 +145,7 @@ For boolean settings, if the environment variable is **set**, the merged value i
 
 | Key | Type | Default | Purpose |
 | --- | --- | --- | --- |
-| `state_file` | string (optional) | — | Local JSON path or `s3://bucket/key` for state (see backend table below). |
+| `state_file` | string (optional) | — | Local JSON path, `s3://bucket/key`, or `gs://bucket/key` for state (see [backend table](#state-backends) above). |
 | `use_stateful` | bool | `false` | Turn on stateful orchestration for supported dbt commands. |
 | `local_run` | bool | `true` | After reuse, revert patched files (typical for local iteration). |
 | `debug` | bool | `false` | Verbose logging. |
