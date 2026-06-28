@@ -31,6 +31,8 @@ Security = "https://github.com/orchestra-hq/sao-paolo/security/policy"
 
 [project.optional-dependencies]
 dev = [
+    "azure-identity>=1.25.3",
+    "azure-storage-blob>=12.30.0",
     "basedpyright",
     "boto3",
     "cloud-storage-mocker",
@@ -72,9 +74,3 @@ where = ["src"]
 
 [tool.uv]
 package = true
-
-[dependency-groups]
-dev = [
-    "azure-identity>=1.25.3",
-    "azure-storage-blob>=12.30.0",
-]

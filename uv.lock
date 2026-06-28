@@ -503,6 +503,8 @@ debug = [
     { name = "graphviz" },
 ]
 dev = [
+    { name = "azure-identity" },
+    { name = "azure-storage-blob" },
     { name = "basedpyright" },
     { name = "boto3" },
     { name = "cloud-storage-mocker" },
@@ -519,17 +521,13 @@ s3 = [
     { name = "boto3" },
 ]
 
-[package.dev-dependencies]
-dev = [
-    { name = "azure-identity" },
-    { name = "azure-storage-blob" },
-]
-
 [package.metadata]
 requires-dist = [
     { name = "awscrt", marker = "extra == 'debug'" },
     { name = "azure-identity", marker = "extra == 'azure'" },
+    { name = "azure-identity", marker = "extra == 'dev'", specifier = ">=1.25.3" },
     { name = "azure-storage-blob", marker = "extra == 'azure'" },
+    { name = "azure-storage-blob", marker = "extra == 'dev'", specifier = ">=12.30.0" },
     { name = "basedpyright", marker = "extra == 'dev'" },
     { name = "boto3", marker = "extra == 'debug'" },
     { name = "boto3", marker = "extra == 'dev'" },
@@ -551,12 +549,6 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'" },
 ]
 provides-extras = ["dev", "adapters", "debug", "s3", "gcs", "azure"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "azure-identity", specifier = ">=1.25.3" },
-    { name = "azure-storage-blob", specifier = ">=12.30.0" },
-]
 
 [[package]]
 name = "dbt-postgres"
