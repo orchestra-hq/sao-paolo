@@ -13,6 +13,16 @@ from ..state_filters import apply_integration_account_filter
 from .logging import log_state_loaded, log_state_saved
 
 
+def _account_from_connection_string(conn_str: str) -> str | None:
+    # Connection strings are `key=value;key=value;...`. AccountKey values are
+    # base64 and may themselves contain `=`, so split on the first `=` only.
+    for part in conn_str.split(";"):
+        name, sep, value = part.partition("=")
+        if sep and name.strip().lower() == "accountname":
+            return value.strip()
+    return None
+
+
 class AzureStateBackend:
     def __init__(self, account: str, container: str, key: str) -> None:
         self._account = account
@@ -20,11 +30,22 @@ class AzureStateBackend:
         self._key = key
 
     def _get_client(self) -> BlobServiceClient:
-        # The clients construct lazily and do not authenticate until a blob
-        # operation runs, so credential failures surface in load()/save() rather
-        # than here.
+        # Credential auth is lazy (no token is acquired until the first blob
+        # call), so auth failures surface in load()/save(). Connection-string
+        # parsing, however, happens eagerly here and can raise ValueError; callers
+        # wrap this method so such setup errors become StateLoad/SaveError.
         conn_str = os.environ.get("AZURE_STORAGE_CONNECTION_STRING")
         if conn_str:
+            # The URI is authoritative for which account/container/blob we touch
+            # (mirroring S3/GCS). A connection string for a different account would
+            # silently read/write the wrong place, so reject the mismatch.
+            conn_account = _account_from_connection_string(conn_str)
+            if conn_account and conn_account.lower() != self._account.lower():
+                raise ValueError(
+                    f"AZURE_STORAGE_CONNECTION_STRING is for account "
+                    f"'{conn_account}', but the configured state URI targets "
+                    f"account '{self._account}'. These must match."
+                )
             return BlobServiceClient.from_connection_string(conn_str)
         return BlobServiceClient(
             f"https://{self._account}.blob.core.windows.net",
@@ -35,7 +56,12 @@ class AzureStateBackend:
         account, container, key = self._account, self._container, self._key
         uri = f"abfss://{container}@{account}.dfs.core.windows.net/{key}"
 
-        client = self._get_client()
+        try:
+            client = self._get_client()
+        except Exception as e:
+            raise StateLoadError(
+                f"Failed to initialize Azure client for {uri}: {e}"
+            ) from e
 
         try:
             blob_client = client.get_blob_client(container=container, blob=key)
@@ -88,7 +114,12 @@ class AzureStateBackend:
         account, container, key = self._account, self._container, self._key
         uri = f"abfss://{container}@{account}.dfs.core.windows.net/{key}"
 
-        client = self._get_client()
+        try:
+            client = self._get_client()
+        except Exception as e:
+            raise StateSaveError(
+                f"Failed to initialize Azure client for {uri}: {e}"
+            ) from e
 
         payload = state.model_dump_json(exclude_none=True).encode("utf-8")
         try:

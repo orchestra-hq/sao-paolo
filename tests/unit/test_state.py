@@ -1076,7 +1076,7 @@ class TestAzureStateBackend:
         with pytest.raises(StateSaveError):
             backend.save(StateApiModel(state={}))
 
-    @patch.dict("os.environ", {"AZURE_STORAGE_CONNECTION_STRING": "DefaultEndpointsProtocol=https;AccountName=test;AccountKey=fake;EndpointSuffix=core.windows.net"})
+    @patch.dict("os.environ", {"AZURE_STORAGE_CONNECTION_STRING": "DefaultEndpointsProtocol=https;AccountName=myaccount;AccountKey=fake;EndpointSuffix=core.windows.net"})
     @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
     def test_load_uses_connection_string_when_set(self, mock_client_cls):
         payload = '{"state": {}}'
@@ -1118,3 +1118,52 @@ class TestAzureStateBackend:
         mock_credential_cls.assert_called_once()
         mock_client_cls.assert_called_once()
         assert result == StateApiModel(state={})
+
+    @patch.dict("os.environ", {"AZURE_STORAGE_CONNECTION_STRING": "DefaultEndpointsProtocol=https;AccountName=otheraccount;AccountKey=fake;EndpointSuffix=core.windows.net"})
+    @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
+    def test_load_raises_when_connection_string_account_mismatches_uri(
+        self, mock_client_cls
+    ):
+        from src.orchestra_dbt.state_errors import StateLoadError
+
+        from src.orchestra_dbt.state_backends.azure import AzureStateBackend
+
+        backend = AzureStateBackend("myaccount", "mycontainer", "state.json")
+        with pytest.raises(StateLoadError, match="must match"):
+            backend.load()
+
+        mock_client_cls.from_connection_string.assert_not_called()
+
+    @patch.dict("os.environ", {"AZURE_STORAGE_CONNECTION_STRING": "DefaultEndpointsProtocol=https;AccountName=otheraccount;AccountKey=fake;EndpointSuffix=core.windows.net"})
+    @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
+    def test_save_raises_when_connection_string_account_mismatches_uri(
+        self, mock_client_cls
+    ):
+        from src.orchestra_dbt.state_errors import StateSaveError
+
+        from src.orchestra_dbt.state_backends.azure import AzureStateBackend
+
+        backend = AzureStateBackend("myaccount", "mycontainer", "state.json")
+        with pytest.raises(StateSaveError, match="must match"):
+            backend.save(StateApiModel(state={}))
+
+        mock_client_cls.from_connection_string.assert_not_called()
+
+    @patch.dict("os.environ", {"AZURE_STORAGE_CONNECTION_STRING": "not-a-valid-connection-string"})
+    @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
+    def test_load_wraps_invalid_connection_string_as_state_load_error(
+        self, mock_client_cls
+    ):
+        from src.orchestra_dbt.state_errors import StateLoadError
+
+        mock_client_cls.from_connection_string.side_effect = ValueError(
+            "Connection string missing required connection details."
+        )
+
+        from src.orchestra_dbt.state_backends.azure import AzureStateBackend
+
+        # Account name is absent from the string, so the mismatch guard passes and
+        # from_connection_string runs and raises — which must surface as StateLoadError.
+        backend = AzureStateBackend("myaccount", "mycontainer", "state.json")
+        with pytest.raises(StateLoadError, match="initialize Azure client"):
+            backend.load()
