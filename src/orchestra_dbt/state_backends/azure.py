@@ -20,6 +20,9 @@ class AzureStateBackend:
         self._key = key
 
     def _get_client(self) -> BlobServiceClient:
+        # The clients construct lazily and do not authenticate until a blob
+        # operation runs, so credential failures surface in load()/save() rather
+        # than here.
         conn_str = os.environ.get("AZURE_STORAGE_CONNECTION_STRING")
         if conn_str:
             return BlobServiceClient.from_connection_string(conn_str)
@@ -32,13 +35,7 @@ class AzureStateBackend:
         account, container, key = self._account, self._container, self._key
         uri = f"abfss://{container}@{account}.dfs.core.windows.net/{key}"
 
-        try:
-            client = self._get_client()
-        except ClientAuthenticationError as e:
-            raise StateLoadError(
-                f"Azure credentials not found. Run `az login` or set "
-                f"AZURE_STORAGE_CONNECTION_STRING. Details: {e}"
-            ) from e
+        client = self._get_client()
 
         try:
             blob_client = client.get_blob_client(container=container, blob=key)
@@ -47,10 +44,6 @@ class AzureStateBackend:
         except ResourceNotFoundError:
             try:
                 container_exists = client.get_container_client(container).exists()
-            except (HttpResponseError, ClientAuthenticationError) as e:
-                raise StateLoadError(
-                    f"Failed to check container '{container}' in account '{account}': {e}"
-                ) from e
             except Exception as e:
                 raise StateLoadError(
                     f"Failed to check container '{container}' in account '{account}': {e}"
@@ -61,7 +54,13 @@ class AzureStateBackend:
                 )
             log_info(f"No state blob at {uri}; starting with empty state.")
             return StateApiModel(state={})
-        except (HttpResponseError, ClientAuthenticationError) as e:
+        except ClientAuthenticationError as e:
+            # Must precede HttpResponseError: ClientAuthenticationError is a subclass.
+            raise StateLoadError(
+                f"Azure credentials not found or invalid while reading {uri}. "
+                f"Run `az login` or set AZURE_STORAGE_CONNECTION_STRING. Details: {e}"
+            ) from e
+        except HttpResponseError as e:
             raise StateLoadError(
                 f"Permission denied reading {uri}. "
                 f"Ensure the identity has the 'Storage Blob Data Reader' role: {e}"
@@ -89,13 +88,7 @@ class AzureStateBackend:
         account, container, key = self._account, self._container, self._key
         uri = f"abfss://{container}@{account}.dfs.core.windows.net/{key}"
 
-        try:
-            client = self._get_client()
-        except ClientAuthenticationError as e:
-            raise StateSaveError(
-                f"Azure credentials not found. Run `az login` or set "
-                f"AZURE_STORAGE_CONNECTION_STRING. Details: {e}"
-            ) from e
+        client = self._get_client()
 
         payload = state.model_dump_json(exclude_none=True).encode("utf-8")
         try:
@@ -107,7 +100,13 @@ class AzureStateBackend:
                     content_type="application/json; charset=utf-8"
                 ),
             )
-        except (HttpResponseError, ClientAuthenticationError) as e:
+        except ClientAuthenticationError as e:
+            # Must precede HttpResponseError: ClientAuthenticationError is a subclass.
+            raise StateSaveError(
+                f"Azure credentials not found or invalid while writing {uri}. "
+                f"Run `az login` or set AZURE_STORAGE_CONNECTION_STRING. Details: {e}"
+            ) from e
+        except HttpResponseError as e:
             raise StateSaveError(
                 f"Permission denied writing {uri}. "
                 f"Ensure the identity has the 'Storage Blob Data Contributor' role: {e}"
