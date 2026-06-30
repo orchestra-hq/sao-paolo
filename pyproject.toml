@@ -31,8 +31,11 @@ Security = "https://github.com/orchestra-hq/sao-paolo/security/policy"
 
 [project.optional-dependencies]
 dev = [
+    "azure-identity>=1.25.3",
+    "azure-storage-blob>=12.30.0",
     "basedpyright",
     "boto3",
+    "cloud-storage-mocker",
     "dbt-core>=1.10,<1.12",
     "moto[s3]",
     "pytest-httpx",
@@ -48,6 +51,12 @@ debug = ["awscrt", "boto3", "graphviz"]
 
 # S3-backed state (optional; boto3 loaded only when S3 URI is configured)
 s3 = ["boto3"]
+
+# GCS-backed state (optional; google-cloud-storage loaded only when GCS URI is configured)
+gcs = ["google-cloud-storage"]
+
+# Azure Blob Storage-backed state (optional; azure-storage-blob and azure-identity loaded only when ABFSS URI is configured)
+azure = ["azure-storage-blob", "azure-identity"]
 
 [project.scripts]
 orc = "orchestra_dbt.cli:main"
