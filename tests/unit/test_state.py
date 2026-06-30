@@ -1,5 +1,5 @@
 from datetime import datetime
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import boto3
 import httpx
@@ -969,3 +969,201 @@ class TestSaveStateGCS:
         ):
             with pytest.raises(StateSaveError):
                 save_state(StateApiModel(state={}))
+
+
+class TestAzureStateBackend:
+    @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
+    @patch("src.orchestra_dbt.state_backends.azure.DefaultAzureCredential")
+    def test_load_returns_empty_state_when_blob_missing(
+        self, mock_credential, mock_client_cls
+    ):
+        from azure.core.exceptions import ResourceNotFoundError
+
+        mock_blob_client = MagicMock()
+        mock_blob_client.download_blob.side_effect = ResourceNotFoundError("not found")
+        mock_container_client = MagicMock()
+        mock_container_client.exists.return_value = True
+        mock_service = MagicMock()
+        mock_service.get_blob_client.return_value = mock_blob_client
+        mock_service.get_container_client.return_value = mock_container_client
+        mock_client_cls.return_value = mock_service
+
+        from src.orchestra_dbt.state_backends.azure import AzureStateBackend
+
+        backend = AzureStateBackend("myaccount", "mycontainer", "state.json")
+        result = backend.load()
+
+        assert result == StateApiModel(state={})
+
+    @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
+    @patch("src.orchestra_dbt.state_backends.azure.DefaultAzureCredential")
+    def test_load_raises_when_container_missing(
+        self, mock_credential, mock_client_cls
+    ):
+        from azure.core.exceptions import ResourceNotFoundError
+        from src.orchestra_dbt.state_errors import StateLoadError
+
+        mock_blob_client = MagicMock()
+        mock_blob_client.download_blob.side_effect = ResourceNotFoundError("not found")
+        mock_container_client = MagicMock()
+        mock_container_client.exists.return_value = False
+        mock_service = MagicMock()
+        mock_service.get_blob_client.return_value = mock_blob_client
+        mock_service.get_container_client.return_value = mock_container_client
+        mock_client_cls.return_value = mock_service
+
+        from src.orchestra_dbt.state_backends.azure import AzureStateBackend
+
+        backend = AzureStateBackend("myaccount", "mycontainer", "state.json")
+        with pytest.raises(StateLoadError, match="container"):
+            backend.load()
+
+    @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
+    @patch("src.orchestra_dbt.state_backends.azure.DefaultAzureCredential")
+    def test_load_returns_valid_state(self, mock_credential, mock_client_cls):
+        payload = '{"state": {"model.test": {"checksum": "abc", "last_updated": "2024-01-01T12:00:00", "sources": {}}}}'
+        mock_download = MagicMock()
+        mock_download.readall.return_value = payload.encode("utf-8")
+        mock_blob_client = MagicMock()
+        mock_blob_client.download_blob.return_value = mock_download
+        mock_service = MagicMock()
+        mock_service.get_blob_client.return_value = mock_blob_client
+        mock_client_cls.return_value = mock_service
+
+        from src.orchestra_dbt.state_backends.azure import AzureStateBackend
+
+        backend = AzureStateBackend("myaccount", "mycontainer", "state.json")
+        result = backend.load()
+
+        assert "model.test" in result.state
+        assert result.state["model.test"].checksum == "abc"
+
+    @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
+    @patch("src.orchestra_dbt.state_backends.azure.DefaultAzureCredential")
+    def test_save_uploads_json(self, mock_credential, mock_client_cls):
+        mock_blob_client = MagicMock()
+        mock_service = MagicMock()
+        mock_service.get_blob_client.return_value = mock_blob_client
+        mock_client_cls.return_value = mock_service
+
+        from src.orchestra_dbt.state_backends.azure import AzureStateBackend
+
+        backend = AzureStateBackend("myaccount", "mycontainer", "state.json")
+        backend.save(StateApiModel(state={}))
+
+        mock_blob_client.upload_blob.assert_called_once()
+        call_kwargs = mock_blob_client.upload_blob.call_args
+        assert call_kwargs.kwargs.get("overwrite") is True
+        assert call_kwargs.kwargs.get("content_settings") is not None
+
+    @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
+    @patch("src.orchestra_dbt.state_backends.azure.DefaultAzureCredential")
+    def test_save_raises_on_auth_error(self, mock_credential, mock_client_cls):
+        from azure.core.exceptions import HttpResponseError
+        from src.orchestra_dbt.state_errors import StateSaveError
+
+        mock_blob_client = MagicMock()
+        mock_blob_client.upload_blob.side_effect = HttpResponseError(
+            message="AuthorizationFailure"
+        )
+        mock_service = MagicMock()
+        mock_service.get_blob_client.return_value = mock_blob_client
+        mock_client_cls.return_value = mock_service
+
+        from src.orchestra_dbt.state_backends.azure import AzureStateBackend
+
+        backend = AzureStateBackend("myaccount", "mycontainer", "state.json")
+        with pytest.raises(StateSaveError):
+            backend.save(StateApiModel(state={}))
+
+    @patch.dict("os.environ", {"AZURE_STORAGE_CONNECTION_STRING": "DefaultEndpointsProtocol=https;AccountName=myaccount;AccountKey=fake;EndpointSuffix=core.windows.net"})
+    @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
+    def test_load_uses_connection_string_when_set(self, mock_client_cls):
+        payload = '{"state": {}}'
+        mock_download = MagicMock()
+        mock_download.readall.return_value = payload.encode("utf-8")
+        mock_blob_client = MagicMock()
+        mock_blob_client.download_blob.return_value = mock_download
+        mock_service = MagicMock()
+        mock_service.get_blob_client.return_value = mock_blob_client
+        mock_client_cls.from_connection_string.return_value = mock_service
+
+        from src.orchestra_dbt.state_backends.azure import AzureStateBackend
+
+        backend = AzureStateBackend("myaccount", "mycontainer", "state.json")
+        result = backend.load()
+
+        mock_client_cls.from_connection_string.assert_called_once()
+        assert result == StateApiModel(state={})
+
+    @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
+    @patch("src.orchestra_dbt.state_backends.azure.DefaultAzureCredential")
+    def test_load_uses_default_credential_when_no_connection_string(
+        self, mock_credential_cls, mock_client_cls
+    ):
+        payload = '{"state": {}}'
+        mock_download = MagicMock()
+        mock_download.readall.return_value = payload.encode("utf-8")
+        mock_blob_client = MagicMock()
+        mock_blob_client.download_blob.return_value = mock_download
+        mock_service = MagicMock()
+        mock_service.get_blob_client.return_value = mock_blob_client
+        mock_client_cls.return_value = mock_service
+
+        from src.orchestra_dbt.state_backends.azure import AzureStateBackend
+
+        backend = AzureStateBackend("myaccount", "mycontainer", "state.json")
+        result = backend.load()
+
+        mock_credential_cls.assert_called_once()
+        mock_client_cls.assert_called_once()
+        assert result == StateApiModel(state={})
+
+    @patch.dict("os.environ", {"AZURE_STORAGE_CONNECTION_STRING": "DefaultEndpointsProtocol=https;AccountName=otheraccount;AccountKey=fake;EndpointSuffix=core.windows.net"})
+    @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
+    def test_load_raises_when_connection_string_account_mismatches_uri(
+        self, mock_client_cls
+    ):
+        from src.orchestra_dbt.state_errors import StateLoadError
+
+        from src.orchestra_dbt.state_backends.azure import AzureStateBackend
+
+        backend = AzureStateBackend("myaccount", "mycontainer", "state.json")
+        with pytest.raises(StateLoadError, match="must match"):
+            backend.load()
+
+        mock_client_cls.from_connection_string.assert_not_called()
+
+    @patch.dict("os.environ", {"AZURE_STORAGE_CONNECTION_STRING": "DefaultEndpointsProtocol=https;AccountName=otheraccount;AccountKey=fake;EndpointSuffix=core.windows.net"})
+    @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
+    def test_save_raises_when_connection_string_account_mismatches_uri(
+        self, mock_client_cls
+    ):
+        from src.orchestra_dbt.state_errors import StateSaveError
+
+        from src.orchestra_dbt.state_backends.azure import AzureStateBackend
+
+        backend = AzureStateBackend("myaccount", "mycontainer", "state.json")
+        with pytest.raises(StateSaveError, match="must match"):
+            backend.save(StateApiModel(state={}))
+
+        mock_client_cls.from_connection_string.assert_not_called()
+
+    @patch.dict("os.environ", {"AZURE_STORAGE_CONNECTION_STRING": "not-a-valid-connection-string"})
+    @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
+    def test_load_wraps_invalid_connection_string_as_state_load_error(
+        self, mock_client_cls
+    ):
+        from src.orchestra_dbt.state_errors import StateLoadError
+
+        mock_client_cls.from_connection_string.side_effect = ValueError(
+            "Connection string missing required connection details."
+        )
+
+        from src.orchestra_dbt.state_backends.azure import AzureStateBackend
+
+        # Account name is absent from the string, so the mismatch guard passes and
+        # from_connection_string runs and raises — which must surface as StateLoadError.
+        backend = AzureStateBackend("myaccount", "mycontainer", "state.json")
+        with pytest.raises(StateLoadError, match="initialize Azure client"):
+            backend.load()
