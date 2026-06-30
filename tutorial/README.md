@@ -21,6 +21,19 @@ Use this tutorial project to exercise all supported stateful permutations:
 | Full refresh override | any stateful backend + `orc dbt build --full-refresh` | Reuse logic is bypassed for that run; state is still updated after execution. |
 | Supported stateful commands | `orc dbt run`, `orc dbt test` | Same orchestration flow as build: compute freshness, patch reusable nodes, update state. |
 | Unsupported stateful command | `orc dbt seed` | Pass-through to dbt even when `use_stateful=true`. |
+| Data test spanning a reused model | `orc dbt build` when one of a test's parents is reused | The test still runs as long as *any* of its parents is built (dbt's default), and is dropped only when *all* its parents are reused. See below. |
+
+### Data tests that span reused and built models
+
+[`dbt/tests/assert_totals_reconcile.sql`](dbt/tests/assert_totals_reconcile.sql) is a singular test that references **two** models (`stg_events` and `mart_daily_totals`). It exists to exercise the reused-node + indirect-selection handling: when Orchestra reuses one of those models, dbt's default "eager" exclusion would otherwise drop the test as soon as one parent is excluded. `orc` keeps the test running whenever any of its parents is built, matching plain `dbt build`.
+
+You can verify this at the dbt level (no state backend needed) by tagging a model as reused and comparing eager vs. cautious indirect selection:
+
+```bash
+# Pretend mart_daily_totals is reused, then exclude it the way orc does:
+dbt build --exclude tag:ORCHESTRA_REUSED_NODE                          # eager (old): spanning test is DROPPED
+dbt build --exclude tag:ORCHESTRA_REUSED_NODE --indirect-selection cautious  # what orc now runs: spanning test RUNS
+```
 
 ## Functions
 

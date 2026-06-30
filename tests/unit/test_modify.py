@@ -7,6 +7,8 @@ from src.orchestra_dbt.modify import (
     _build_generated_selector_definition,
     _split_selection_args,
     modify_dbt_command,
+    restore_selectors_file,
+    snapshot_selectors_file,
     update_selectors_yaml,
 )
 
@@ -399,6 +401,71 @@ class TestSplitSelectionArgs:
         )
         assert excludes == []
         assert passthrough == ["--exclude-resource-types", "test"]
+
+
+class TestSelectorsFileSnapshot:
+    def test_snapshot_returns_none_when_missing(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        assert snapshot_selectors_file() is None
+
+    def test_snapshot_returns_bytes_when_present(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "selectors.yml").write_text("selectors: []\n")
+        assert snapshot_selectors_file() == b"selectors: []\n"
+
+    def test_restore_rewrites_original_bytes(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        original = b"selectors:\n  - name: nightly\n"
+        f = tmp_path / "selectors.yml"
+        f.write_bytes(original)
+
+        snapshot = snapshot_selectors_file()
+        f.write_text("mutated")  # simulate orc mutating the file for a run
+        restore_selectors_file(snapshot)
+
+        assert f.read_bytes() == original
+
+    def test_restore_removes_file_we_created(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        snapshot = snapshot_selectors_file()  # None: did not exist
+        (tmp_path / "selectors.yml").write_text("generated")  # orc created it
+        restore_selectors_file(snapshot)
+
+        assert not (tmp_path / "selectors.yml").exists()
+
+    def test_restore_is_noop_when_nothing_existed_or_created(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.chdir(tmp_path)
+        restore_selectors_file(None)  # must not raise
+        assert not (tmp_path / "selectors.yml").exists()
+
+    def test_round_trip_through_modify_dbt_command(self, tmp_path, monkeypatch):
+        # End-to-end: a user selectors.yml is mutated by a generated selector,
+        # then fully restored to its pre-run bytes.
+        monkeypatch.chdir(tmp_path)
+        original = "selectors:\n  - name: nightly\n    definition:\n      tag: nightly\n"
+        f = tmp_path / "selectors.yml"
+        f.write_text(original)
+
+        snapshot = snapshot_selectors_file()
+        result = modify_dbt_command(["dbt", "build", "--select", "a"])
+        assert result[-2] == "--selector"  # a generated selector was written
+        assert "orchestra_reused_" in f.read_text()  # file was mutated
+
+        restore_selectors_file(snapshot)
+        assert f.read_text() == original
+
+    def test_round_trip_removes_file_created_for_run(self, tmp_path, monkeypatch):
+        # No selectors.yml to begin with; modify_dbt_command creates one, restore
+        # removes it so a local run leaves the tree clean.
+        monkeypatch.chdir(tmp_path)
+        snapshot = snapshot_selectors_file()
+        modify_dbt_command(["dbt", "build", "--select", "a"])
+        assert (tmp_path / "selectors.yml").exists()
+
+        restore_selectors_file(snapshot)
+        assert not (tmp_path / "selectors.yml").exists()
 
 
 class TestBuildGeneratedSelectorDefinition:

@@ -1,3 +1,4 @@
+import os
 import uuid
 from typing import Any
 
@@ -5,9 +6,29 @@ from .constants import INDIRECT_SELECTION_CAUTIOUS, ORCHESTRA_REUSED_NODE
 from .logger import log_error, log_warn
 from .utils import load_yaml, save_yaml
 
+_SELECTORS_FILE = "selectors.yml"
 _SELECT_FLAGS = frozenset({"--select", "-s", "--models", "--model", "-m"})
 _EXCLUDE_FLAGS = frozenset({"--exclude"})
 _TEST_RUNNING_SUBCOMMANDS = frozenset({"build", "test"})
+
+
+def snapshot_selectors_file() -> bytes | None:
+    try:
+        with open(_SELECTORS_FILE, "rb") as f:
+            return f.read()
+    except FileNotFoundError:
+        return None
+
+
+def restore_selectors_file(snapshot: bytes | None) -> None:
+    if snapshot is not None:
+        with open(_SELECTORS_FILE, "wb") as f:
+            f.write(snapshot)
+        return
+    try:
+        os.remove(_SELECTORS_FILE)
+    except FileNotFoundError:
+        pass
 
 
 def _reused_exclusion_criteria() -> dict[str, Any]:
@@ -29,7 +50,7 @@ def _get_reused_selector_definition(existing_selector: str) -> dict[str, Any]:
 
 def update_selectors_yaml(selector_tag: str) -> bool:
     try:
-        selectors_yml = load_yaml("selectors.yml")
+        selectors_yml = load_yaml(_SELECTORS_FILE)
     except FileNotFoundError:
         log_error(
             "A `--selector` was used on the command, but no `selectors.yml` file found."
@@ -62,7 +83,7 @@ def update_selectors_yaml(selector_tag: str) -> bool:
     )
 
     try:
-        save_yaml("selectors.yml", {"selectors": selectors})
+        save_yaml(_SELECTORS_FILE, {"selectors": selectors})
     except Exception as e:
         log_error(f"Error saving selectors.yml: {e}")
         return False
@@ -106,7 +127,7 @@ def _build_generated_selector_definition(
 
 def _append_generated_selector(definition: dict[str, Any]) -> str | None:
     try:
-        selectors_yml = load_yaml("selectors.yml")
+        selectors_yml = load_yaml(_SELECTORS_FILE)
     except FileNotFoundError:
         selectors_yml = None
     except Exception as e:
@@ -127,7 +148,7 @@ def _append_generated_selector(definition: dict[str, Any]) -> str | None:
     selectors_yml["selectors"] = selectors
 
     try:
-        save_yaml("selectors.yml", selectors_yml)
+        save_yaml(_SELECTORS_FILE, selectors_yml)
     except Exception as e:
         log_error(f"Error saving selectors.yml: {e}")
         return None

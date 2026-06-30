@@ -184,7 +184,7 @@ A different global mode doesn't rescue this, because the two sides want **opposi
 
 `--indirect-selection` sets a single mode for both. `cautious` and `buildable` are too strict on the select side — they drop the `orders`/`customers` test above. `eager` and `buildable` are too loose on the exclude side — they drop a test even when one of its parents is being built (`buildable` because it also sweeps in *ancestors* of reused nodes, which may be models you are building). `buildable` is wrong on both ends; only a per-criterion selector can be eager on your selection and cautious on the exclusion at once.
 
-The generated selector is named `orchestra_reused_<uuid>`; like the `--selector` rewrite, it is left in `selectors.yml` after the run — harmless on the ephemeral checkouts used in CI/Orchestra; run `git checkout selectors.yml` to discard it locally.
+The generated selector is named `orchestra_reused_<uuid>`. On a local run (`local_run`, the default), `orc` restores `selectors.yml` to exactly its pre-run state afterwards — rewriting back the original bytes, or removing a file it created — so neither the generated selector nor the `--selector` rewrite is left behind. On managed/Orchestra runs the rewrite is left in place; the checkout is ephemeral, so it is harmless.
 
 ## Configuration reference
 
