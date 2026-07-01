@@ -2,6 +2,8 @@ from .compatibility import dbt_core_import_error_message
 from .constants import RESOURCE_TYPES_TO_LS
 from .logger import log_debug, log_error, log_info, log_warn
 
+DBT_LS_ARGS_NOT_ACCEPTED = ["--empty"]
+
 
 def get_args_for_ls(user_args: tuple) -> list[str]:
     command_args = ["ls"]
@@ -10,7 +12,15 @@ def get_args_for_ls(user_args: tuple) -> list[str]:
         resource_type_args.append("--resource-type")
         resource_type_args.append(resource_type)
     output_args = ["--output", "path", "-q"]
-    return command_args + resource_type_args + list(user_args) + output_args
+
+    # Remove args not accepted by dbt ls
+    list_user_args = []
+    for user_arg in user_args:
+        if user_arg in DBT_LS_ARGS_NOT_ACCEPTED:
+            continue
+        list_user_args.append(user_arg)
+
+    return command_args + resource_type_args + list_user_args + output_args
 
 
 def get_paths_to_run(args: tuple) -> list[str] | None:
