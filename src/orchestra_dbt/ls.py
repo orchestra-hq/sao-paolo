@@ -49,5 +49,5 @@ def get_paths_to_run(args: tuple) -> list[str] | None:
     except Exception as e:
         log_debug(e)
 
-    log_warn("Error getting list of nodes that will be executed.")
+    log_warn("Error getting [dbt ls] of nodes that will be executed.")
     return None
