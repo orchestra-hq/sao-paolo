@@ -132,6 +132,60 @@ Stateful orchestration only runs for `dbt build`, `dbt run`, and `dbt test`. Oth
 | `true` | `build`, `run`, `test` + `--full-refresh` | `orc` skips reuse decisions for this invocation, runs dbt directly, then still updates/saves state after execution. |
 | `true` | other command (for example `seed`, `docs generate`) | `orc` passes through to dbt unchanged. |
 
+### Reused nodes and data tests
+
+When `orc` reuses (skips) an up-to-date node, it preserves dbt's default rule for data tests: **a test runs if _any_ of its models is being built**, even when its other parent models are being reused. Without this, dbt's default "eager" exclusion drops a test as soon as one of its parents is excluded — so a singular test that joins a freshly-built model to a reused one would silently stop running.
+
+Take this graph, where `model_b` has no new data and is reused:
+
+```mermaid
+flowchart LR
+    A["model_a<br/>new data → built"]
+    B["model_b<br/>no new data → reused (skipped)"]
+    T1(["test refs model_a and model_b"])
+    T2(["test refs model_b only"])
+    A --> T1
+    B --> T1
+    B --> T2
+```
+
+| Test | Parents | Runs? |
+| --- | --- | --- |
+| refs `model_a` & `model_b` | one built, one reused | ✅ **runs** — a model it tests was built |
+| refs `model_b` only | all reused | ⏭️ **skipped** — nothing it tests was built |
+
+This holds however you select nodes:
+
+| You run | `orc` runs | Notes |
+| --- | --- | --- |
+| `orc dbt build` | `dbt build --exclude tag:ORCHESTRA_REUSED_NODE --indirect-selection cautious` | Nothing is selected explicitly, so a global `cautious` flag only narrows our exclusion. |
+| `orc dbt build --select +model_a` | `dbt build --selector <generated>` | Your `--select`/`--exclude` and the reused exclusion are folded into a generated selector (see below). |
+| `orc dbt build --selector nightly` | rewrites `nightly` to also exclude reused nodes | Your named selector is wrapped, not replaced. |
+| `orc dbt run …` | `dbt run --exclude tag:ORCHESTRA_REUSED_NODE` | `run` never selects tests, so no test handling is needed. |
+
+#### Why a generated selector, and not just one flag?
+
+dbt's `--indirect-selection` is **global** — it applies to your `--select` as much as to our reused-node exclusion. Forcing it to `cautious` everywhere would change what your own selection means, so when you pass your own `--select`/`--exclude`, `orc` instead writes a generated selector to `selectors.yml` (creating the file if needed) that sets `indirect_selection: cautious` on **only the reused-node exclusion**, leaving your selection at dbt's default (eager) behaviour. dbt has no per-flag indirect selection and reads selectors only from `selectors.yml`, so a generated selector is the only way to do this.
+
+The scenario this gets right (and a single global flag gets wrong) is **a test whose parents straddle your selection** — for example a test that references both `orders` and `customers`, when you run `orc dbt build --select orders` (so `customers` is not selected):
+
+| Approach | Does the `orders` + `customers` test run? | Matches plain `dbt build --select orders`? |
+| --- | --- | --- |
+| plain dbt (eager, the default) | ✅ runs — a selected parent (`orders`) is built | — |
+| one global `--indirect-selection cautious` | ❌ dropped — `cautious` needs *all* parents selected, and `customers` isn't | ❌ no |
+| generated selector (eager select, cautious only on the reused exclude) | ✅ runs | ✅ yes |
+
+A different global mode doesn't rescue this, because the two sides want **opposite** modes:
+
+| Side | Wants | So that |
+| --- | --- | --- |
+| your `--select` | `eager` | a test runs if *any* selected parent is built (dbt's default) |
+| the reused-node exclude | `cautious` | a test is dropped only when *all* its parents are reused |
+
+`--indirect-selection` sets a single mode for both. `cautious` and `buildable` are too strict on the select side — they drop the `orders`/`customers` test above. `eager` and `buildable` are too loose on the exclude side — they drop a test even when one of its parents is being built (`buildable` because it also sweeps in *ancestors* of reused nodes, which may be models you are building). `buildable` is wrong on both ends; only a per-criterion selector can be eager on your selection and cautious on the exclusion at once.
+
+The generated selector is named `orchestra_reused_<uuid>`. On a local run (`local_run`, the default), `orc` restores `selectors.yml` to exactly its pre-run state afterwards — rewriting back the original bytes, or removing a file it created — so neither the generated selector nor the `--selector` rewrite is left behind. On managed/Orchestra runs the rewrite is left in place; the checkout is ephemeral, so it is harmless.
+
 ## Configuration reference
 
 When stateful orchestration is enabled, the CLI loads and saves [dbt Core state](https://docs.getdbt.com/). Enable it with `use_stateful = true` under `[tool.orchestra_dbt]`, or set `ORCHESTRA_USE_STATEFUL=true`. That state is the same JSON shape regardless of the backend used.

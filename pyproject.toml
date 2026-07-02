@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dbt-orchestra"
-version = "1.0.2"
+version = "1.1.0"
 description = "Orchestra wrapper for dbt Core (including state aware orchestration)."
 authors = [{ name = "Orchestra Technologies" }]
 license = "Apache-2.0"

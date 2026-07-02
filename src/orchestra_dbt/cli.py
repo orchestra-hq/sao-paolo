@@ -24,7 +24,11 @@ from .models import (
     SourceFreshness,
     StateApiModel,
 )
-from .modify import modify_dbt_command
+from .modify import (
+    modify_dbt_command,
+    restore_selectors_file,
+    snapshot_selectors_file,
+)
 from .orchestra import is_warn
 from .patcher import patch_seed_properties, patch_sql_files, revert_patching
 from .sao import Freshness, calculate_nodes_to_run
@@ -202,6 +206,7 @@ def main(args: tuple[str, ...]) -> None:
         patch_sql_files(nodes_to_reuse)
         patch_seed_properties(nodes_to_reuse)
 
+        selectors_snapshot = snapshot_selectors_file()
         result = subprocess.run(modify_dbt_command(cmd=list(dbt_args)))
 
         log_info(f"{len(nodes_to_reuse)}/{node_count} nodes reused.")
@@ -211,6 +216,7 @@ def main(args: tuple[str, ...]) -> None:
                     node.file_path for node in nodes_to_reuse.values()
                 ]
             )
+            restore_selectors_file(selectors_snapshot)
     else:
         result = subprocess.run(list(dbt_args))
 
