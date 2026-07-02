@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Keep data tests that span reused and freshly-built models. The reused-node exclusion now uses `cautious` indirect selection, so a test is dropped only when _all_ its parents are reused — matching plain `dbt build`. Applies to bare, `--selector`, and `--select`/`--exclude` commands.
 - Restore `selectors.yml` to its pre-run state after a local run, so `--selector` rewrites and generated selectors no longer mutate or accumulate on disk.
+- Stop `dbt source freshness` from crashing (`'NoneType' object has no attribute 'filter'`) on sources configured with `config: {freshness: null}`. Such sources now still get a real, queried `max_loaded_at` and always report a passing freshness status, instead of raising or reporting a fabricated timestamp.
 
 [1.1.0]: https://github.com/orchestra-hq/sao-paolo/releases/tag/v1.1.0
 
