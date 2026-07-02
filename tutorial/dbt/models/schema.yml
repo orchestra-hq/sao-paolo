@@ -11,6 +11,12 @@ sources:
           freshness:
             warn_after: { count: 24, period: hour }
           loaded_at_field: event_at
+      - name: raw_events_freshness_disabled
+        identifier: raw_events
+        description: "Same physical table as raw_events, but with freshness checking explicitly disabled to exercise Orchestra's `config.freshness: null` handling."
+        config:
+          freshness: null
+          loaded_at_field: event_at
 
 models:
   - name: stg_events

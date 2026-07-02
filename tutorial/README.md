@@ -22,6 +22,7 @@ Use this tutorial project to exercise all supported stateful permutations:
 | Supported stateful commands | `orc dbt run`, `orc dbt test` | Same orchestration flow as build: compute freshness, patch reusable nodes, update state. |
 | Unsupported stateful command | `orc dbt seed` | Pass-through to dbt even when `use_stateful=true`. |
 | Data test spanning a reused model | `orc dbt build` when one of a test's parents is reused | The test still runs as long as *any* of its parents is built (dbt's default), and is dropped only when *all* its parents are reused. See below. |
+| Source freshness explicitly disabled | `raw.raw_events_freshness_disabled` in [`schema.yml`](dbt/models/schema.yml) sets `config: {freshness: null}` | A real `max_loaded_at` is still collected via a normal query; the check always reports `pass` since there's no threshold to violate. |
 
 ### Data tests that span reused and built models
 
