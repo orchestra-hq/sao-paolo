@@ -1,0 +1,21 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: "{{ target.schema }}_raw"
+    database: "{{ target.database }}"
+    tables:
+      - name: raw_events
+        identifier: raw_events
+        # Source freshness is what Orchestra uses to decide whether model_a has
+        # new data. `event_at` is the loaded-at column in the seed.
+        config:
+          freshness:
+            warn_after: { count: 24, period: hour }
+          loaded_at_field: event_at
+
+models:
+  # A: fed directly by the source. Selector X targets this node alone.
+  - name: model_a
+  # B: downstream of A only. No source of its own, no build_after config.
+  - name: model_b

@@ -26,6 +26,7 @@ from src.orchestra_dbt.state import (
     _load_run_results,
     load_state,
     save_state,
+    save_updated_state,
     update_state,
 )
 
@@ -812,6 +813,68 @@ class TestSaveStateFile:
         assert loaded.state["model.test"].checksum == "123"
 
 
+class TestSaveUpdatedState:
+    def test_only_merges_updated_entries_without_reverting_concurrent_writes(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        """A narrow run must not revert a concurrent run's update to another node.
+
+        Simulates: this run loaded stale state (model_a only), then a concurrent
+        run wrote model_b to the backend. Saving must merge our model_a update onto
+        the latest state, leaving the concurrently-written model_b intact.
+        """
+        p = tmp_path / "st.json"
+        p.write_text('{"state": {}}', encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(p))
+
+        # State this run loaded at start: only model_a exists, with an old timestamp.
+        in_memory = StateApiModel(
+            state={
+                "model.a": StateItem(
+                    last_updated=datetime(2024, 1, 1, 10, 0, 0),
+                    checksum="a-old",
+                    sources={},
+                )
+            }
+        )
+
+        # A concurrent run has since written the backend: model_a advanced AND
+        # model_b was created. This is the latest stored state.
+        save_state(
+            StateApiModel(
+                state={
+                    "model.a": StateItem(
+                        last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                        checksum="a-concurrent",
+                        sources={},
+                    ),
+                    "model.b": StateItem(
+                        last_updated=datetime(2024, 1, 1, 12, 5, 0),
+                        checksum="b-concurrent",
+                        sources={},
+                    ),
+                }
+            )
+        )
+
+        # This run only executed model_a, so it only updates model.a.
+        in_memory.state["model.a"] = StateItem(
+            last_updated=datetime(2024, 1, 1, 11, 0, 0),
+            checksum="a-this-run",
+            sources={},
+        )
+        save_updated_state(state=in_memory, updated_asset_external_ids={"model.a"})
+
+        merged = load_state()
+        # Our model_a update wins for the key we ran...
+        assert merged.state["model.a"].checksum == "a-this-run"
+        # ...and the concurrently-written model_b is preserved, not reverted.
+        assert "model.b" in merged.state
+        assert merged.state["model.b"].checksum == "b-concurrent"
+
+
 class TestLoadStateS3:
     @mock_aws
     def test_load_state_s3_missing_object_starts_empty(
@@ -882,14 +945,14 @@ class TestLoadStateGCS:
         from cloud_storage_mocker._core import Client as MockClient
 
         with gcs_patch(
-            mounts=[Mount("test-bucket", tmp_path / "gcs", readable=True, writable=True)]
+            mounts=[
+                Mount("test-bucket", tmp_path / "gcs", readable=True, writable=True)
+            ]
         ):
             with patch.object(MockClient, "get_bucket", return_value=None, create=True):
                 assert load_state() == StateApiModel(state={})
 
-    def test_load_state_gcs_success(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path
-    ):
+    def test_load_state_gcs_success(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
         bucket_dir = tmp_path / "gcs"
         blob_path = bucket_dir / "k.json"
         bucket_dir.mkdir()
@@ -997,9 +1060,7 @@ class TestAzureStateBackend:
 
     @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
     @patch("src.orchestra_dbt.state_backends.azure.DefaultAzureCredential")
-    def test_load_raises_when_container_missing(
-        self, mock_credential, mock_client_cls
-    ):
+    def test_load_raises_when_container_missing(self, mock_credential, mock_client_cls):
         from azure.core.exceptions import ResourceNotFoundError
         from src.orchestra_dbt.state_errors import StateLoadError
 
@@ -1076,7 +1137,12 @@ class TestAzureStateBackend:
         with pytest.raises(StateSaveError):
             backend.save(StateApiModel(state={}))
 
-    @patch.dict("os.environ", {"AZURE_STORAGE_CONNECTION_STRING": "DefaultEndpointsProtocol=https;AccountName=myaccount;AccountKey=fake;EndpointSuffix=core.windows.net"})
+    @patch.dict(
+        "os.environ",
+        {
+            "AZURE_STORAGE_CONNECTION_STRING": "DefaultEndpointsProtocol=https;AccountName=myaccount;AccountKey=fake;EndpointSuffix=core.windows.net"
+        },
+    )
     @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
     def test_load_uses_connection_string_when_set(self, mock_client_cls):
         payload = '{"state": {}}'
@@ -1119,7 +1185,12 @@ class TestAzureStateBackend:
         mock_client_cls.assert_called_once()
         assert result == StateApiModel(state={})
 
-    @patch.dict("os.environ", {"AZURE_STORAGE_CONNECTION_STRING": "DefaultEndpointsProtocol=https;AccountName=otheraccount;AccountKey=fake;EndpointSuffix=core.windows.net"})
+    @patch.dict(
+        "os.environ",
+        {
+            "AZURE_STORAGE_CONNECTION_STRING": "DefaultEndpointsProtocol=https;AccountName=otheraccount;AccountKey=fake;EndpointSuffix=core.windows.net"
+        },
+    )
     @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
     def test_load_raises_when_connection_string_account_mismatches_uri(
         self, mock_client_cls
@@ -1134,7 +1205,12 @@ class TestAzureStateBackend:
 
         mock_client_cls.from_connection_string.assert_not_called()
 
-    @patch.dict("os.environ", {"AZURE_STORAGE_CONNECTION_STRING": "DefaultEndpointsProtocol=https;AccountName=otheraccount;AccountKey=fake;EndpointSuffix=core.windows.net"})
+    @patch.dict(
+        "os.environ",
+        {
+            "AZURE_STORAGE_CONNECTION_STRING": "DefaultEndpointsProtocol=https;AccountName=otheraccount;AccountKey=fake;EndpointSuffix=core.windows.net"
+        },
+    )
     @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
     def test_save_raises_when_connection_string_account_mismatches_uri(
         self, mock_client_cls
@@ -1149,7 +1225,10 @@ class TestAzureStateBackend:
 
         mock_client_cls.from_connection_string.assert_not_called()
 
-    @patch.dict("os.environ", {"AZURE_STORAGE_CONNECTION_STRING": "not-a-valid-connection-string"})
+    @patch.dict(
+        "os.environ",
+        {"AZURE_STORAGE_CONNECTION_STRING": "not-a-valid-connection-string"},
+    )
     @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
     def test_load_wraps_invalid_connection_string_as_state_load_error(
         self, mock_client_cls

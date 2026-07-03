@@ -33,7 +33,13 @@ from .orchestra import is_warn
 from .patcher import patch_seed_properties, patch_sql_files, revert_patching
 from .sao import Freshness, calculate_nodes_to_run
 from .source_freshness import get_source_freshness
-from .state import StateLoadError, StateSaveError, load_state, save_state, update_state
+from .state import (
+    StateLoadError,
+    StateSaveError,
+    load_state,
+    save_updated_state,
+    update_state,
+)
 from .state_types import StateBackendKind
 from .target_finder import find_target_in_args
 
@@ -86,9 +92,13 @@ def _complete_run(
     source_freshness: SourceFreshness,
     dbt_exit_code: int,
 ) -> None:
-    update_state(state=state, parsed_dag=parsed_dag, source_freshness=source_freshness)
+    updated_asset_external_ids = update_state(
+        state=state, parsed_dag=parsed_dag, source_freshness=source_freshness
+    )
     try:
-        save_state(state=state)
+        save_updated_state(
+            state=state, updated_asset_external_ids=updated_asset_external_ids
+        )
     except StateSaveError as e:
         log_error(str(e))
         sys.exit(1)

@@ -1,0 +1,16 @@
+name: concurrent_selector_repro
+config-version: 2
+
+profile: concurrent_selector_repro
+
+# A -> B, where A is fed by a source. Deliberately NO `freshness.build_after`
+# on any model: the bug being reproduced only affects nodes without an SLA,
+# because the SLA branch already performs the "upstream ran more recently than
+# me" catch-up while the default (no-SLA) branch did not.
+models:
+  concurrent_selector_repro:
+    +materialized: table
+
+seeds:
+  concurrent_selector_repro:
+    +schema: raw

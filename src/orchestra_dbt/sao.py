@@ -75,23 +75,26 @@ def should_mark_dirty_from_single_upstream(
             if upstream_freshness == Freshness.CLEAN:
                 reason = "Upstream node(s) being reused."
 
-    if not current_node.freshness_config.minutes_sla:
-        return upstream_freshness == Freshness.DIRTY, reason
+    # An SLA (build_after) only holds a node back inside its freshness window; it is
+    # not required for the catch-up comparison below.
+    if current_node.freshness_config.minutes_sla:
+        minutes_since_last_updated: int = int(
+            (
+                datetime.now(tz=current_node.last_updated.tzinfo)
+                - current_node.last_updated
+            ).total_seconds()
+            / 60
+        )
 
-    minutes_since_last_updated: int = int(
-        (
-            datetime.now(tz=current_node.last_updated.tzinfo)
-            - current_node.last_updated
-        ).total_seconds()
-        / 60
-    )
+        if minutes_since_last_updated < current_node.freshness_config.minutes_sla:
+            reason = f"Model still within freshness config of {current_node.freshness_config.minutes_sla} minutes. Last updated {minutes_since_last_updated} minutes ago."
+            if current_node.freshness_config.inherited_from:
+                reason += f" Config inherited from {current_node.freshness_config.inherited_from}."
+            return (False, reason)
 
-    if minutes_since_last_updated < current_node.freshness_config.minutes_sla:
-        reason = f"Model still within freshness config of {current_node.freshness_config.minutes_sla} minutes. Last updated {minutes_since_last_updated} minutes ago."
-        if current_node.freshness_config.inherited_from:
-            reason += f" Config inherited from {current_node.freshness_config.inherited_from}."
-        return (False, reason)
-
+    # A clean upstream still forces a rebuild if it ran more recently than this node
+    # (e.g. a concurrent pipeline with a narrower selector advanced the upstream alone),
+    # otherwise this node would never catch up to the upstream's newer output.
     match upstream_freshness:
         case Freshness.DIRTY:
             return True, reason
