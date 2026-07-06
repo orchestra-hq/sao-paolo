@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Stop clobbering stored state when it cannot be loaded at save time. When merging a run's updates, `save_state` now re-reads the latest state and fails loudly (`StateSaveError`) if that read fails, instead of assuming empty state and overwriting every node the run did not touch.
 - The Orchestra HTTP state backend now raises on a failed load (network error, non-2xx, or unparseable body) rather than silently returning empty state, so a transient outage can no longer wipe stored state on the next save.
-- A failed state load at the start of a run no longer aborts the dbt command. The run continues with empty state (no node reuse) and still persists state on completion if the backend can be re-read.
+- A failed state load at the start of a run no longer aborts the dbt command. The run continues with empty state (no node reuse) and still persists state on completion if the backend can be re-read. When the initial load failed, a subsequent save failure is logged as a warning rather than failing the run — a save failure is only fatal when good state was loaded to begin with.
 
 [1.1.1]: https://github.com/orchestra-hq/sao-paolo/releases/tag/v1.1.1
 
