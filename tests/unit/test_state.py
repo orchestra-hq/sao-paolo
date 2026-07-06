@@ -96,7 +96,8 @@ class TestLoadState:
             },
             status_code=400,
         )
-        assert load_state() == StateApiModel(state={})
+        with pytest.raises(StateLoadError):
+            load_state()
 
     def test_load_state_validation_error(self, httpx_mock: HTTPXMock):
         httpx_mock.add_response(
@@ -107,7 +108,8 @@ class TestLoadState:
             },
             json={"invalid": "data"},
         )
-        assert load_state() == StateApiModel(state={})
+        with pytest.raises(StateLoadError):
+            load_state()
 
     def test_load_state_request_error(self, httpx_mock: HTTPXMock):
         httpx_mock.add_exception(
@@ -119,11 +121,17 @@ class TestLoadState:
                 "Authorization": "Bearer test-api-key",
             },
         )
-        assert load_state() == StateApiModel(state={})
+        with pytest.raises(StateLoadError):
+            load_state()
 
 
 class TestSaveState:
     def test_save_state_success(self, httpx_mock: HTTPXMock):
+        httpx_mock.add_response(
+            method="GET",
+            url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
+            json={"state": {}},
+        )
         httpx_mock.add_response(
             method="PATCH",
             url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
@@ -169,12 +177,18 @@ class TestSaveState:
                             },
                         ),
                     }
-                )
+                ),
+                updated_asset_external_ids={"model.test", "model.new"},
             )
             is None
         )
 
     def test_save_state_http_error(self, httpx_mock: HTTPXMock):
+        httpx_mock.add_response(
+            method="GET",
+            url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
+            json={"state": {}},
+        )
         httpx_mock.add_response(
             method="PATCH",
             url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
@@ -184,9 +198,17 @@ class TestSaveState:
             },
             status_code=500,
         )
-        assert save_state(state=StateApiModel(state={})) is None
+        assert (
+            save_state(state=StateApiModel(state={}), updated_asset_external_ids=set())
+            is None
+        )
 
     def test_save_state_timeout(self, httpx_mock: HTTPXMock):
+        httpx_mock.add_response(
+            method="GET",
+            url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
+            json={"state": {}},
+        )
         httpx_mock.add_exception(
             httpx.TimeoutException("Request timed out"),
             method="PATCH",
@@ -196,7 +218,10 @@ class TestSaveState:
                 "Authorization": "Bearer test-api-key",
             },
         )
-        assert save_state(state=StateApiModel(state={})) is None
+        assert (
+            save_state(state=StateApiModel(state={}), updated_asset_external_ids=set())
+            is None
+        )
 
 
 class TestUpdateState:
@@ -807,9 +832,103 @@ class TestSaveStateFile:
                 )
             }
         )
-        save_state(state)
+        save_state(state, updated_asset_external_ids={"model.test"})
         loaded = load_state()
         assert loaded.state["model.test"].checksum == "123"
+
+
+class TestSaveStateMerge:
+    def test_only_merges_updated_entries_without_reverting_concurrent_writes(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        """A narrow run must not revert a concurrent run's update to another node.
+
+        Simulates: this run loaded stale state (model_a only), then a concurrent
+        run wrote model_b to the backend. Saving must merge our model_a update onto
+        the latest state, leaving the concurrently-written model_b intact.
+        """
+        p = tmp_path / "st.json"
+        p.write_text('{"state": {}}', encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(p))
+
+        # State this run loaded at start: only model_a exists, with an old timestamp.
+        in_memory = StateApiModel(
+            state={
+                "model.a": StateItem(
+                    last_updated=datetime(2024, 1, 1, 10, 0, 0),
+                    checksum="a-old",
+                    sources={},
+                )
+            }
+        )
+
+        # A concurrent run has since written the backend: model_a advanced AND
+        # model_b was created. This is the latest stored state.
+        save_state(
+            StateApiModel(
+                state={
+                    "model.a": StateItem(
+                        last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                        checksum="a-concurrent",
+                        sources={},
+                    ),
+                    "model.b": StateItem(
+                        last_updated=datetime(2024, 1, 1, 12, 5, 0),
+                        checksum="b-concurrent",
+                        sources={},
+                    ),
+                }
+            ),
+            updated_asset_external_ids={"model.a", "model.b"},
+        )
+
+        # This run only executed model_a, so it only updates model.a.
+        in_memory.state["model.a"] = StateItem(
+            last_updated=datetime(2024, 1, 1, 11, 0, 0),
+            checksum="a-this-run",
+            sources={},
+        )
+        save_state(state=in_memory, updated_asset_external_ids={"model.a"})
+
+        merged = load_state()
+        # Our model_a update wins for the key we ran...
+        assert merged.state["model.a"].checksum == "a-this-run"
+        # ...and the concurrently-written model_b is preserved, not reverted.
+        assert "model.b" in merged.state
+        assert merged.state["model.b"].checksum == "b-concurrent"
+
+    def test_aborts_without_clobbering_when_latest_state_cannot_be_loaded(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        """A load failure at save time must abort, not overwrite good state.
+
+        Merging onto an assumed-empty state would wipe every node this run did
+        not touch, so save_state raises StateSaveError and leaves the stored
+        state untouched.
+        """
+        p = tmp_path / "st.json"
+        original = "{ this is not valid json"
+        p.write_text(original, encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(p))
+
+        state = StateApiModel(
+            state={
+                "model.a": StateItem(
+                    last_updated=datetime(2024, 1, 1, 11, 0, 0),
+                    checksum="a-this-run",
+                    sources={},
+                )
+            }
+        )
+        with pytest.raises(StateSaveError):
+            save_state(state=state, updated_asset_external_ids={"model.a"})
+
+        # The unreadable state file is left exactly as it was, not overwritten.
+        assert p.read_text(encoding="utf-8") == original
 
 
 class TestLoadStateS3:
@@ -861,7 +980,8 @@ class TestSaveStateS3:
                         sources={},
                     )
                 }
-            )
+            ),
+            updated_asset_external_ids={"m"},
         )
 
         obj = conn.get_object(Bucket="bucket", Key="dir/f.json")
@@ -882,14 +1002,14 @@ class TestLoadStateGCS:
         from cloud_storage_mocker._core import Client as MockClient
 
         with gcs_patch(
-            mounts=[Mount("test-bucket", tmp_path / "gcs", readable=True, writable=True)]
+            mounts=[
+                Mount("test-bucket", tmp_path / "gcs", readable=True, writable=True)
+            ]
         ):
             with patch.object(MockClient, "get_bucket", return_value=None, create=True):
                 assert load_state() == StateApiModel(state={})
 
-    def test_load_state_gcs_success(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path
-    ):
+    def test_load_state_gcs_success(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
         bucket_dir = tmp_path / "gcs"
         blob_path = bucket_dir / "k.json"
         bucket_dir.mkdir()
@@ -932,6 +1052,10 @@ class TestSaveStateGCS:
     ):
         bucket_dir = tmp_path / "gcs"
         bucket_dir.mkdir()
+        # Seed an existing (empty) state blob so the pre-save load() succeeds and
+        # exercises the merge path rather than the missing-blob branch.
+        (bucket_dir / "dir").mkdir()
+        (bucket_dir / "dir" / "f.json").write_text('{"state": {}}')
         monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
         monkeypatch.setenv("ORCHESTRA_STATE_FILE", "gs://bucket/dir/f.json")
@@ -948,7 +1072,8 @@ class TestSaveStateGCS:
                             sources={},
                         )
                     }
-                )
+                ),
+                updated_asset_external_ids={"m"},
             )
 
         body = (bucket_dir / "dir" / "f.json").read_text()
@@ -968,7 +1093,9 @@ class TestSaveStateGCS:
             side_effect=DefaultCredentialsError("no credentials"),
         ):
             with pytest.raises(StateSaveError):
-                save_state(StateApiModel(state={}))
+                save_state(
+                    StateApiModel(state={}), updated_asset_external_ids=set()
+                )
 
 
 class TestAzureStateBackend:
@@ -997,9 +1124,7 @@ class TestAzureStateBackend:
 
     @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
     @patch("src.orchestra_dbt.state_backends.azure.DefaultAzureCredential")
-    def test_load_raises_when_container_missing(
-        self, mock_credential, mock_client_cls
-    ):
+    def test_load_raises_when_container_missing(self, mock_credential, mock_client_cls):
         from azure.core.exceptions import ResourceNotFoundError
         from src.orchestra_dbt.state_errors import StateLoadError
 
@@ -1076,7 +1201,12 @@ class TestAzureStateBackend:
         with pytest.raises(StateSaveError):
             backend.save(StateApiModel(state={}))
 
-    @patch.dict("os.environ", {"AZURE_STORAGE_CONNECTION_STRING": "DefaultEndpointsProtocol=https;AccountName=myaccount;AccountKey=fake;EndpointSuffix=core.windows.net"})
+    @patch.dict(
+        "os.environ",
+        {
+            "AZURE_STORAGE_CONNECTION_STRING": "DefaultEndpointsProtocol=https;AccountName=myaccount;AccountKey=fake;EndpointSuffix=core.windows.net"
+        },
+    )
     @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
     def test_load_uses_connection_string_when_set(self, mock_client_cls):
         payload = '{"state": {}}'
@@ -1119,7 +1249,12 @@ class TestAzureStateBackend:
         mock_client_cls.assert_called_once()
         assert result == StateApiModel(state={})
 
-    @patch.dict("os.environ", {"AZURE_STORAGE_CONNECTION_STRING": "DefaultEndpointsProtocol=https;AccountName=otheraccount;AccountKey=fake;EndpointSuffix=core.windows.net"})
+    @patch.dict(
+        "os.environ",
+        {
+            "AZURE_STORAGE_CONNECTION_STRING": "DefaultEndpointsProtocol=https;AccountName=otheraccount;AccountKey=fake;EndpointSuffix=core.windows.net"
+        },
+    )
     @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
     def test_load_raises_when_connection_string_account_mismatches_uri(
         self, mock_client_cls
@@ -1134,7 +1269,12 @@ class TestAzureStateBackend:
 
         mock_client_cls.from_connection_string.assert_not_called()
 
-    @patch.dict("os.environ", {"AZURE_STORAGE_CONNECTION_STRING": "DefaultEndpointsProtocol=https;AccountName=otheraccount;AccountKey=fake;EndpointSuffix=core.windows.net"})
+    @patch.dict(
+        "os.environ",
+        {
+            "AZURE_STORAGE_CONNECTION_STRING": "DefaultEndpointsProtocol=https;AccountName=otheraccount;AccountKey=fake;EndpointSuffix=core.windows.net"
+        },
+    )
     @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
     def test_save_raises_when_connection_string_account_mismatches_uri(
         self, mock_client_cls
@@ -1149,7 +1289,10 @@ class TestAzureStateBackend:
 
         mock_client_cls.from_connection_string.assert_not_called()
 
-    @patch.dict("os.environ", {"AZURE_STORAGE_CONNECTION_STRING": "not-a-valid-connection-string"})
+    @patch.dict(
+        "os.environ",
+        {"AZURE_STORAGE_CONNECTION_STRING": "not-a-valid-connection-string"},
+    )
     @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
     def test_load_wraps_invalid_connection_string_as_state_load_error(
         self, mock_client_cls

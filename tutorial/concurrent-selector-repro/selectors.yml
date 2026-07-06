@@ -1,0 +1,15 @@
+selectors:
+  # Selector X: the narrow pipeline. Selects ONLY model_a (the source-fed node).
+  - name: selector_x
+    description: Narrow pipeline - model_a only.
+    definition:
+      method: fqn
+      value: model_a
+
+  # Selector Y: the full pipeline. Selects model_a and everything downstream (model_b).
+  - name: selector_y
+    description: Full pipeline - model_a and its downstream (model_b).
+    definition:
+      method: fqn
+      value: model_a
+      children: true

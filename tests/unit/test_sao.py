@@ -478,6 +478,64 @@ class TestCalculateModelsToRun:
             and dag.nodes["model.c"].freshness == result_freshness
         )
 
+    def test_clean_upstream_ran_more_recently_forces_catch_up_without_sla(self):
+        """Regression: concurrent pipelines with different selectors.
+
+        A -> B. A source only feeds A. A narrow pipeline (selector: A only) reran A
+        alone, so A.last_updated is now newer than B.last_updated even though A's
+        source has no new data (A is CLEAN). B has no build_after config. B must
+        still rebuild to incorporate A's newer output.
+        """
+        now = datetime.now()
+        source_ts = now - timedelta(minutes=30)
+
+        dag = ParsedDag(
+            nodes={
+                "source.test": SourceNode(last_updated=source_ts),
+                "model.a": MaterialisationNode(
+                    asset_external_id="model.a",
+                    freshness=Freshness.CLEAN,
+                    checksum="1",
+                    dbt_path="models/model_a.sql",
+                    file_path="models/model_a.sql",
+                    # A already processed this source and ran recently (narrow pipeline).
+                    last_updated=now - timedelta(minutes=10),
+                    sources={"source.test": source_ts},
+                    reason="Source in same state as last run.",
+                    freshness_config=FreshnessConfig(),
+                ),
+                "model.b": MaterialisationNode(
+                    asset_external_id="model.b",
+                    freshness=Freshness.CLEAN,
+                    checksum="2",
+                    dbt_path="models/model_b.sql",
+                    file_path="models/model_b.sql",
+                    # B last ran before A's most recent run.
+                    last_updated=now - timedelta(minutes=20),
+                    sources={},
+                    reason="Node in same state as last run.",
+                    freshness_config=FreshnessConfig(),
+                ),
+            },
+            edges=[
+                Edge(from_="source.test", to_="model.a"),
+                Edge(from_="model.a", to_="model.b"),
+            ],
+        )
+
+        calculate_nodes_to_run(dag=dag)
+
+        # A is reused (its source has no new data)...
+        assert (
+            isinstance(dag.nodes["model.a"], MaterialisationNode)
+            and dag.nodes["model.a"].freshness == Freshness.CLEAN
+        )
+        # ...but B must rebuild to catch up to A's newer output.
+        assert (
+            isinstance(dag.nodes["model.b"], MaterialisationNode)
+            and dag.nodes["model.b"].freshness == Freshness.DIRTY
+        )
+
     def test_calculate_nodes_to_run_sample_1(self):
         now = datetime.now()
 

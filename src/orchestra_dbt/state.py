@@ -2,9 +2,10 @@ from datetime import datetime
 from functools import lru_cache
 from typing import cast
 
-from .state_backends import resolved_state_backend
-from .state_errors import StateLoadError, StateSaveError
 from .logger import log_warn
+from .state_backends import resolved_state_backend
+from .state_backends.base import StateBackend
+from .state_errors import StateLoadError, StateSaveError
 
 __all__ = [
     "StateLoadError",
@@ -29,8 +30,26 @@ def load_state() -> StateApiModel:
     return resolved_state_backend().load()
 
 
-def save_state(state: StateApiModel) -> None:
-    resolved_state_backend().save(state)
+def save_state(
+    state: StateApiModel, updated_asset_external_ids: set[str]
+) -> None:
+    """Merge only this run's updated nodes onto the latest stored state.
+
+    Re-reads state at save time so a run with a narrow selector does not revert
+    another concurrent run's writes to nodes it did not execute itself.
+    """
+    backend: StateBackend = resolved_state_backend()
+    try:
+        latest = backend.load()
+    except StateLoadError as e:
+        raise StateSaveError(
+            f"Refusing to save: could not load latest state to merge onto: {e}"
+        )
+    for asset_external_id in updated_asset_external_ids:
+        updated_item = state.state.get(asset_external_id)
+        if updated_item is not None:
+            latest.state[asset_external_id] = updated_item
+    backend.save(latest)
 
 
 @lru_cache
@@ -53,7 +72,8 @@ def get_last_updated_from_run_results(node_id: str) -> datetime | None:
 
 def update_state(
     state: StateApiModel, parsed_dag: ParsedDag, source_freshness: SourceFreshness
-) -> None:
+) -> set[str]:
+    updated_asset_external_ids: set[str] = set()
     for node_id, node in parsed_dag.nodes.items():
         if node.node_type == NodeType.SOURCE:
             continue
@@ -79,3 +99,6 @@ def update_state(
             last_updated=last_updated_from_run_results,
             sources=sources_dict,
         )
+        updated_asset_external_ids.add(materialisation_node.asset_external_id)
+
+    return updated_asset_external_ids

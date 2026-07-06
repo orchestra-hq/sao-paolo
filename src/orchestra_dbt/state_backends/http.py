@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from ..config import get_orchestra_api_key, load_orchestra_dbt_settings
 from ..logger import log_error, log_warn
 from ..models import StateApiModel
+from ..state_errors import StateLoadError
 from ..state_filters import apply_integration_account_filter
 from .logging import log_state_loaded, log_state_saved
 
@@ -35,10 +36,12 @@ class HttpStateBackend:
             log_warn(
                 f"Failed to load state ({e.response.status_code}): {e.response.text}"
             )
-            return StateApiModel(state={})
+            raise StateLoadError(
+                f"Failed to load state ({e.response.status_code}): {e.response.text}"
+            )
         except httpx.RequestError as e:
             log_warn(f"Failed to load state due to network error: {e}")
-            return StateApiModel(state={})
+            raise StateLoadError(f"Failed to load state due to network error: {e}")
 
         try:
             state = StateApiModel.model_validate(response.json())
@@ -47,7 +50,7 @@ class HttpStateBackend:
             return state
         except (ValidationError, ValueError) as e:
             log_error(f"Failed to validate state: {e}")
-            return StateApiModel(state={})
+            raise StateLoadError(f"Failed to validate state: {e}")
 
     def save(self, state: StateApiModel) -> None:
         try:

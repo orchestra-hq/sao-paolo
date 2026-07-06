@@ -15,7 +15,7 @@ from .config import (
 )
 from .constants import SERVICE_NAME
 from .dag import construct_dag
-from .logger import log_debug, log_error, log_info, log_reused_nodes
+from .logger import log_debug, log_error, log_info, log_reused_nodes, log_warn
 from .ls import get_paths_to_run
 from .models import (
     MaterialisationNode,
@@ -33,7 +33,13 @@ from .orchestra import is_warn
 from .patcher import patch_seed_properties, patch_sql_files, revert_patching
 from .sao import Freshness, calculate_nodes_to_run
 from .source_freshness import get_source_freshness
-from .state import StateLoadError, StateSaveError, load_state, save_state, update_state
+from .state import (
+    StateLoadError,
+    StateSaveError,
+    load_state,
+    save_state,
+    update_state,
+)
 from .state_types import StateBackendKind
 from .target_finder import find_target_in_args
 
@@ -85,13 +91,23 @@ def _complete_run(
     parsed_dag: ParsedDag,
     source_freshness: SourceFreshness,
     dbt_exit_code: int,
+    state_load_ok: bool,
 ) -> None:
-    update_state(state=state, parsed_dag=parsed_dag, source_freshness=source_freshness)
+    updated_asset_external_ids = update_state(
+        state=state, parsed_dag=parsed_dag, source_freshness=source_freshness
+    )
     try:
-        save_state(state=state)
+        save_state(
+            state=state, updated_asset_external_ids=updated_asset_external_ids
+        )
     except StateSaveError as e:
-        log_error(str(e))
-        sys.exit(1)
+        # A save failure is only fatal if we had good state to begin with. If the
+        # initial load already failed, we never had reliable state to protect, so
+        # don't fail an otherwise-successful dbt run over it.
+        if state_load_ok:
+            log_error(str(e))
+            sys.exit(1)
+        log_warn(str(e))
     sys.exit(dbt_exit_code)
 
 
@@ -167,9 +183,14 @@ def main(args: tuple[str, ...]) -> None:
 
     try:
         state = load_state()
+        state_load_ok = True
     except StateLoadError as e:
-        log_error(str(e))
-        sys.exit(1)
+        log_warn(
+            f"Could not load state; continuing with empty state (no node reuse). "
+            f"State will still be saved on completion if it can be re-read. {e}"
+        )
+        state = StateApiModel(state={})
+        state_load_ok = False
 
     parsed_dag = construct_dag(source_freshness, state)
 
@@ -183,6 +204,7 @@ def main(args: tuple[str, ...]) -> None:
             parsed_dag,
             source_freshness,
             dbt_exit_code=subprocess.run(dbt_args).returncode,
+            state_load_ok=state_load_ok,
         )
 
     # Edit the DAG inline.
@@ -220,4 +242,10 @@ def main(args: tuple[str, ...]) -> None:
     else:
         result = subprocess.run(list(dbt_args))
 
-    _complete_run(state, parsed_dag, source_freshness, dbt_exit_code=result.returncode)
+    _complete_run(
+        state,
+        parsed_dag,
+        source_freshness,
+        dbt_exit_code=result.returncode,
+        state_load_ok=state_load_ok,
+    )
