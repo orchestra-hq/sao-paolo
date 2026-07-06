@@ -13,7 +13,6 @@ __all__ = [
     "get_last_updated_from_run_results",
     "load_state",
     "save_state",
-    "save_updated_state",
     "update_state",
 ]
 from .models import (
@@ -31,11 +30,7 @@ def load_state() -> StateApiModel:
     return resolved_state_backend().load()
 
 
-def save_state(state: StateApiModel) -> None:
-    resolved_state_backend().save(state)
-
-
-def save_updated_state(
+def save_state(
     state: StateApiModel, updated_asset_external_ids: set[str]
 ) -> None:
     """Merge only this run's updated nodes onto the latest stored state.
@@ -46,8 +41,10 @@ def save_updated_state(
     backend: StateBackend = resolved_state_backend()
     try:
         latest = backend.load()
-    except StateLoadError:
-        latest = StateApiModel(state={})
+    except StateLoadError as e:
+        raise StateSaveError(
+            f"Refusing to save: could not load latest state to merge onto: {e}"
+        )
     for asset_external_id in updated_asset_external_ids:
         updated_item = state.state.get(asset_external_id)
         if updated_item is not None:

@@ -15,7 +15,7 @@ from .config import (
 )
 from .constants import SERVICE_NAME
 from .dag import construct_dag
-from .logger import log_debug, log_error, log_info, log_reused_nodes
+from .logger import log_debug, log_error, log_info, log_reused_nodes, log_warn
 from .ls import get_paths_to_run
 from .models import (
     MaterialisationNode,
@@ -37,7 +37,7 @@ from .state import (
     StateLoadError,
     StateSaveError,
     load_state,
-    save_updated_state,
+    save_state,
     update_state,
 )
 from .state_types import StateBackendKind
@@ -96,7 +96,7 @@ def _complete_run(
         state=state, parsed_dag=parsed_dag, source_freshness=source_freshness
     )
     try:
-        save_updated_state(
+        save_state(
             state=state, updated_asset_external_ids=updated_asset_external_ids
         )
     except StateSaveError as e:
@@ -178,8 +178,11 @@ def main(args: tuple[str, ...]) -> None:
     try:
         state = load_state()
     except StateLoadError as e:
-        log_error(str(e))
-        sys.exit(1)
+        log_warn(
+            f"Could not load state; continuing with empty state (no node reuse). "
+            f"State will still be saved on completion if it can be re-read. {e}"
+        )
+        state = StateApiModel(state={})
 
     parsed_dag = construct_dag(source_freshness, state)
 

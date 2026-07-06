@@ -26,7 +26,6 @@ from src.orchestra_dbt.state import (
     _load_run_results,
     load_state,
     save_state,
-    save_updated_state,
     update_state,
 )
 
@@ -97,7 +96,8 @@ class TestLoadState:
             },
             status_code=400,
         )
-        assert load_state() == StateApiModel(state={})
+        with pytest.raises(StateLoadError):
+            load_state()
 
     def test_load_state_validation_error(self, httpx_mock: HTTPXMock):
         httpx_mock.add_response(
@@ -108,7 +108,8 @@ class TestLoadState:
             },
             json={"invalid": "data"},
         )
-        assert load_state() == StateApiModel(state={})
+        with pytest.raises(StateLoadError):
+            load_state()
 
     def test_load_state_request_error(self, httpx_mock: HTTPXMock):
         httpx_mock.add_exception(
@@ -120,11 +121,17 @@ class TestLoadState:
                 "Authorization": "Bearer test-api-key",
             },
         )
-        assert load_state() == StateApiModel(state={})
+        with pytest.raises(StateLoadError):
+            load_state()
 
 
 class TestSaveState:
     def test_save_state_success(self, httpx_mock: HTTPXMock):
+        httpx_mock.add_response(
+            method="GET",
+            url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
+            json={"state": {}},
+        )
         httpx_mock.add_response(
             method="PATCH",
             url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
@@ -170,12 +177,18 @@ class TestSaveState:
                             },
                         ),
                     }
-                )
+                ),
+                updated_asset_external_ids={"model.test", "model.new"},
             )
             is None
         )
 
     def test_save_state_http_error(self, httpx_mock: HTTPXMock):
+        httpx_mock.add_response(
+            method="GET",
+            url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
+            json={"state": {}},
+        )
         httpx_mock.add_response(
             method="PATCH",
             url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
@@ -185,9 +198,17 @@ class TestSaveState:
             },
             status_code=500,
         )
-        assert save_state(state=StateApiModel(state={})) is None
+        assert (
+            save_state(state=StateApiModel(state={}), updated_asset_external_ids=set())
+            is None
+        )
 
     def test_save_state_timeout(self, httpx_mock: HTTPXMock):
+        httpx_mock.add_response(
+            method="GET",
+            url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
+            json={"state": {}},
+        )
         httpx_mock.add_exception(
             httpx.TimeoutException("Request timed out"),
             method="PATCH",
@@ -197,7 +218,10 @@ class TestSaveState:
                 "Authorization": "Bearer test-api-key",
             },
         )
-        assert save_state(state=StateApiModel(state={})) is None
+        assert (
+            save_state(state=StateApiModel(state={}), updated_asset_external_ids=set())
+            is None
+        )
 
 
 class TestUpdateState:
@@ -808,12 +832,12 @@ class TestSaveStateFile:
                 )
             }
         )
-        save_state(state)
+        save_state(state, updated_asset_external_ids={"model.test"})
         loaded = load_state()
         assert loaded.state["model.test"].checksum == "123"
 
 
-class TestSaveUpdatedState:
+class TestSaveStateMerge:
     def test_only_merges_updated_entries_without_reverting_concurrent_writes(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path
     ):
@@ -856,7 +880,8 @@ class TestSaveUpdatedState:
                         sources={},
                     ),
                 }
-            )
+            ),
+            updated_asset_external_ids={"model.a", "model.b"},
         )
 
         # This run only executed model_a, so it only updates model.a.
@@ -865,7 +890,7 @@ class TestSaveUpdatedState:
             checksum="a-this-run",
             sources={},
         )
-        save_updated_state(state=in_memory, updated_asset_external_ids={"model.a"})
+        save_state(state=in_memory, updated_asset_external_ids={"model.a"})
 
         merged = load_state()
         # Our model_a update wins for the key we ran...
@@ -873,6 +898,37 @@ class TestSaveUpdatedState:
         # ...and the concurrently-written model_b is preserved, not reverted.
         assert "model.b" in merged.state
         assert merged.state["model.b"].checksum == "b-concurrent"
+
+    def test_aborts_without_clobbering_when_latest_state_cannot_be_loaded(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        """A load failure at save time must abort, not overwrite good state.
+
+        Merging onto an assumed-empty state would wipe every node this run did
+        not touch, so save_state raises StateSaveError and leaves the stored
+        state untouched.
+        """
+        p = tmp_path / "st.json"
+        original = "{ this is not valid json"
+        p.write_text(original, encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(p))
+
+        state = StateApiModel(
+            state={
+                "model.a": StateItem(
+                    last_updated=datetime(2024, 1, 1, 11, 0, 0),
+                    checksum="a-this-run",
+                    sources={},
+                )
+            }
+        )
+        with pytest.raises(StateSaveError):
+            save_state(state=state, updated_asset_external_ids={"model.a"})
+
+        # The unreadable state file is left exactly as it was, not overwritten.
+        assert p.read_text(encoding="utf-8") == original
 
 
 class TestLoadStateS3:
@@ -924,7 +980,8 @@ class TestSaveStateS3:
                         sources={},
                     )
                 }
-            )
+            ),
+            updated_asset_external_ids={"m"},
         )
 
         obj = conn.get_object(Bucket="bucket", Key="dir/f.json")
@@ -995,6 +1052,10 @@ class TestSaveStateGCS:
     ):
         bucket_dir = tmp_path / "gcs"
         bucket_dir.mkdir()
+        # Seed an existing (empty) state blob so the pre-save load() succeeds and
+        # exercises the merge path rather than the missing-blob branch.
+        (bucket_dir / "dir").mkdir()
+        (bucket_dir / "dir" / "f.json").write_text('{"state": {}}')
         monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
         monkeypatch.setenv("ORCHESTRA_STATE_FILE", "gs://bucket/dir/f.json")
@@ -1011,7 +1072,8 @@ class TestSaveStateGCS:
                             sources={},
                         )
                     }
-                )
+                ),
+                updated_asset_external_ids={"m"},
             )
 
         body = (bucket_dir / "dir" / "f.json").read_text()
@@ -1031,7 +1093,9 @@ class TestSaveStateGCS:
             side_effect=DefaultCredentialsError("no credentials"),
         ):
             with pytest.raises(StateSaveError):
-                save_state(StateApiModel(state={}))
+                save_state(
+                    StateApiModel(state={}), updated_asset_external_ids=set()
+                )
 
 
 class TestAzureStateBackend:
