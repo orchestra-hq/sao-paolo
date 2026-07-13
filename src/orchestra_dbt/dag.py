@@ -1,21 +1,79 @@
+from .asset_external_id import generate_asset_external_id
+from .build_after import parse_freshness_config
+from .checksum import calculate_checksum
+from .config import load_orchestra_dbt_settings, resolve_state_backend_config
+from .logger import log_warn
 from .models import (
     Edge,
     Freshness,
-    ModelNode,
+    MaterialisationNode,
     Node,
     ParsedDag,
     SourceFreshness,
     SourceNode,
     StateApiModel,
 )
+from .state_types import StateBackendKind
 from .utils import load_json
 
+_IGNORED_PREFIXES = ("function.",)
 
-def construct_dag(source_freshness: SourceFreshness, state: StateApiModel) -> ParsedDag:
-    manifest = load_json("target/manifest.json")
+
+def calculate_freshness_on_node(
+    asset_external_id: str,
+    checksum: str,
+    state: StateApiModel,
+    resource_type: str,
+    track_state: bool,
+    from_external_package: bool,
+    depends_on_nodes: list[str] | None,
+    seed_state_orchestration: bool = False,
+) -> tuple[Freshness, str]:
+    if resource_type == "snapshot":
+        # Note: currently, we always run snapshots. Need to configure how to propagate
+        # the ability not to run snapshots via tags/meta.
+        return Freshness.DIRTY, "Snapshot is always dirty."
+
+    if not track_state:
+        return Freshness.DIRTY, "State orchestration for this node is disabled."
+
+    if from_external_package and not depends_on_nodes:
+        return (
+            Freshness.DIRTY,
+            "Model from external package without parent dependencies - skipping state orchestration.",
+        )
+
+    if resource_type == "seed" and not seed_state_orchestration:
+        return Freshness.DIRTY, "State orchestration for seeds currently disabled."
+
+    if asset_external_id not in state.state:
+        return (
+            Freshness.DIRTY,
+            f"{resource_type.capitalize()} not previously seen in state.",
+        )
+    if checksum != state.state[asset_external_id].checksum:
+        return Freshness.DIRTY, "Checksum changed since last run."
+    return Freshness.CLEAN, f"{resource_type.capitalize()} in same state as last run."
+
+
+def construct_dag(
+    source_freshness: SourceFreshness,
+    state: StateApiModel,
+    manifest_override: str | None = None,
+) -> ParsedDag:
+    manifest = load_json(manifest_override or "target/manifest.json")
 
     nodes: dict[str, Node] = {}
     edges: list[Edge] = []
+
+    project_name_from_manifest = manifest["metadata"]["project_name"]
+    settings = load_orchestra_dbt_settings()
+    integration_account_id = settings.integration_account_id
+    state_backend_kind = resolve_state_backend_config().kind
+    if not integration_account_id and state_backend_kind == StateBackendKind.HTTP:
+        log_warn(
+            "No integration account ID found. Will use node ID as the asset external ID."
+        )
 
     for node_id in manifest.get("child_map", {}).keys():
         node_id = str(node_id)
@@ -24,30 +82,77 @@ def construct_dag(source_freshness: SourceFreshness, state: StateApiModel) -> Pa
         nodes[node_id] = SourceNode(last_updated=source_freshness.sources.get(node_id))
 
     for node_id, node in manifest.get("nodes", {}).items():
-        if node.get("resource_type") != "model":
-            continue
+        resource_type = str(node.get("resource_type"))
 
-        node_id = str(node_id)
-        checksum = str(node["checksum"]["checksum"])
+        match resource_type:
+            case "seed" | "model" | "snapshot":
+                node_id: str = str(node_id)
+                asset_external_id: str = generate_asset_external_id(
+                    node_id=node_id,
+                    relation_name=node.get("relation_name"),
+                    integration_account_id=integration_account_id,
+                    local_run=settings.local_run,
+                )
 
-        nodes[node_id] = ModelNode(
-            freshness=(
-                Freshness.DIRTY
-                if node_id not in state.state
-                or not checksum
-                or checksum != state.state[node_id].checksum
-                else Freshness.CLEAN
-            ),
-            checksum=checksum,
-            freshness_config=node.get("config", {}).get("freshness"),
-            last_updated=(
-                state.state[node_id].last_updated if node_id in state.state else None
-            ),
-            sources=state.state[node_id].sources if node_id in state.state else {},
-            sql_path=node["original_file_path"],
-        )
+                dbt_path = str(node["original_file_path"])
+                from_external_package = (
+                    node["package_name"] != project_name_from_manifest
+                )
+                depends_on_nodes = node.get("depends_on", {}).get("nodes", [])
+                if from_external_package:
+                    file_path = f"dbt_packages/{node['package_name']}/{dbt_path}"
+                else:
+                    file_path = dbt_path
 
-        for dep in node.get("depends_on", {}).get("nodes", []):
-            edges.append(Edge(from_=str(dep), to_=node_id))
+                track_state = True
+                checksum: str | None = calculate_checksum(
+                    resource_type,
+                    node_checksum=str(node["checksum"]["checksum"]),
+                    file_path=file_path,
+                )
+                if not checksum:
+                    track_state = False
+                    checksum = str(node["checksum"]["checksum"])
+
+                freshness, reason = calculate_freshness_on_node(
+                    asset_external_id,
+                    checksum,
+                    state,
+                    resource_type,
+                    track_state,
+                    from_external_package,
+                    depends_on_nodes,
+                    settings.seed_state_orchestration,
+                )
+
+                nodes[node_id] = MaterialisationNode(
+                    asset_external_id=asset_external_id,
+                    checksum=checksum,
+                    freshness_config=parse_freshness_config(
+                        config_on_node=node.get("config", {}).get("freshness")
+                    ),
+                    freshness=freshness,
+                    dbt_path=dbt_path,
+                    reason=reason,
+                    sources=(
+                        state.state[asset_external_id].sources
+                        if asset_external_id in state.state
+                        else {}
+                    ),
+                    file_path=file_path,
+                    last_updated=(
+                        state.state[asset_external_id].last_updated
+                        if asset_external_id in state.state
+                        else None
+                    ),
+                )
+
+                for dep in depends_on_nodes:
+                    dep = str(dep)
+                    if dep.startswith(_IGNORED_PREFIXES):
+                        continue
+                    edges.append(Edge(from_=dep, to_=node_id))
+            case _:
+                continue
 
     return ParsedDag(nodes=nodes, edges=edges)

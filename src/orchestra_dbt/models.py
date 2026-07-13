@@ -1,16 +1,17 @@
 from datetime import datetime
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel
 
 
-class Freshness(Enum):
+class Freshness(str, Enum):
     CLEAN = "CLEAN"
     DIRTY = "DIRTY"
 
 
-class NodeType(Enum):
-    MODEL = "MODEL"
+class NodeType(str, Enum):
+    MATERIALISATION = "MATERIALISATION"
     SOURCE = "SOURCE"
 
 
@@ -28,23 +29,32 @@ class SourceFreshness(BaseModel):
     sources: dict[str, datetime]
 
 
+class FreshnessConfig(BaseModel):
+    inherited_from: str | None = None
+    minutes_sla: int | None = None
+    updates_on: Literal["any", "all"] = "any"
+
+
 class Node(BaseModel):
     last_updated: datetime | None = None
-    type: NodeType
+    node_type: NodeType
 
 
 class SourceNode(Node):
-    type: NodeType = NodeType.SOURCE
+    node_type: NodeType = NodeType.SOURCE
 
 
-class ModelNode(Node):
+class MaterialisationNode(Node):
+    node_type: NodeType = NodeType.MATERIALISATION
+
+    asset_external_id: str
     checksum: str
+    dbt_path: str
+    file_path: str
+    freshness_config: FreshnessConfig
     freshness: Freshness
-    sources: dict[str, datetime] = {}
-    sql_path: str
-    type: NodeType = NodeType.MODEL
-
-    freshness_config: dict | None = None
+    reason: str
+    sources: dict[str, datetime]
 
 
 class Edge(BaseModel):

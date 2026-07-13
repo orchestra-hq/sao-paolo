@@ -1,13 +1,19 @@
 from datetime import datetime
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+import boto3
+import httpx
 import pytest
+from cloud_storage_mocker import Mount
+from cloud_storage_mocker import patch as gcs_patch
+from moto import mock_aws
 from pytest_httpx import HTTPXMock
 
 from src.orchestra_dbt.models import (
     Edge,
     Freshness,
-    ModelNode,
+    FreshnessConfig,
+    MaterialisationNode,
     ParsedDag,
     SourceFreshness,
     SourceNode,
@@ -15,6 +21,8 @@ from src.orchestra_dbt.models import (
     StateItem,
 )
 from src.orchestra_dbt.state import (
+    StateLoadError,
+    StateSaveError,
     _load_run_results,
     load_state,
     save_state,
@@ -23,7 +31,18 @@ from src.orchestra_dbt.state import (
 
 
 class TestLoadState:
-    def test_load_state_success(self, httpx_mock: HTTPXMock):
+    @patch("src.orchestra_dbt.state_filters.get_integration_account_id")
+    @pytest.mark.parametrize(
+        "integration_account_id, expected_state_len",
+        [(None, 3), ("a", 1), ("b", 1)],
+    )
+    def test_load_state_success(
+        self,
+        mock_get_integration_account_id,
+        httpx_mock: HTTPXMock,
+        integration_account_id: str | None,
+        expected_state_len: int,
+    ):
         httpx_mock.add_response(
             url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
             match_headers={
@@ -32,26 +51,40 @@ class TestLoadState:
             },
             json={
                 "state": {
+                    "a.model.test": {
+                        "checksum": "123",
+                        "last_updated": "2024-01-01T12:00:00",
+                        "sources": {
+                            "source.test": "2024-01-01T11:00:00",
+                        },
+                    },
+                    "b.model.test": {
+                        "checksum": "123",
+                        "last_updated": "2024-01-01T12:00:00",
+                        "sources": {
+                            "source.test": "2024-01-01T11:00:00",
+                        },
+                    },
                     "model.test": {
                         "checksum": "123",
                         "last_updated": "2024-01-01T12:00:00",
                         "sources": {
                             "source.test": "2024-01-01T11:00:00",
                         },
-                    }
+                    },
                 }
             },
         )
-        assert load_state() == StateApiModel(
-            state={
-                "model.test": StateItem(
-                    last_updated=datetime(2024, 1, 1, 12, 0, 0),
-                    checksum="123",
-                    sources={
-                        "source.test": datetime(2024, 1, 1, 11, 0, 0),
-                    },
-                )
-            }
+
+        mock_get_integration_account_id.return_value = integration_account_id
+        loaded_state = load_state()
+        assert len(loaded_state.state) == expected_state_len
+        assert list(loaded_state.state.values())[0] == StateItem(
+            last_updated=datetime(2024, 1, 1, 12, 0, 0),
+            checksum="123",
+            sources={
+                "source.test": datetime(2024, 1, 1, 11, 0, 0),
+            },
         )
 
     def test_load_state_http_error(self, httpx_mock: HTTPXMock):
@@ -63,7 +96,8 @@ class TestLoadState:
             },
             status_code=400,
         )
-        assert load_state() == StateApiModel(state={})
+        with pytest.raises(StateLoadError):
+            load_state()
 
     def test_load_state_validation_error(self, httpx_mock: HTTPXMock):
         httpx_mock.add_response(
@@ -74,11 +108,30 @@ class TestLoadState:
             },
             json={"invalid": "data"},
         )
-        assert load_state() == StateApiModel(state={})
+        with pytest.raises(StateLoadError):
+            load_state()
+
+    def test_load_state_request_error(self, httpx_mock: HTTPXMock):
+        httpx_mock.add_exception(
+            httpx.ConnectError("Connection failed"),
+            method="GET",
+            url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
+            match_headers={
+                "Accept": "application/json",
+                "Authorization": "Bearer test-api-key",
+            },
+        )
+        with pytest.raises(StateLoadError):
+            load_state()
 
 
 class TestSaveState:
     def test_save_state_success(self, httpx_mock: HTTPXMock):
+        httpx_mock.add_response(
+            method="GET",
+            url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
+            json={"state": {}},
+        )
         httpx_mock.add_response(
             method="PATCH",
             url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
@@ -124,12 +177,18 @@ class TestSaveState:
                             },
                         ),
                     }
-                )
+                ),
+                updated_asset_external_ids={"model.test", "model.new"},
             )
             is None
         )
 
     def test_save_state_http_error(self, httpx_mock: HTTPXMock):
+        httpx_mock.add_response(
+            method="GET",
+            url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
+            json={"state": {}},
+        )
         httpx_mock.add_response(
             method="PATCH",
             url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
@@ -139,7 +198,30 @@ class TestSaveState:
             },
             status_code=500,
         )
-        assert save_state(state=StateApiModel(state={})) is None
+        assert (
+            save_state(state=StateApiModel(state={}), updated_asset_external_ids=set())
+            is None
+        )
+
+    def test_save_state_timeout(self, httpx_mock: HTTPXMock):
+        httpx_mock.add_response(
+            method="GET",
+            url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
+            json={"state": {}},
+        )
+        httpx_mock.add_exception(
+            httpx.TimeoutException("Request timed out"),
+            method="PATCH",
+            url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
+            match_headers={
+                "Content-Type": "application/json",
+                "Authorization": "Bearer test-api-key",
+            },
+        )
+        assert (
+            save_state(state=StateApiModel(state={}), updated_asset_external_ids=set())
+            is None
+        )
 
 
 class TestUpdateState:
@@ -167,10 +249,15 @@ class TestUpdateState:
         state = StateApiModel(state={})
         parsed_dag = ParsedDag(
             nodes={
-                "model.test_project.model_a": ModelNode(
+                "model.test_project.model_a": MaterialisationNode(
+                    asset_external_id="model.test_project.model_a",
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
-                    sql_path="models/model_a.sql",
+                    dbt_path="models/model_a.sql",
+                    file_path="models/model_a.sql",
+                    reason="Node not seen before",
+                    sources={},
+                    freshness_config=FreshnessConfig(),
                 )
             },
             edges=[],
@@ -206,10 +293,15 @@ class TestUpdateState:
         parsed_dag = ParsedDag(
             nodes={
                 "source.test_db.test_schema.test_table": SourceNode(),
-                "model.test_project.model_a": ModelNode(
+                "model.test_project.model_a": MaterialisationNode(
+                    asset_external_id="model.test_project.model_a",
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
-                    sql_path="models/model_a.sql",
+                    dbt_path="models/model_a.sql",
+                    file_path="models/model_a.sql",
+                    reason="Node not seen before",
+                    sources={},
+                    freshness_config=FreshnessConfig(),
                 ),
             },
             edges=[
@@ -240,10 +332,15 @@ class TestUpdateState:
         state = StateApiModel(state={})
         parsed_dag = ParsedDag(
             nodes={
-                "model.test_project.model_a": ModelNode(
+                "model.test_project.model_a": MaterialisationNode(
+                    asset_external_id="integration_account_id.model.test_project.model_a",
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
-                    sql_path="models/model_a.sql",
+                    dbt_path="models/model_a.sql",
+                    file_path="models/model_a.sql",
+                    reason="Node not seen before",
+                    sources={},
+                    freshness_config=FreshnessConfig(),
                 )
             },
             edges=[],
@@ -273,10 +370,15 @@ class TestUpdateState:
         state = StateApiModel(state={})
         parsed_dag = ParsedDag(
             nodes={
-                "model.test_project.model_a": ModelNode(
+                "model.test_project.model_a": MaterialisationNode(
+                    asset_external_id="integration_account_id.model.test_project.model_a",
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
-                    sql_path="models/model_a.sql",
+                    dbt_path="models/model_a.sql",
+                    file_path="models/model_a.sql",
+                    reason="Node not seen before",
+                    sources={},
+                    freshness_config=FreshnessConfig(),
                 )
             },
             edges=[],
@@ -343,15 +445,25 @@ class TestUpdateState:
         state = StateApiModel(state={})
         parsed_dag = ParsedDag(
             nodes={
-                "model.test_project.model_a": ModelNode(
+                "model.test_project.model_a": MaterialisationNode(
+                    asset_external_id="model.test_project.model_a",
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
-                    sql_path="models/model_a.sql",
+                    dbt_path="models/model_a.sql",
+                    file_path="models/model_a.sql",
+                    reason="Node not seen before",
+                    sources={},
+                    freshness_config=FreshnessConfig(),
                 ),
-                "model.test_project.model_b": ModelNode(
+                "model.test_project.model_b": MaterialisationNode(
+                    asset_external_id="model.test_project.model_b",
                     checksum="def456",
                     freshness=Freshness.CLEAN,
-                    sql_path="models/model_b.sql",
+                    dbt_path="models/model_b.sql",
+                    file_path="models/model_b.sql",
+                    sources={},
+                    reason="Node not seen before",
+                    freshness_config=FreshnessConfig(),
                 ),
             },
             edges=[],
@@ -387,10 +499,15 @@ class TestUpdateState:
             nodes={
                 "source.test_db.test_schema.table1": SourceNode(),
                 "source.test_db.test_schema.table2": SourceNode(),
-                "model.test_project.model_a": ModelNode(
+                "model.test_project.model_a": MaterialisationNode(
+                    asset_external_id="model.test_project.model_a",
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
-                    sql_path="models/model_a.sql",
+                    dbt_path="models/model_a.sql",
+                    file_path="models/model_a.sql",
+                    reason="Node not seen before",
+                    sources={},
+                    freshness_config=FreshnessConfig(),
                 ),
             },
             edges=[
@@ -445,10 +562,15 @@ class TestUpdateState:
             nodes={
                 "source.test_db.test_schema.table1": SourceNode(),
                 "source.test_db.test_schema.table2": SourceNode(),
-                "model.test_project.model_a": ModelNode(
+                "model.test_project.model_a": MaterialisationNode(
+                    asset_external_id="model.test_project.model_a",
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
-                    sql_path="models/model_a.sql",
+                    dbt_path="models/model_a.sql",
+                    file_path="models/model_a.sql",
+                    reason="Node not seen before",
+                    sources={},
+                    freshness_config=FreshnessConfig(),
                 ),
             },
             edges=[
@@ -511,10 +633,15 @@ class TestUpdateState:
         )
         parsed_dag = ParsedDag(
             nodes={
-                "model.test_project.model_a": ModelNode(
+                "model.test_project.model_a": MaterialisationNode(
+                    asset_external_id="model.test_project.model_a",
                     checksum="new_checksum",
                     freshness=Freshness.CLEAN,
-                    sql_path="models/model_a.sql",
+                    dbt_path="models/model_a.sql",
+                    file_path="models/model_a.sql",
+                    reason="Node not seen before",
+                    sources={},
+                    freshness_config=FreshnessConfig(),
                 )
             },
             edges=[],
@@ -547,15 +674,25 @@ class TestUpdateState:
         state = StateApiModel(state={})
         parsed_dag = ParsedDag(
             nodes={
-                "model.test_project.model_a": ModelNode(
+                "model.test_project.model_a": MaterialisationNode(
+                    asset_external_id="model.test_project.model_a",
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
-                    sql_path="models/model_a.sql",
+                    dbt_path="models/model_a.sql",
+                    file_path="models/model_a.sql",
+                    reason="Node not seen before",
+                    sources={},
+                    freshness_config=FreshnessConfig(),
                 ),
-                "model.test_project.model_b": ModelNode(
+                "model.test_project.model_b": MaterialisationNode(
+                    asset_external_id="model.test_project.model_b",
                     checksum="def456",
                     freshness=Freshness.CLEAN,
-                    sql_path="models/model_b.sql",
+                    dbt_path="models/model_b.sql",
+                    file_path="models/model_b.sql",
+                    reason="Node not seen before",
+                    sources={},
+                    freshness_config=FreshnessConfig(),
                 ),
             },
             edges=[
@@ -589,10 +726,15 @@ class TestUpdateState:
         state = StateApiModel(state={})
         parsed_dag = ParsedDag(
             nodes={
-                "model.test_project.model_a": ModelNode(
+                "model.test_project.model_a": MaterialisationNode(
+                    asset_external_id="integration_account_id.model.test_project.model_a",
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
-                    sql_path="models/model_a.sql",
+                    dbt_path="models/model_a.sql",
+                    file_path="models/model_a.sql",
+                    reason="Node not seen before",
+                    sources={},
+                    freshness_config=FreshnessConfig(),
                 )
             },
             edges=[],
@@ -619,10 +761,15 @@ class TestUpdateState:
         state = StateApiModel(state={})
         parsed_dag = ParsedDag(
             nodes={
-                "model.test_project.model_a": ModelNode(
+                "model.test_project.model_a": MaterialisationNode(
+                    asset_external_id="model.test_project.model_a",
                     checksum="abc123",
                     freshness=Freshness.CLEAN,
-                    sql_path="models/model_a.sql",
+                    dbt_path="models/model_a.sql",
+                    file_path="models/model_a.sql",
+                    reason="Node not seen before",
+                    sources={},
+                    freshness_config=FreshnessConfig(),
                 )
             },
             edges=[],
@@ -632,3 +779,534 @@ class TestUpdateState:
         update_state(state, parsed_dag, source_freshness)
 
         assert state.state == {}
+
+
+class TestLoadStateFile:
+    def test_load_state_file_missing(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(tmp_path / "missing.json"))
+
+        with pytest.raises(StateLoadError, match="State file not found"):
+            load_state()
+
+    def test_load_state_file_empty_state(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        p = tmp_path / "st.json"
+        p.write_text('{"state": {}}', encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(p))
+
+        assert load_state() == StateApiModel(state={})
+
+    def test_load_state_file_invalid_json(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        p = tmp_path / "st.json"
+        p.write_text("not json", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(p))
+
+        with pytest.raises(StateLoadError, match="not valid JSON"):
+            load_state()
+
+
+class TestSaveStateFile:
+    def test_save_state_file_round_trip(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        p = tmp_path / "st.json"
+        p.write_text('{"state": {}}', encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(p))
+        state = StateApiModel(
+            state={
+                "model.test": StateItem(
+                    last_updated=datetime(2024, 1, 1, 14, 0, 0),
+                    checksum="123",
+                    sources={"source.test": datetime(2024, 1, 1, 11, 0, 0)},
+                )
+            }
+        )
+        save_state(state, updated_asset_external_ids={"model.test"})
+        loaded = load_state()
+        assert loaded.state["model.test"].checksum == "123"
+
+
+class TestSaveStateMerge:
+    def test_only_merges_updated_entries_without_reverting_concurrent_writes(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        """A narrow run must not revert a concurrent run's update to another node.
+
+        Simulates: this run loaded stale state (model_a only), then a concurrent
+        run wrote model_b to the backend. Saving must merge our model_a update onto
+        the latest state, leaving the concurrently-written model_b intact.
+        """
+        p = tmp_path / "st.json"
+        p.write_text('{"state": {}}', encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(p))
+
+        # State this run loaded at start: only model_a exists, with an old timestamp.
+        in_memory = StateApiModel(
+            state={
+                "model.a": StateItem(
+                    last_updated=datetime(2024, 1, 1, 10, 0, 0),
+                    checksum="a-old",
+                    sources={},
+                )
+            }
+        )
+
+        # A concurrent run has since written the backend: model_a advanced AND
+        # model_b was created. This is the latest stored state.
+        save_state(
+            StateApiModel(
+                state={
+                    "model.a": StateItem(
+                        last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                        checksum="a-concurrent",
+                        sources={},
+                    ),
+                    "model.b": StateItem(
+                        last_updated=datetime(2024, 1, 1, 12, 5, 0),
+                        checksum="b-concurrent",
+                        sources={},
+                    ),
+                }
+            ),
+            updated_asset_external_ids={"model.a", "model.b"},
+        )
+
+        # This run only executed model_a, so it only updates model.a.
+        in_memory.state["model.a"] = StateItem(
+            last_updated=datetime(2024, 1, 1, 11, 0, 0),
+            checksum="a-this-run",
+            sources={},
+        )
+        save_state(state=in_memory, updated_asset_external_ids={"model.a"})
+
+        merged = load_state()
+        # Our model_a update wins for the key we ran...
+        assert merged.state["model.a"].checksum == "a-this-run"
+        # ...and the concurrently-written model_b is preserved, not reverted.
+        assert "model.b" in merged.state
+        assert merged.state["model.b"].checksum == "b-concurrent"
+
+    def test_aborts_without_clobbering_when_latest_state_cannot_be_loaded(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        """A load failure at save time must abort, not overwrite good state.
+
+        Merging onto an assumed-empty state would wipe every node this run did
+        not touch, so save_state raises StateSaveError and leaves the stored
+        state untouched.
+        """
+        p = tmp_path / "st.json"
+        original = "{ this is not valid json"
+        p.write_text(original, encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(p))
+
+        state = StateApiModel(
+            state={
+                "model.a": StateItem(
+                    last_updated=datetime(2024, 1, 1, 11, 0, 0),
+                    checksum="a-this-run",
+                    sources={},
+                )
+            }
+        )
+        with pytest.raises(StateSaveError):
+            save_state(state=state, updated_asset_external_ids={"model.a"})
+
+        # The unreadable state file is left exactly as it was, not overwritten.
+        assert p.read_text(encoding="utf-8") == original
+
+
+class TestLoadStateS3:
+    @mock_aws
+    def test_load_state_s3_missing_object_starts_empty(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        conn = boto3.client("s3", region_name="us-east-1")
+        conn.create_bucket(Bucket="test-bucket")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", "s3://test-bucket/prefix/state.json")
+
+        assert load_state() == StateApiModel(state={})
+
+    @mock_aws
+    def test_load_state_s3_success(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
+        conn = boto3.client("s3", region_name="us-east-1")
+        conn.create_bucket(Bucket="test-bucket-s3")
+        payload = (
+            b'{"state": {"model.x": {"checksum": "c", '
+            b'"last_updated": "2024-01-01T12:00:00", "sources": {}}}}'
+        )
+        conn.put_object(Bucket="test-bucket-s3", Key="k.json", Body=payload)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", "s3://test-bucket-s3/k.json")
+
+        loaded = load_state()
+        assert "model.x" in loaded.state
+        assert loaded.state["model.x"].checksum == "c"
+
+
+class TestSaveStateS3:
+    @mock_aws
+    def test_save_state_s3_put_object(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
+        conn = boto3.client("s3", region_name="us-east-1")
+        conn.create_bucket(Bucket="bucket")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", "s3://bucket/dir/f.json")
+
+        save_state(
+            StateApiModel(
+                state={
+                    "m": StateItem(
+                        last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                        checksum="1",
+                        sources={},
+                    )
+                }
+            ),
+            updated_asset_external_ids={"m"},
+        )
+
+        obj = conn.get_object(Bucket="bucket", Key="dir/f.json")
+        body = obj["Body"].read()
+        assert b'"checksum"' in body
+
+
+class TestLoadStateGCS:
+    def test_load_state_gcs_missing_blob_starts_empty(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", "gs://test-bucket/prefix/state.json")
+
+        # cloud-storage-mocker doesn't implement get_bucket; patch it to confirm
+        # the bucket exists so the missing-blob path is exercised.
+        from cloud_storage_mocker._core import Client as MockClient
+
+        with gcs_patch(
+            mounts=[
+                Mount("test-bucket", tmp_path / "gcs", readable=True, writable=True)
+            ]
+        ):
+            with patch.object(MockClient, "get_bucket", return_value=None, create=True):
+                assert load_state() == StateApiModel(state={})
+
+    def test_load_state_gcs_success(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
+        bucket_dir = tmp_path / "gcs"
+        blob_path = bucket_dir / "k.json"
+        bucket_dir.mkdir()
+        blob_path.write_text(
+            '{"state": {"model.x": {"checksum": "c", '
+            '"last_updated": "2024-01-01T12:00:00", "sources": {}}}}'
+        )
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", "gs://test-bucket/k.json")
+
+        with gcs_patch(
+            mounts=[Mount("test-bucket", bucket_dir, readable=True, writable=True)]
+        ):
+            loaded = load_state()
+
+        assert "model.x" in loaded.state
+        assert loaded.state["model.x"].checksum == "c"
+
+    def test_load_state_gcs_credential_error_raises_state_load_error(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", "gs://bucket/state.json")
+
+        from google.auth.exceptions import DefaultCredentialsError
+
+        with patch(
+            "orchestra_dbt.state_backends.gcs.storage.Client",
+            side_effect=DefaultCredentialsError("no credentials"),
+        ):
+            with pytest.raises(StateLoadError):
+                load_state()
+
+
+class TestSaveStateGCS:
+    def test_save_state_gcs_uploads_blob(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        bucket_dir = tmp_path / "gcs"
+        bucket_dir.mkdir()
+        # Seed an existing (empty) state blob so the pre-save load() succeeds and
+        # exercises the merge path rather than the missing-blob branch.
+        (bucket_dir / "dir").mkdir()
+        (bucket_dir / "dir" / "f.json").write_text('{"state": {}}')
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", "gs://bucket/dir/f.json")
+
+        with gcs_patch(
+            mounts=[Mount("bucket", bucket_dir, readable=True, writable=True)]
+        ):
+            save_state(
+                StateApiModel(
+                    state={
+                        "m": StateItem(
+                            last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                            checksum="1",
+                            sources={},
+                        )
+                    }
+                ),
+                updated_asset_external_ids={"m"},
+            )
+
+        body = (bucket_dir / "dir" / "f.json").read_text()
+        assert '"checksum"' in body
+
+    def test_save_state_gcs_credential_error_raises_state_save_error(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", "gs://bucket/state.json")
+
+        from google.auth.exceptions import DefaultCredentialsError
+
+        with patch(
+            "orchestra_dbt.state_backends.gcs.storage.Client",
+            side_effect=DefaultCredentialsError("no credentials"),
+        ):
+            with pytest.raises(StateSaveError):
+                save_state(
+                    StateApiModel(state={}), updated_asset_external_ids=set()
+                )
+
+
+class TestAzureStateBackend:
+    @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
+    @patch("src.orchestra_dbt.state_backends.azure.DefaultAzureCredential")
+    def test_load_returns_empty_state_when_blob_missing(
+        self, mock_credential, mock_client_cls
+    ):
+        from azure.core.exceptions import ResourceNotFoundError
+
+        mock_blob_client = MagicMock()
+        mock_blob_client.download_blob.side_effect = ResourceNotFoundError("not found")
+        mock_container_client = MagicMock()
+        mock_container_client.exists.return_value = True
+        mock_service = MagicMock()
+        mock_service.get_blob_client.return_value = mock_blob_client
+        mock_service.get_container_client.return_value = mock_container_client
+        mock_client_cls.return_value = mock_service
+
+        from src.orchestra_dbt.state_backends.azure import AzureStateBackend
+
+        backend = AzureStateBackend("myaccount", "mycontainer", "state.json")
+        result = backend.load()
+
+        assert result == StateApiModel(state={})
+
+    @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
+    @patch("src.orchestra_dbt.state_backends.azure.DefaultAzureCredential")
+    def test_load_raises_when_container_missing(self, mock_credential, mock_client_cls):
+        from azure.core.exceptions import ResourceNotFoundError
+        from src.orchestra_dbt.state_errors import StateLoadError
+
+        mock_blob_client = MagicMock()
+        mock_blob_client.download_blob.side_effect = ResourceNotFoundError("not found")
+        mock_container_client = MagicMock()
+        mock_container_client.exists.return_value = False
+        mock_service = MagicMock()
+        mock_service.get_blob_client.return_value = mock_blob_client
+        mock_service.get_container_client.return_value = mock_container_client
+        mock_client_cls.return_value = mock_service
+
+        from src.orchestra_dbt.state_backends.azure import AzureStateBackend
+
+        backend = AzureStateBackend("myaccount", "mycontainer", "state.json")
+        with pytest.raises(StateLoadError, match="container"):
+            backend.load()
+
+    @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
+    @patch("src.orchestra_dbt.state_backends.azure.DefaultAzureCredential")
+    def test_load_returns_valid_state(self, mock_credential, mock_client_cls):
+        payload = '{"state": {"model.test": {"checksum": "abc", "last_updated": "2024-01-01T12:00:00", "sources": {}}}}'
+        mock_download = MagicMock()
+        mock_download.readall.return_value = payload.encode("utf-8")
+        mock_blob_client = MagicMock()
+        mock_blob_client.download_blob.return_value = mock_download
+        mock_service = MagicMock()
+        mock_service.get_blob_client.return_value = mock_blob_client
+        mock_client_cls.return_value = mock_service
+
+        from src.orchestra_dbt.state_backends.azure import AzureStateBackend
+
+        backend = AzureStateBackend("myaccount", "mycontainer", "state.json")
+        result = backend.load()
+
+        assert "model.test" in result.state
+        assert result.state["model.test"].checksum == "abc"
+
+    @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
+    @patch("src.orchestra_dbt.state_backends.azure.DefaultAzureCredential")
+    def test_save_uploads_json(self, mock_credential, mock_client_cls):
+        mock_blob_client = MagicMock()
+        mock_service = MagicMock()
+        mock_service.get_blob_client.return_value = mock_blob_client
+        mock_client_cls.return_value = mock_service
+
+        from src.orchestra_dbt.state_backends.azure import AzureStateBackend
+
+        backend = AzureStateBackend("myaccount", "mycontainer", "state.json")
+        backend.save(StateApiModel(state={}))
+
+        mock_blob_client.upload_blob.assert_called_once()
+        call_kwargs = mock_blob_client.upload_blob.call_args
+        assert call_kwargs.kwargs.get("overwrite") is True
+        assert call_kwargs.kwargs.get("content_settings") is not None
+
+    @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
+    @patch("src.orchestra_dbt.state_backends.azure.DefaultAzureCredential")
+    def test_save_raises_on_auth_error(self, mock_credential, mock_client_cls):
+        from azure.core.exceptions import HttpResponseError
+        from src.orchestra_dbt.state_errors import StateSaveError
+
+        mock_blob_client = MagicMock()
+        mock_blob_client.upload_blob.side_effect = HttpResponseError(
+            message="AuthorizationFailure"
+        )
+        mock_service = MagicMock()
+        mock_service.get_blob_client.return_value = mock_blob_client
+        mock_client_cls.return_value = mock_service
+
+        from src.orchestra_dbt.state_backends.azure import AzureStateBackend
+
+        backend = AzureStateBackend("myaccount", "mycontainer", "state.json")
+        with pytest.raises(StateSaveError):
+            backend.save(StateApiModel(state={}))
+
+    @patch.dict(
+        "os.environ",
+        {
+            "AZURE_STORAGE_CONNECTION_STRING": "DefaultEndpointsProtocol=https;AccountName=myaccount;AccountKey=fake;EndpointSuffix=core.windows.net"
+        },
+    )
+    @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
+    def test_load_uses_connection_string_when_set(self, mock_client_cls):
+        payload = '{"state": {}}'
+        mock_download = MagicMock()
+        mock_download.readall.return_value = payload.encode("utf-8")
+        mock_blob_client = MagicMock()
+        mock_blob_client.download_blob.return_value = mock_download
+        mock_service = MagicMock()
+        mock_service.get_blob_client.return_value = mock_blob_client
+        mock_client_cls.from_connection_string.return_value = mock_service
+
+        from src.orchestra_dbt.state_backends.azure import AzureStateBackend
+
+        backend = AzureStateBackend("myaccount", "mycontainer", "state.json")
+        result = backend.load()
+
+        mock_client_cls.from_connection_string.assert_called_once()
+        assert result == StateApiModel(state={})
+
+    @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
+    @patch("src.orchestra_dbt.state_backends.azure.DefaultAzureCredential")
+    def test_load_uses_default_credential_when_no_connection_string(
+        self, mock_credential_cls, mock_client_cls
+    ):
+        payload = '{"state": {}}'
+        mock_download = MagicMock()
+        mock_download.readall.return_value = payload.encode("utf-8")
+        mock_blob_client = MagicMock()
+        mock_blob_client.download_blob.return_value = mock_download
+        mock_service = MagicMock()
+        mock_service.get_blob_client.return_value = mock_blob_client
+        mock_client_cls.return_value = mock_service
+
+        from src.orchestra_dbt.state_backends.azure import AzureStateBackend
+
+        backend = AzureStateBackend("myaccount", "mycontainer", "state.json")
+        result = backend.load()
+
+        mock_credential_cls.assert_called_once()
+        mock_client_cls.assert_called_once()
+        assert result == StateApiModel(state={})
+
+    @patch.dict(
+        "os.environ",
+        {
+            "AZURE_STORAGE_CONNECTION_STRING": "DefaultEndpointsProtocol=https;AccountName=otheraccount;AccountKey=fake;EndpointSuffix=core.windows.net"
+        },
+    )
+    @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
+    def test_load_raises_when_connection_string_account_mismatches_uri(
+        self, mock_client_cls
+    ):
+        from src.orchestra_dbt.state_errors import StateLoadError
+
+        from src.orchestra_dbt.state_backends.azure import AzureStateBackend
+
+        backend = AzureStateBackend("myaccount", "mycontainer", "state.json")
+        with pytest.raises(StateLoadError, match="must match"):
+            backend.load()
+
+        mock_client_cls.from_connection_string.assert_not_called()
+
+    @patch.dict(
+        "os.environ",
+        {
+            "AZURE_STORAGE_CONNECTION_STRING": "DefaultEndpointsProtocol=https;AccountName=otheraccount;AccountKey=fake;EndpointSuffix=core.windows.net"
+        },
+    )
+    @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
+    def test_save_raises_when_connection_string_account_mismatches_uri(
+        self, mock_client_cls
+    ):
+        from src.orchestra_dbt.state_errors import StateSaveError
+
+        from src.orchestra_dbt.state_backends.azure import AzureStateBackend
+
+        backend = AzureStateBackend("myaccount", "mycontainer", "state.json")
+        with pytest.raises(StateSaveError, match="must match"):
+            backend.save(StateApiModel(state={}))
+
+        mock_client_cls.from_connection_string.assert_not_called()
+
+    @patch.dict(
+        "os.environ",
+        {"AZURE_STORAGE_CONNECTION_STRING": "not-a-valid-connection-string"},
+    )
+    @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
+    def test_load_wraps_invalid_connection_string_as_state_load_error(
+        self, mock_client_cls
+    ):
+        from src.orchestra_dbt.state_errors import StateLoadError
+
+        mock_client_cls.from_connection_string.side_effect = ValueError(
+            "Connection string missing required connection details."
+        )
+
+        from src.orchestra_dbt.state_backends.azure import AzureStateBackend
+
+        # Account name is absent from the string, so the mismatch guard passes and
+        # from_connection_string runs and raises — which must surface as StateLoadError.
+        backend = AzureStateBackend("myaccount", "mycontainer", "state.json")
+        with pytest.raises(StateLoadError, match="initialize Azure client"):
+            backend.load()

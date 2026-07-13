@@ -1,55 +1,55 @@
-import json
-import os
 from datetime import datetime
 from functools import lru_cache
+from typing import cast
 
-import httpx
-from pydantic import ValidationError
+from .logger import log_warn
+from .state_backends import resolved_state_backend
+from .state_backends.base import StateBackend
+from .state_errors import StateLoadError, StateSaveError
 
-from orchestra_dbt.utils import load_json
-
-from .logger import log_error, log_info, log_warn
+__all__ = [
+    "StateLoadError",
+    "StateSaveError",
+    "get_last_updated_from_run_results",
+    "load_state",
+    "save_state",
+    "update_state",
+]
 from .models import (
-    ModelNode,
+    MaterialisationNode,
     NodeType,
     ParsedDag,
     SourceFreshness,
     StateApiModel,
     StateItem,
 )
-
-
-def _get_base_api_url() -> str:
-    return f"https://{os.getenv('ORCHESTRA_ENV', 'app').lower()}.getorchestra.io/api/engine/public"
-
-
-def _get_headers() -> dict:
-    return {
-        "Authorization": f"Bearer {os.getenv('ORCHESTRA_API_KEY')}",
-    }
+from .utils import load_json
 
 
 def load_state() -> StateApiModel:
-    try:
-        response = httpx.get(
-            headers={
-                **_get_headers(),
-                "Accept": "application/json",
-            },
-            url=f"{_get_base_api_url()}/state/DBT_CORE",
-        )
-        response.raise_for_status()
-    except httpx.HTTPStatusError as e:
-        log_warn(f"Failed to load state ({e.response.status_code}): {e.response.text}")
-        return StateApiModel(state={})
+    return resolved_state_backend().load()
 
+
+def save_state(
+    state: StateApiModel, updated_asset_external_ids: set[str]
+) -> None:
+    """Merge only this run's updated nodes onto the latest stored state.
+
+    Re-reads state at save time so a run with a narrow selector does not revert
+    another concurrent run's writes to nodes it did not execute itself.
+    """
+    backend: StateBackend = resolved_state_backend()
     try:
-        state = StateApiModel.model_validate(response.json())
-        log_info("State loaded")
-        return state
-    except (ValidationError, ValueError) as e:
-        log_error(f"Failed to validate state: {e}")
-        return StateApiModel(state={})
+        latest = backend.load()
+    except StateLoadError as e:
+        raise StateSaveError(
+            f"Refusing to save: could not load latest state to merge onto: {e}"
+        )
+    for asset_external_id in updated_asset_external_ids:
+        updated_item = state.state.get(asset_external_id)
+        if updated_item is not None:
+            latest.state[asset_external_id] = updated_item
+    backend.save(latest)
 
 
 @lru_cache
@@ -72,45 +72,33 @@ def get_last_updated_from_run_results(node_id: str) -> datetime | None:
 
 def update_state(
     state: StateApiModel, parsed_dag: ParsedDag, source_freshness: SourceFreshness
-) -> None:
+) -> set[str]:
+    updated_asset_external_ids: set[str] = set()
     for node_id, node in parsed_dag.nodes.items():
-        if not isinstance(node, ModelNode):
+        if node.node_type == NodeType.SOURCE:
             continue
 
+        materialisation_node: MaterialisationNode = cast(MaterialisationNode, node)
         last_updated_from_run_results = get_last_updated_from_run_results(node_id)
         if not last_updated_from_run_results:
             continue
 
-        # Build sources dict from parent nodes that are sources
         sources_dict: dict[str, datetime] = {}
         for edge in parsed_dag.edges:
             if edge.to_ == node_id:
                 if edge.from_ in parsed_dag.nodes:
                     parent_node = parsed_dag.nodes[edge.from_]
                     if (
-                        parent_node.type == NodeType.SOURCE
+                        parent_node.node_type == NodeType.SOURCE
                         and edge.from_ in source_freshness.sources
                     ):
                         sources_dict[edge.from_] = source_freshness.sources[edge.from_]
 
-        state.state[node_id] = StateItem(
-            checksum=node.checksum,
+        state.state[materialisation_node.asset_external_id] = StateItem(
+            checksum=materialisation_node.checksum,
             last_updated=last_updated_from_run_results,
             sources=sources_dict,
         )
+        updated_asset_external_ids.add(materialisation_node.asset_external_id)
 
-
-def save_state(state: StateApiModel) -> None:
-    try:
-        response = httpx.patch(
-            headers={
-                **_get_headers(),
-                "Content-Type": "application/json",
-            },
-            json=json.loads(state.model_dump_json(exclude_none=True)),
-            url=f"{_get_base_api_url()}/state/DBT_CORE",
-        )
-        response.raise_for_status()
-        log_info("State saved")
-    except httpx.HTTPStatusError as e:
-        log_warn(f"Failed to save state ({e.response.status_code}): {e.response.text}")
+    return updated_asset_external_ids

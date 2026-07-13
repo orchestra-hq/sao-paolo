@@ -1,33 +1,270 @@
-# sao-paolo
+# dbt-orchestra
+
+## Introduction
+
+`dbt-orchestra` wraps dbt Core commands, using previous run state to reduce unnecessary work. It is designed to be added to an existing dbt Core project, not used as a standalone dbt repository.
+
+There are a few core reasons to use this project:
+
+- Easier Scheduling: Orchestra SAO (State Aware Orchestration) means you don’t need to manually tag models, you just need to say when the models should be updated and Orchestra handles the dependencies.
+- Save cost: Orchestra SAO detects when there is new data and only updates models and their downstream deps if there is new data, saving money and reducing time.
+- Works out of the box: no need to upgrade dbt versions to take advantage of Orchestra SAO
+
+## Compatibility and prerequisites
+
+- **Python:** 3.11, 3.12, and 3.13 only (see `requires-python` in `pyproject.toml`).
+- **dbt-core:** 1.10.x and 1.11.x when using stateful orchestration.
+- **A dbt Core project:** an existing dbt Core project where you already run `dbt build` / `dbt run` / `dbt test`.
 
 ## Installing
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-uv sync --extra dev
-```
+1. Install `dbt-orchestra` in the same environment as your dbt project:
+
+    ```bash
+    pip install dbt-orchestra
+    ```
+
+2. Add a minimal config block to your project's `pyproject.toml`:
+
+    ```toml
+    [tool.orchestra_dbt]
+    use_stateful = true
+    state_file = ".orchestra/dbt_state.json"
+    ```
+
+You can skip `pyproject.toml` entirely: every `[tool.orchestra_dbt]` option has an environment-variable override (see [Pyproject.toml and environment variables](#pyprojecttoml-and-environment-variables)).
 
 ## Running
 
-```bash
-orchestra-dbt dbt run
+1. Bootstrap the local state file once:
+
+    ```bash
+    mkdir -p .orchestra
+    echo '{"state":{}}' > .orchestra/dbt_state.json
+    ```
+
+2. Run your normal dbt command through `orc`:
+
+    ```bash
+    orc dbt run
+    ```
+
+After this run, your `.orchestra/dbt_state.json` state file will contain freshness information, and subsequent runs will compare this information to your project's model freshness configuration for optimisation.
+
+If you want a small demo dbt Core project to try this with, use [`tutorial/README.md`](tutorial/README.md).
+
+## State backends
+
+### Local JSON file (quick start)
+
+Local JSON is the easiest way to try state-aware orchestration quickly. Keep `ORCHESTRA_API_KEY` unset so `ORCHESTRA_STATE_FILE` or `state_file` in `pyproject.toml` is used.
+
+```toml
+[tool.orchestra_dbt]
+use_stateful = true
+state_file = ".orchestra/dbt_state.json"
 ```
 
-## Testing
-
 ```bash
-pytest
+orc dbt run
 ```
 
-## Linting
+### Orchestra Cloud (managed)
 
-```bash
-ruff check . && ruff format --check . && basedpyright
+Managing your dbt Core state in Orchestra requires an Orchestra API key. When `ORCHESTRA_API_KEY` is set, `dbt-orchestra` selects this backend, and ignores file-related settings. Put non-secret defaults in `pyproject.toml` and only export the API key:
+
+```toml
+[tool.orchestra_dbt]
+use_stateful = true
 ```
 
-To automatically fix issues:
+```bash
+export ORCHESTRA_API_KEY=<API_KEY>
+orc dbt run
+```
+
+If you want to run state-aware dbt Core code without managing state files and the `dbt-orchestra` CLI tool, try running your dbt Core in Orchestra. Orchestra users can enable state-aware orchestration using a simple toggle.
+
+### S3 backend
+
+To store your dbt Core state in S3, install the optional dependency (`pip install 'dbt-orchestra[s3]'` or `uv sync --extra s3`). Credentials and region follow the usual [AWS SDK resolution](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html) (environment variables, shared config, IAM role, etc.). If the object does not exist yet, load starts with an empty state and save creates the object. The state file parameter expects a `s3://bucket/key` URI.
+
+### GCS backend
+
+To store your dbt Core state in Google Cloud Storage, install the optional dependency (`pip install 'dbt-orchestra[gcs]'` or `uv sync --extra gcs`). Credentials follow [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/application-default-credentials) — run `gcloud auth application-default login` for local development, or set `GOOGLE_APPLICATION_CREDENTIALS` to a service account key file, or rely on the attached service account when running on GCP. The bucket must already exist; if the object does not exist yet, load starts with an empty state and save creates the object. The state file parameter expects a `gs://bucket/key` URI.
+
+```toml
+[tool.orchestra_dbt]
+use_stateful = true
+state_file = "gs://my-bucket/dbt_state.json"
+```
 
 ```bash
-ruff check --fix . && ruff format . && basedpyright
+gcloud auth application-default login   # once, for local dev
+orc dbt run
 ```
+
+### ABS backend
+
+To store your dbt Core state in Azure Blob Storage, install the optional dependency (`pip install 'dbt-orchestra[azure]'` or `uv sync --extra azure`). Credentials follow [DefaultAzureCredential](https://learn.microsoft.com/en-us/azure/developer/python/sdk/authentication/credential-chains#defaultazurecredential-overview) — run `az login` for local development, or configure a service principal via `AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET` / `AZURE_TENANT_ID`, or rely on the attached managed identity when running on Azure. Alternatively, set `AZURE_STORAGE_CONNECTION_STRING` for simpler setups. The container must already exist; if the blob does not exist yet, load starts with an empty state and save creates the blob. The state file parameter expects an `abfs://` or `abfss://` URI of the form `abfss://container@account.dfs.core.windows.net/path`. Both schemes always connect via TLS.
+
+```toml
+[tool.orchestra_dbt]
+use_stateful = true
+state_file = "abfss://my-container@my-account.dfs.core.windows.net/dbt_state.json"
+```
+
+```bash
+az login   # once, for local dev
+orc dbt run
+```
+
+## Daily usage
+
+Stateful orchestration only runs for `dbt build`, `dbt run`, and `dbt test`. Other dbt subcommands are passed through to dbt unchanged.
+
+### Runtime behaviour by command and mode
+
+| Stateful enabled | dbt command | Behaviour |
+| --- | --- | --- |
+| `false` | any command | `orc` passes through to dbt with no state load/save. |
+| `true` | `build`, `run`, `test` | `orc` loads state, computes reusable nodes, patches clean nodes, runs dbt, updates and saves state. |
+| `true` | `build`, `run`, `test` + `--full-refresh` | `orc` skips reuse decisions for this invocation, runs dbt directly, then still updates/saves state after execution. |
+| `true` | other command (for example `seed`, `docs generate`) | `orc` passes through to dbt unchanged. |
+
+### Reused nodes and data tests
+
+When `orc` reuses (skips) an up-to-date node, it preserves dbt's default rule for data tests: **a test runs if _any_ of its models is being built**, even when its other parent models are being reused. Without this, dbt's default "eager" exclusion drops a test as soon as one of its parents is excluded — so a singular test that joins a freshly-built model to a reused one would silently stop running.
+
+Take this graph, where `model_b` has no new data and is reused:
+
+```mermaid
+flowchart LR
+    A["model_a<br/>new data → built"]
+    B["model_b<br/>no new data → reused (skipped)"]
+    T1(["test refs model_a and model_b"])
+    T2(["test refs model_b only"])
+    A --> T1
+    B --> T1
+    B --> T2
+```
+
+| Test | Parents | Runs? |
+| --- | --- | --- |
+| refs `model_a` & `model_b` | one built, one reused | ✅ **runs** — a model it tests was built |
+| refs `model_b` only | all reused | ⏭️ **skipped** — nothing it tests was built |
+
+This holds however you select nodes:
+
+| You run | `orc` runs | Notes |
+| --- | --- | --- |
+| `orc dbt build` | `dbt build --exclude tag:ORCHESTRA_REUSED_NODE --indirect-selection cautious` | Nothing is selected explicitly, so a global `cautious` flag only narrows our exclusion. |
+| `orc dbt build --select +model_a` | `dbt build --selector <generated>` | Your `--select`/`--exclude` and the reused exclusion are folded into a generated selector (see below). |
+| `orc dbt build --selector nightly` | rewrites `nightly` to also exclude reused nodes | Your named selector is wrapped, not replaced. |
+| `orc dbt run …` | `dbt run --exclude tag:ORCHESTRA_REUSED_NODE` | `run` never selects tests, so no test handling is needed. |
+
+#### Why a generated selector, and not just one flag?
+
+dbt's `--indirect-selection` is **global** — it applies to your `--select` as much as to our reused-node exclusion. Forcing it to `cautious` everywhere would change what your own selection means, so when you pass your own `--select`/`--exclude`, `orc` instead writes a generated selector to `selectors.yml` (creating the file if needed) that sets `indirect_selection: cautious` on **only the reused-node exclusion**, leaving your selection at dbt's default (eager) behaviour. dbt has no per-flag indirect selection and reads selectors only from `selectors.yml`, so a generated selector is the only way to do this.
+
+The scenario this gets right (and a single global flag gets wrong) is **a test whose parents straddle your selection** — for example a test that references both `orders` and `customers`, when you run `orc dbt build --select orders` (so `customers` is not selected):
+
+| Approach | Does the `orders` + `customers` test run? | Matches plain `dbt build --select orders`? |
+| --- | --- | --- |
+| plain dbt (eager, the default) | ✅ runs — a selected parent (`orders`) is built | — |
+| one global `--indirect-selection cautious` | ❌ dropped — `cautious` needs *all* parents selected, and `customers` isn't | ❌ no |
+| generated selector (eager select, cautious only on the reused exclude) | ✅ runs | ✅ yes |
+
+A different global mode doesn't rescue this, because the two sides want **opposite** modes:
+
+| Side | Wants | So that |
+| --- | --- | --- |
+| your `--select` | `eager` | a test runs if *any* selected parent is built (dbt's default) |
+| the reused-node exclude | `cautious` | a test is dropped only when *all* its parents are reused |
+
+`--indirect-selection` sets a single mode for both. `cautious` and `buildable` are too strict on the select side — they drop the `orders`/`customers` test above. `eager` and `buildable` are too loose on the exclude side — they drop a test even when one of its parents is being built (`buildable` because it also sweeps in *ancestors* of reused nodes, which may be models you are building). `buildable` is wrong on both ends; only a per-criterion selector can be eager on your selection and cautious on the exclusion at once.
+
+The generated selector is named `orchestra_reused_<uuid>`. On a local run (`local_run`, the default), `orc` restores `selectors.yml` to exactly its pre-run state afterwards — rewriting back the original bytes, or removing a file it created — so neither the generated selector nor the `--selector` rewrite is left behind. On managed/Orchestra runs the rewrite is left in place; the checkout is ephemeral, so it is harmless.
+
+## Configuration reference
+
+When stateful orchestration is enabled, the CLI loads and saves [dbt Core state](https://docs.getdbt.com/). Enable it with `use_stateful = true` under `[tool.orchestra_dbt]`, or set `ORCHESTRA_USE_STATEFUL=true`. That state is the same JSON shape regardless of the backend used.
+
+**Do not put secrets in `pyproject.toml`.** Use environment variables (or your platform's secret store) for `ORCHESTRA_API_KEY`.
+
+### Configuration precedence
+
+For non-secret options, **if an environment variable is set, it overrides** values from `[tool.orchestra_dbt]`; otherwise the value from `pyproject.toml` is used, then the built-in default. The CLI discovers `pyproject.toml` by walking upward from the current working directory. `[tool.orchestra_dbt]` is read from that file when present.
+
+### Pyproject.toml and environment variables
+
+Each `[tool.orchestra_dbt]` key can be set in TOML, or omitted and supplied only via the matching variable. When both are present, the environment variable wins (see [Configuration precedence](#configuration-precedence) above). `ORCHESTRA_API_KEY` has no TOML equivalent; it selects the Orchestra HTTP backend when set.
+
+| `pyproject.toml` key | Environment variable |
+| --- | --- |
+| `state_file` | `ORCHESTRA_STATE_FILE` |
+| `use_stateful` | `ORCHESTRA_USE_STATEFUL` |
+| `local_run` | `ORCHESTRA_LOCAL_RUN` |
+| `debug` | `ORCHESTRA_DBT_DEBUG` |
+| `seed_state_orchestration` | `ORCHESTRA_SEED_STATE_ORCHESTRATION` |
+
+For boolean settings, if the environment variable is **set**, the merged value is `true` only when the value is exactly the string `true` (case-insensitive); otherwise it is `false`. If the variable is **unset**, `pyproject.toml` (or the default) applies.
+
+### `[tool.orchestra_dbt]` options
+
+| Key | Type | Default | Purpose |
+| --- | --- | --- | --- |
+| `state_file` | string (optional) | — | Local JSON path, `s3://bucket/key`, `gs://bucket/key`, or `abfss://container@account.dfs.core.windows.net/key` for state (see [backend table](#state-backends) above). |
+| `use_stateful` | bool | `false` | Turn on stateful orchestration for supported dbt commands. |
+| `local_run` | bool | `true` | After reuse, revert patched files (typical for local iteration). |
+| `debug` | bool | `false` | Verbose logging. |
+| `seed_state_orchestration` | bool | `false` | When `true`, seed nodes can be reused from state like models; when `false`, seeds are always treated as dirty for reuse. This feature should be considered experimental and may change in the future. |
+
+### Resolving multiple backend state configurations
+
+| Priority | Setting | Effect |
+| --- | --- | --- |
+| 1 | `ORCHESTRA_API_KEY` | Load/save state via Orchestra HTTP. When the API key is set, `ORCHESTRA_STATE_FILE` and `state_file` in `pyproject.toml` are **ignored** for choosing the state backend. |
+| 2 | `ORCHESTRA_STATE_FILE` | Path to a JSON file, or `s3://bucket/key`, `gs://bucket/key`, or `abfss://container@account.dfs.core.windows.net/key`. Relative file paths are resolved from the current working directory. Used only when `ORCHESTRA_API_KEY` is unset. |
+| 3 | `[tool.orchestra_dbt]` / `state_file` in `pyproject.toml` | Path to a JSON file, or `s3://bucket/key`, `gs://bucket/key`, or `abfss://container@account.dfs.core.windows.net/key`. Relative file paths are resolved from the directory that contains the **discovered** `pyproject.toml`; absolute paths are used as-is. Used only when `ORCHESTRA_API_KEY` is unset and `ORCHESTRA_STATE_FILE` is unset. |
+
+If an effective local path, S3, GCS, or ABS URI is configured (rows 2 or 3), that backend is used and an API key is not required for state. If `ORCHESTRA_API_KEY` is set (row 1), the **HTTP backend** is used regardless of file settings.
+
+### Warehouse adapters and implicit source freshness
+
+Stateful reuse uses `dbt source freshness` results. When a source defines **`loaded_at_field`** or **`loaded_at_query`**, dbt's normal freshness logic runs on every adapter Orchestra supports through dbt Core.
+
+When **both** are omitted, Orchestra can still run **adapter-specific** SQL to infer `max_loaded_at` (see `src/orchestra_dbt/source_freshness/`). Only the adapters below register that path today; the mapping is keyed by `FreshnessRunner.adapter.type()`.
+
+| Warehouse | dbt adapter type (typical) | Implicit freshness (no `loaded_at_*`) |
+| --- | --- | --- |
+| **Databricks** | `databricks` | **Supported** — uses `DESCRIBE HISTORY` on the source relation. |
+| **Snowflake** | `snowflake` | **Use `loaded_at_field` or `loaded_at_query`** — no Orchestra fallback; standard dbt freshness. |
+| **Microsoft Fabric** | `fabric` | Same as Snowflake — configure `loaded_at_*`; no Orchestra fallback. |
+| **Google BigQuery** | `bigquery` | Same as Snowflake — configure `loaded_at_*`; no Orchestra fallback. |
+| **AWS Redshift** | `redshift` | Same as Snowflake — configure `loaded_at_*`; no Orchestra fallback. |
+| **PostgreSQL** | `postgres` | Same as Snowflake — configure `loaded_at_*`; no Orchestra fallback. |
+| **DuckDB** | `duckdb` | **Not supported** |
+| **Other adapters** | varies | No Orchestra fallback unless listed above; use `loaded_at_*` or verify dbt's default behavior for your warehouse. |
+
+For adapters without a registered fallback, if both `loaded_at` settings are missing, Orchestra follows dbt's `FreshnessRunner` behavior (which may surface as warnings or a non-actionable result depending on dbt and the warehouse).
+
+### Example snippet
+
+Example optional snippet in `pyproject.toml`:
+
+```toml
+[tool.orchestra_dbt]
+use_stateful = true
+state_file = ".orchestra/dbt_state.json"
+```
+
+Add `.orchestra/` (or your chosen path) to `.gitignore` if the file should not be committed.
+
+## Development and contributing
+
+For contributor guidance, see [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+## License
+
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.

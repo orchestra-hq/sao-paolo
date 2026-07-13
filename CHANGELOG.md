@@ -1,0 +1,53 @@
+# Changelog
+
+All notable changes to this project are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.1.1] - 2026-07-06
+
+### Fixed
+
+- Stop clobbering stored state when it cannot be loaded at save time. When merging a run's updates, `save_state` now re-reads the latest state and fails loudly (`StateSaveError`) if that read fails, instead of assuming empty state and overwriting every node the run did not touch.
+- The Orchestra HTTP state backend now raises on a failed load (network error, non-2xx, or unparseable body) rather than silently returning empty state, so a transient outage can no longer wipe stored state on the next save.
+- A failed state load at the start of a run no longer aborts the dbt command. The run continues with empty state (no node reuse) and still persists state on completion if the backend can be re-read. When the initial load failed, a subsequent save failure is logged as a warning rather than failing the run — a save failure is only fatal when good state was loaded to begin with.
+
+[1.1.1]: https://github.com/orchestra-hq/sao-paolo/releases/tag/v1.1.1
+
+## [1.1.0] - 2026-06-30
+
+### Added
+
+- GCS state backend (`ORCHESTRA_STATE_FILE=gs://…`) using Application Default Credentials; install with `dbt-orchestra[gcs]`.
+- Azure Blob Storage state backend (`ORCHESTRA_STATE_FILE=abfss://…`); install with `dbt-orchestra[azure]`.
+
+### Fixed
+
+- Keep data tests that span reused and freshly-built models. The reused-node exclusion now uses `cautious` indirect selection, so a test is dropped only when _all_ its parents are reused — matching plain `dbt build`. Applies to bare, `--selector`, and `--select`/`--exclude` commands.
+- Restore `selectors.yml` to its pre-run state after a local run, so `--selector` rewrites and generated selectors no longer mutate or accumulate on disk.
+- Stop `dbt source freshness` from crashing (`'NoneType' object has no attribute 'filter'`) on sources configured with `config: {freshness: null}`. Such sources now still get a real, queried `max_loaded_at` and always report a passing freshness status, instead of raising or reporting a fabricated timestamp.
+
+[1.1.0]: https://github.com/orchestra-hq/sao-paolo/releases/tag/v1.1.0
+
+## [1.0.2] - 2026-06-12
+
+### Changed
+
+- Open sourced under the Apache License 2.0.
+
+[1.0.2]: https://github.com/orchestra-hq/sao-paolo/releases/tag/v1.0.2
+
+## [1.0.1] - 2026-05-14
+
+### Fixed
+
+- Skip unsupported node types (`function.*`) in DAG edge construction to prevent `KeyError` when dbt Core includes them in `depends_on.nodes`.
+
+[1.0.1]: https://github.com/orchestra-hq/sao-paolo/releases/tag/v1.0.1
+
+## [1.0.0] - 2026-04-24
+
+First formal release of this codebase.
+
+[1.0.0]: https://github.com/orchestra-hq/sao-paolo/releases/tag/v1.0.0

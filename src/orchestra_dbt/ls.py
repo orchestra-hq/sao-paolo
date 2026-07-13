@@ -1,15 +1,42 @@
-from dbt.cli.main import dbtRunner, dbtRunnerResult
+from .compatibility import dbt_core_import_error_message
+from .constants import RESOURCE_TYPES_TO_LS
+from .logger import log_debug, log_error, log_info, log_warn
 
-from .logger import log_debug, log_info, log_warn
+DBT_LS_ARGS_NOT_ACCEPTED = ["--empty"]
 
 
-def get_model_paths_to_run(args: tuple) -> list[str] | None:
-    log_info("Finding model paths to be executed:")
+def get_args_for_ls(user_args: tuple) -> list[str]:
+    command_args = ["ls"]
+    resource_type_args = []
+    for resource_type in RESOURCE_TYPES_TO_LS:
+        resource_type_args.append("--resource-type")
+        resource_type_args.append(resource_type)
+    output_args = ["--output", "path", "-q"]
+
+    # Remove args not accepted by dbt ls
+    list_user_args = []
+    for user_arg in user_args:
+        if user_arg in DBT_LS_ARGS_NOT_ACCEPTED:
+            continue
+        list_user_args.append(user_arg)
+
+    return command_args + resource_type_args + list_user_args + output_args
+
+
+def get_paths_to_run(args: tuple) -> list[str] | None:
+    try:
+        from dbt.cli.main import (
+            dbtRunner,
+            dbtRunnerResult,
+        )
+    except ImportError as missing_dbt_core_error:
+        log_error(dbt_core_import_error_message(missing_dbt_core_error))
+        raise missing_dbt_core_error
+
+    log_info("Finding node paths to be executed:")
 
     try:
-        res: dbtRunnerResult = dbtRunner().invoke(
-            ["ls", "--resource-type", "model"] + list(args) + ["--output", "path", "-q"]
-        )
+        res: dbtRunnerResult = dbtRunner().invoke(get_args_for_ls(args))
         if not res.success:
             raise ValueError(f"dbt ls failed to run correctly: {res.exception}")
 
@@ -22,5 +49,5 @@ def get_model_paths_to_run(args: tuple) -> list[str] | None:
     except Exception as e:
         log_debug(e)
 
-    log_warn("Error getting list of models that will be executed.")
+    log_warn("Error getting [dbt ls] of nodes that will be executed.")
     return None

@@ -3,6 +3,8 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def mock_env_vars(monkeypatch):
+    monkeypatch.delenv("ORCHESTRA_STATE_FILE", raising=False)
+    monkeypatch.delenv("AZURE_STORAGE_CONNECTION_STRING", raising=False)
     monkeypatch.setenv("ORCHESTRA_API_KEY", "test-api-key")
     monkeypatch.setenv("ORCHESTRA_ENV", "dev")
     yield
@@ -11,23 +13,38 @@ def mock_env_vars(monkeypatch):
 @pytest.fixture
 def sample_manifest():
     return {
+        "metadata": {
+            "project_name": "test_project",
+        },
         "nodes": {
             "model.test_project.model_a": {
                 "resource_type": "model",
                 "checksum": {"checksum": "def456"},
                 "config": {"freshness": None},
+                "package_name": "test_project",
                 "original_file_path": "models/model_a.sql",
                 "depends_on": {
                     "nodes": ["source.test_db.test_schema.test_table"],
                 },
             },
-            "model.test_project.model_b": {
+            "model.test_project_2.model_b": {
                 "resource_type": "model",
                 "checksum": {"checksum": "ghi789"},
-                "config": {"freshness": None},
+                "config": {"freshness": None, "materialized": "incremental"},
+                "package_name": "test_project_2",
                 "original_file_path": "models/model_b.sql",
                 "depends_on": {
                     "nodes": ["model.test_project.model_a"],
+                },
+            },
+            "model.test_project.model_c": {
+                "resource_type": "model",
+                "checksum": {"checksum": "456"},
+                "config": {"freshness": None},
+                "package_name": "test_project",
+                "original_file_path": "models/model_c.sql",
+                "depends_on": {
+                    "nodes": [],
                 },
             },
         },

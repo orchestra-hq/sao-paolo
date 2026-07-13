@@ -1,0 +1,68 @@
+import json
+from pathlib import Path
+from typing import cast
+
+import pytest
+
+import src.orchestra_dbt.dag as dag_module
+from src.orchestra_dbt.config import OrchestraDbtSettings
+from src.orchestra_dbt.dag import construct_dag
+from src.orchestra_dbt.logger import log_reused_nodes
+from src.orchestra_dbt.models import (
+    Freshness,
+    MaterialisationNode,
+    NodeType,
+    SourceFreshness,
+    StateApiModel,
+)
+from src.orchestra_dbt.sao import calculate_nodes_to_run
+
+
+def test_e2e(monkeypatch: pytest.MonkeyPatch) -> None:
+    local_state_path = Path("local_state.json")
+    if not local_state_path.exists():
+        pytest.skip("local_state.json not found")
+    local_state = local_state_path.read_text(encoding="utf-8")
+
+    local_manifest_path = Path("local_manifest.json")
+    if not local_manifest_path.exists():
+        pytest.skip("local_manifest.json not found")
+
+    monkeypatch.setattr(
+        dag_module,
+        "load_orchestra_dbt_settings",
+        lambda: OrchestraDbtSettings(
+            integration_account_id="TO_BE_COMPLETED",
+            local_run=False,
+        ),
+    )
+
+    parsed_dag = construct_dag(
+        source_freshness=SourceFreshness(sources={}),
+        state=StateApiModel.model_validate(json.loads(local_state)),
+        manifest_override="local_manifest.json",
+    )
+
+    # check that each node defined in edges is in nodes
+    for edge in parsed_dag.edges:
+        if edge.from_ not in parsed_dag.nodes:
+            raise ValueError(f"Node {edge.from_} not found in nodes")
+        if edge.to_ not in parsed_dag.nodes:
+            raise ValueError(f"Node {edge.to_} not found in nodes")
+
+    calculate_nodes_to_run(parsed_dag)
+
+    paths_to_run = []
+    nodes_to_reuse: dict[str, MaterialisationNode] = {}
+    node_count = 0
+    for node_id, node in parsed_dag.nodes.items():
+        if node.node_type == NodeType.SOURCE:
+            continue
+        model_node: MaterialisationNode = cast(MaterialisationNode, node)
+        if paths_to_run and model_node.file_path not in paths_to_run:
+            continue
+        node_count += 1
+        if model_node.freshness == Freshness.CLEAN:
+            nodes_to_reuse[node_id] = model_node
+
+    log_reused_nodes(nodes_to_reuse)

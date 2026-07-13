@@ -1,38 +1,43 @@
-import os
-from datetime import datetime
+from datetime import UTC, datetime
 
 import click
 
+from .config import load_orchestra_dbt_settings
 from .constants import SERVICE_NAME
-from .models import ModelNode
+from .models import MaterialisationNode
 
 
 def _log(msg: str, fg: str | None, error: bool = False) -> None:
-    text = f"[{str(datetime.now().strftime('%H:%M:%S'))}]"
+    text = str(datetime.now(UTC).strftime("%H:%M:%S")) + " "
     if error:
         text += " [ERROR]"
     text += f" [{SERVICE_NAME}] {msg}"
     click.echo(message=click.style(text=text, fg=fg), color=True)
 
 
-def log_debug(msg):
-    if os.getenv("ORCHESTRA_DBT_DEBUG"):
+def log_debug(msg) -> None:
+    if load_orchestra_dbt_settings().debug:
         _log(msg, None)
 
 
-def log_info(msg):
+def log_info(msg) -> None:
     _log(msg, None)
 
 
-def log_warn(msg):
+def log_warn(msg) -> None:
     _log(msg, "yellow")
 
 
-def log_error(msg):
+def log_error(msg) -> None:
     _log(msg, "red", error=True)
 
 
-def log_reused_models(models_to_reuse: dict[str, ModelNode]):
-    log_info(f"{len(models_to_reuse)} models to be reused.")
-    for node_id in models_to_reuse.keys():
-        log_debug(f" - {node_id}")
+def log_reused_nodes(nodes_to_reuse: dict[str, MaterialisationNode]) -> None:
+    total_nodes: int = len(nodes_to_reuse)
+    log_info(f"{total_nodes} node(s) to be reused:")
+    counter = 1
+    for node_id, node in nodes_to_reuse.items():
+        log_info(
+            f"{counter} of {total_nodes} REUSED {node_id} - {node.reason} (last updated: {node.last_updated or 'none'})"
+        )
+        counter += 1

@@ -1,8 +1,15 @@
 from collections import defaultdict, deque
-from datetime import datetime, timedelta
-from typing import Literal
+from datetime import datetime
+from typing import cast
 
-from .models import Freshness, ModelNode, Node, ParsedDag, SourceNode
+from .models import (
+    Freshness,
+    MaterialisationNode,
+    Node,
+    NodeType,
+    ParsedDag,
+    SourceNode,
+)
 
 
 def build_dependency_graphs(
@@ -34,109 +41,95 @@ def build_dependency_graphs(
     return children, parents, in_degree
 
 
-def build_after_duration_minutes(build_after: dict[str, str | int]) -> int:
-    period = build_after["period"]  # minute | hour | day
-    match period:
-        case "minute":
-            mins_multiplier = 1
-        case "hour":
-            mins_multiplier = 60
-        case "day":
-            mins_multiplier = 1440
-        case _:
-            raise ValueError(f"Invalid period: {period}")
-
-    count = build_after["count"]
-    if not isinstance(count, int):
-        raise ValueError(f"Invalid count: {count}")
-
-    return count * mins_multiplier
-
-
-def _get_updates_on(freshness_config: dict | None) -> Literal["any", "all"]:
-    if not freshness_config:
-        return "any"
-
-    build_after = freshness_config.get("build_after")
-    if not build_after:
-        return "any"
-
-    return build_after.get("updates_on", "any")
-
-
 def should_mark_dirty_from_single_upstream(
-    upstream_id: str, upstream_node: Node, current_node: ModelNode
-) -> bool:
+    upstream_id: str, upstream_node: Node, current_node: MaterialisationNode
+) -> tuple[bool, str | None]:
     if not current_node.last_updated:
         # This scenario should not occur as the node will be dirty already.
         # But helps with typing.
-        return True
+        return True, None
 
-    # Based on if the upstream is a source or a node, calculate if it is dirty or not.
-    if isinstance(upstream_node, SourceNode):
-        if upstream_id not in current_node.sources:
-            upstream_freshness = Freshness.DIRTY
-        else:
-            if not upstream_node.last_updated:
+    reason = None
+
+    match upstream_node.node_type:
+        case NodeType.SOURCE:
+            source_node: SourceNode = cast(SourceNode, upstream_node)
+            if upstream_id not in current_node.sources:
                 upstream_freshness = Freshness.DIRTY
             else:
-                upstream_freshness = (
-                    Freshness.DIRTY
-                    if upstream_node.last_updated > current_node.sources[upstream_id]
-                    else Freshness.CLEAN
-                )
-    elif isinstance(upstream_node, ModelNode):
-        upstream_freshness = upstream_node.freshness
-    else:
-        return True
+                if not source_node.last_updated:
+                    upstream_freshness = Freshness.DIRTY
+                else:
+                    upstream_freshness = (
+                        Freshness.DIRTY
+                        if source_node.last_updated > current_node.sources[upstream_id]
+                        else Freshness.CLEAN
+                    )
+                    if upstream_freshness == Freshness.CLEAN:
+                        reason = f"Source {upstream_id} has no new data since last run."
+        case NodeType.MATERIALISATION:
+            materialisation_node: MaterialisationNode = cast(
+                MaterialisationNode, upstream_node
+            )
+            upstream_freshness = materialisation_node.freshness
+            if upstream_freshness == Freshness.CLEAN:
+                reason = "Upstream node(s) being reused."
 
-    if not current_node.freshness_config:
-        return upstream_freshness == Freshness.DIRTY
+    # An SLA (build_after) only holds a node back inside its freshness window; it is
+    # not required for the catch-up comparison below.
+    if current_node.freshness_config.minutes_sla:
+        minutes_since_last_updated: int = int(
+            (
+                datetime.now(tz=current_node.last_updated.tzinfo)
+                - current_node.last_updated
+            ).total_seconds()
+            / 60
+        )
 
-    # Similar to above - build_after should always exist, so this is more for
-    # type checking.
-    build_after = current_node.freshness_config.get("build_after")
-    if not build_after:
-        return upstream_freshness == Freshness.DIRTY
+        if minutes_since_last_updated < current_node.freshness_config.minutes_sla:
+            reason = f"Model still within freshness config of {current_node.freshness_config.minutes_sla} minutes. Last updated {minutes_since_last_updated} minutes ago."
+            if current_node.freshness_config.inherited_from:
+                reason += f" Config inherited from {current_node.freshness_config.inherited_from}."
+            return (False, reason)
 
-    if current_node.last_updated >= datetime.now(
-        tz=current_node.last_updated.tzinfo
-    ) - timedelta(minutes=build_after_duration_minutes(build_after)):
-        return False
-
+    # A clean upstream still forces a rebuild if it ran more recently than this node
+    # (e.g. a concurrent pipeline with a narrower selector advanced the upstream alone),
+    # otherwise this node would never catch up to the upstream's newer output.
     match upstream_freshness:
         case Freshness.DIRTY:
-            return True
+            return True, reason
         case Freshness.CLEAN:
             return (
-                True
+                (True, None)
                 if (
                     upstream_node.last_updated
                     and upstream_node.last_updated > current_node.last_updated
                 )
-                else False
+                else (False, reason)
             )
 
 
 def _should_mark_dirty(
     upstream_ids: list[str],
-    node: ModelNode,
+    node: MaterialisationNode,
     dag: ParsedDag,
-) -> bool:
-    updates_on: Literal["any", "all"] = _get_updates_on(node.freshness_config)
-
+) -> tuple[bool, str | None]:
+    should_be_dirty = False
+    reason = None
     for upstream_id in upstream_ids:
-        should_be_dirty: bool = should_mark_dirty_from_single_upstream(
+        should_be_dirty, reason = should_mark_dirty_from_single_upstream(
             upstream_id=upstream_id,
             upstream_node=dag.nodes[upstream_id],
             current_node=node,
         )
-        if updates_on == "all" and not should_be_dirty:
-            return False
-        if updates_on == "any" and should_be_dirty:
-            return True
-
-    return False
+        if node.freshness_config.updates_on == "all" and not should_be_dirty:
+            return (
+                False,
+                f"{reason} (node requires all upstream dependents to have new data).",
+            )
+        if node.freshness_config.updates_on == "any" and should_be_dirty:
+            return True, None
+    return should_be_dirty, reason
 
 
 def _process_node(
@@ -146,11 +139,19 @@ def _process_node(
     Process a single node to determine if it should be marked dirty based on upstream dependencies.
     """
     node: Node = dag.nodes[current_id]
-    if not isinstance(node, ModelNode) or node.freshness == Freshness.DIRTY:
+    if node.node_type != NodeType.MATERIALISATION:
         return
-    else:
-        if _should_mark_dirty(upstream_ids=parents[current_id], node=node, dag=dag):
-            node.freshness = Freshness.DIRTY
+
+    materialisation_node: MaterialisationNode = cast(MaterialisationNode, node)
+    if materialisation_node.freshness == Freshness.CLEAN:
+        should_mark_dirty, reason = _should_mark_dirty(
+            upstream_ids=parents[current_id], node=materialisation_node, dag=dag
+        )
+        if should_mark_dirty:
+            materialisation_node.freshness = Freshness.DIRTY
+        else:
+            if reason:
+                materialisation_node.reason = reason
 
 
 def _enqueue_children(
@@ -165,7 +166,7 @@ def _enqueue_children(
             queue.append(child)
 
 
-def calculate_models_to_run(dag: ParsedDag):
+def calculate_nodes_to_run(dag: ParsedDag):
     children, parents, in_degree = build_dependency_graphs(dag)
 
     # Queue for nodes with no upstream dependencies (in_degree 0)

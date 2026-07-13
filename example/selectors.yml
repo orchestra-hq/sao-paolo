@@ -1,7 +1,0 @@
-selectors:
-  - name: selection_a
-    definition:
-      tag: a
-  - name: selection_b
-    definition:
-      tag: b
