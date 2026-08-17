@@ -418,3 +418,74 @@ class TestConstructDag:
         edge_froms = [e.from_ for e in dag.edges]
         assert "source.test_db.raw.events" in edge_froms
         assert "function.test_project.is_positive_int" not in edge_froms
+
+
+class TestConstructDagRelationNames:
+    """The relation name is what the warehouse existence check looks for."""
+
+    @staticmethod
+    def _manifest() -> dict:
+        return {
+            "metadata": {"project_name": "test_project"},
+            "nodes": {
+                "model.test_project.materialised": {
+                    "resource_type": "model",
+                    "checksum": {"checksum": "abc"},
+                    "config": {"freshness": None},
+                    "package_name": "test_project",
+                    "original_file_path": "models/materialised.sql",
+                    "database": "analytics",
+                    "schema": "marts",
+                    "alias": "materialised",
+                    "relation_name": '"analytics"."marts"."materialised"',
+                    "depends_on": {"nodes": []},
+                },
+                "model.test_project.ephemeral": {
+                    "resource_type": "model",
+                    "checksum": {"checksum": "def"},
+                    "config": {"freshness": None, "materialized": "ephemeral"},
+                    "package_name": "test_project",
+                    "original_file_path": "models/ephemeral.sql",
+                    "database": "analytics",
+                    "schema": "marts",
+                    "alias": "ephemeral",
+                    "depends_on": {"nodes": []},
+                },
+            },
+            "child_map": {},
+        }
+
+    def test_relation_name_is_carried_onto_the_node(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(dag_module, "load_json", lambda _: self._manifest())
+        monkeypatch.setattr(dag_module, "calculate_checksum", lambda *a, **k: "stable")
+        monkeypatch.setattr(
+            dag_module,
+            "load_orchestra_dbt_settings",
+            lambda: OrchestraDbtSettings(),
+        )
+
+        dag = construct_dag(SourceFreshness(sources={}), StateApiModel(state={}))
+
+        node = dag.nodes["model.test_project.materialised"]
+        assert isinstance(node, MaterialisationNode)
+        assert node.relation_name == '"analytics"."marts"."materialised"'
+
+    def test_ephemeral_models_have_no_relation_name(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """dbt leaves relation_name unset for ephemeral models, so they self-exclude."""
+        monkeypatch.setattr(dag_module, "load_json", lambda _: self._manifest())
+        monkeypatch.setattr(dag_module, "calculate_checksum", lambda *a, **k: "stable")
+        monkeypatch.setattr(
+            dag_module,
+            "load_orchestra_dbt_settings",
+            lambda: OrchestraDbtSettings(),
+        )
+
+        dag = construct_dag(SourceFreshness(sources={}), StateApiModel(state={}))
+
+        node = dag.nodes["model.test_project.ephemeral"]
+        assert isinstance(node, MaterialisationNode)
+        assert node.relation_name is None

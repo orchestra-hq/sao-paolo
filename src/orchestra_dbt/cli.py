@@ -43,6 +43,7 @@ from .state import (
 )
 from .state_types import StateBackendKind
 from .target_finder import find_target_in_args
+from .warehouse import apply_relation_existence_gate
 
 
 def _usage_program() -> str:
@@ -206,6 +207,12 @@ def main(args: tuple[str, ...]) -> None:
             dbt_exit_code=subprocess.run(dbt_args).returncode,
             state_load_ok=state_load_ok,
         )
+
+    # A node can be clean on paper but missing from the warehouse (dropped out of band, or a
+    # state file pointed at a fresh target). Force those back into the run before the
+    # timestamp comparison, so the topological sweep also picks up their children.
+    if settings.verify_relations_exist:
+        apply_relation_existence_gate(parsed_dag, paths_to_run)
 
     # Edit the DAG inline.
     calculate_nodes_to_run(parsed_dag)

@@ -208,6 +208,7 @@ Each `[tool.orchestra_dbt]` key can be set in TOML, or omitted and supplied only
 | `debug` | `ORCHESTRA_DBT_DEBUG` |
 | `seed_state_orchestration` | `ORCHESTRA_SEED_STATE_ORCHESTRATION` |
 | `require_explicit_source_freshness` | `ORCHESTRA_REQUIRE_EXPLICIT_SOURCE_FRESHNESS` |
+| `verify_relations_exist` | `ORCHESTRA_VERIFY_RELATIONS_EXIST` |
 
 For boolean settings, if the environment variable is **set**, the merged value is `true` only when the value is exactly the string `true` (case-insensitive); otherwise it is `false`. If the variable is **unset**, `pyproject.toml` (or the default) applies.
 
@@ -221,6 +222,7 @@ For boolean settings, if the environment variable is **set**, the merged value i
 | `debug` | bool | `false` | Verbose logging. |
 | `seed_state_orchestration` | bool | `false` | When `true`, seed nodes can be reused from state like models; when `false`, seeds are always treated as dirty for reuse. This feature should be considered experimental and may change in the future. |
 | `require_explicit_source_freshness` | bool | `false` | When `true`, sources without an explicit `loaded_at_field` or `loaded_at_query` are excluded from state-aware orchestration: no implicit/fallback freshness is inferred for them, and models depending on them always run. Use this when implicit freshness is unreliable (for example, sources defined on top of views, where warehouse metadata reflects the view rather than the underlying data). |
+| `verify_relations_exist` | bool | `true` | Before skipping a node, confirm its table/view is actually in the warehouse (see [Verifying relations still exist](#verifying-relations-still-exist)). Set to `false` to skip the check entirely. |
 
 ### Resolving multiple backend state configurations
 
@@ -252,6 +254,29 @@ When **both** are omitted, Orchestra can still run **adapter-specific** SQL to i
 For adapters without a registered fallback, if both `loaded_at` settings are missing, Orchestra follows dbt's `FreshnessRunner` behavior (which may surface as warnings or a non-actionable result depending on dbt and the warehouse).
 
 Implicit freshness can be misleading for sources defined on top of **views**: warehouse metadata reports when the view was last altered, not when new data arrived in the underlying tables. To opt out of implicit freshness entirely, set `require_explicit_source_freshness = true` (or `ORCHESTRA_REQUIRE_EXPLICIT_SOURCE_FRESHNESS=true`). Sources without `loaded_at_field`/`loaded_at_query` are then excluded from state-aware orchestration and models depending on them always run; sources with an explicit config keep working as normal.
+### Verifying relations still exist
+
+State and source freshness alone cannot tell you whether a node's table or view is *actually there*. A model whose relation was dropped out of band, renamed, or never built in this target still looks clean in state, so it would be skipped and the run would "succeed" with a missing relation. Carrying a warm state file to a fresh database or schema has the same effect: everything looks reusable and nothing gets built.
+
+Before the state-aware timestamp comparison runs, `orc` therefore asks the target warehouse which relations exist and forces any missing node back into the run, logging `<node> was deleted from the warehouse hence rerun.` Because this happens before the dependency sweep, models downstream of a missing node are rebuilt too.
+
+This is delegated to the dbt adapter's own relation listing rather than SQL Orchestra writes, so it works on every warehouse dbt supports and inherits that adapter's quoting and case-sensitivity rules.
+
+**Cost.** One metadata query per distinct `(database, schema)` that holds a reusable node, plus one connection — **nothing scales with the number of models**. There are no queries at all on a first run, when state is empty or unreadable, with `--full-refresh`, or when nothing is reusable. For scale, this is the same listing dbt itself performs moments later to warm its relation cache.
+
+| Warehouse | dbt adapter type | Per-schema call |
+| --- | --- | --- |
+| **Snowflake** | `snowflake` | `show objects in <schema>` — a metadata command, so no warehouse credits. Paginates above 10,000 objects (`list_relations_per_page`). |
+| **Google BigQuery** | `bigquery` | `tables.list` REST call — not a query job, so no slots or bytes billed. |
+| **Databricks** | `databricks` | Unity Catalog: one `system.information_schema` query. Hive metastore: `SHOW TABLES` plus `SHOW VIEWS`. |
+| **PostgreSQL** | `postgres` | One `pg_catalog` read. |
+| **AWS Redshift** | `redshift` | As PostgreSQL, plus `svv_external_tables` for Spectrum. |
+| **DuckDB / MotherDuck** | `duckdb` | One `information_schema.tables` read. |
+| **Microsoft Fabric** | `fabric` | One `INFORMATION_SCHEMA.TABLES` read. |
+| **Apache Spark** | `spark` | **Excluded** — the adapter returns an empty list on unrecognised errors, which would read as "the whole schema is gone", and its Iceberg fallback degrades to one `describe extended` per table. |
+| **Other adapters** | varies | Whatever that adapter implements for `list_relations_without_caching`. |
+
+If a schema cannot be read at all (permissions, a network blip), Orchestra logs a warning and leaves that schema's reuse decisions untouched rather than triggering a surprise rebuild. Set `verify_relations_exist = false` (or `ORCHESTRA_VERIFY_RELATIONS_EXIST=false`) to turn the check off.
 
 ### Example snippet
 

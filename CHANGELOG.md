@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `require_explicit_source_freshness` setting (`[tool.orchestra_dbt]` or `ORCHESTRA_REQUIRE_EXPLICIT_SOURCE_FRESHNESS`). When enabled, sources without an explicit `loaded_at_field`/`loaded_at_query` are excluded from state-aware orchestration — no implicit/fallback freshness is inferred for them and models depending on them always run. Useful when implicit freshness is unreliable, e.g. sources defined on views, where warehouse metadata reflects the view rather than the underlying data.
 
+### Added
+
+- Verify a node's relation still exists in the target warehouse before reusing it. A model whose table or view was dropped out of band — or a state file pointed at a fresh database or schema — no longer gets silently skipped; it is forced back into the run (`<node> was deleted from the warehouse hence rerun.`) and its downstream models rebuild with it. Delegated to the dbt adapter's own relation listing, so it works on every warehouse dbt supports, and costs one metadata query per distinct `(database, schema)` holding a reusable node — nothing scales with model count, and there are no queries when nothing is reusable. Controlled by `verify_relations_exist` / `ORCHESTRA_VERIFY_RELATIONS_EXIST` (default on); `spark` is excluded.
+
 ### Fixed
 
 - `--full-refresh` detection (the switch that disables stateful orchestration for a run) now also recognizes the short flag `-f` and the `DBT_FULL_REFRESH` env var, not just a bare `--full-refresh` token. Previously `orc dbt build -f` or `DBT_FULL_REFRESH=true` triggered a real full refresh in the dbt subprocess while orchestra's own state-aware reuse logic ran as if it hadn't. Env var truthiness matches click's exact recognized states (`1/yes/true/on/t/y` vs `0/no/false/off/f/n/""`), and an explicit flag still wins over the environment.
