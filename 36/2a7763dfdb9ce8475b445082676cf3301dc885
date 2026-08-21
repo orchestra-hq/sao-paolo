@@ -1,0 +1,20 @@
+src/orchestra_dbt/source_freshness/__init__.py
+  s_a3de8d6ede0e2f::t_11943f05296736 46
+  s_a3de8d6ede0e2f::t_8dbd39c8cd7885 3,11-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "362a7763dfdb9ce8475b445082676cf3301dc885",
+  "prompts": {},
+  "sessions": {
+    "s_a3de8d6ede0e2f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c8a8ead4-5d7d-4087-a69a-3b5b4144eb21",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Jeroen Rijks <jeroen@getorchestra.io>"
+    }
+  }
+}
