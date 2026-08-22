@@ -1,18 +1,11 @@
 from typing import Any, Callable
 
-# Adapters whose relation listing is too expensive or too unreliable to gate reuse on.
-#
-# dbt-spark swallows unrecognised errors and returns an empty list, which we would read as
-# "the whole schema is gone" and rebuild everything. Its Iceberg-v2 fallback also degrades to
-# one `describe extended` per table, so the check stops being one query per schema.
+# Adapters whose relation listing is too expensive or unreliable to gate reuse on. dbt-spark
+# swallows unrecognised errors and returns [], which we'd read as "the whole schema is gone".
 EXISTENCE_CHECK_UNSUPPORTED: frozenset[str] = frozenset({"spark"})
 
-# Per-adapter overrides for listing the identifiers present in one schema.
-#
-# A handler receives (adapter, schema_relation) and returns the set of *normalised* identifiers
-# in that schema, or None to fall through to dbt's own `list_relations_without_caching`. Empty
-# by default: dbt's per-adapter implementation is the primary path, and this exists so a
-# warehouse whose listing turns out slow or wrong can be swapped without touching call sites.
+# Per-adapter override: (adapter, schema_relation) -> normalised identifiers in that schema,
+# or None to fall through to dbt's own `list_relations_without_caching`. Empty by default.
 EXISTENCE_OVERRIDE_BY_ADAPTER_TYPE: dict[
     str, Callable[[Any, Any], set[str] | None]
 ] = {}

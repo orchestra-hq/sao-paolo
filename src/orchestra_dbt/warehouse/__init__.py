@@ -25,11 +25,7 @@ __all__ = [
 def collect_reuse_candidates(
     parsed_dag: ParsedDag, paths_to_run: list[str] | None
 ) -> list[str]:
-    """Nodes we are about to skip and could therefore be wrong about.
-
-    Dirty nodes are already being rebuilt, and nodes without a relation name (dbt leaves it
-    unset for ephemeral models) have nothing to look for, so neither is worth a query.
-    """
+    """Nodes we're about to skip and could be wrong about (dirty and ephemeral don't apply)."""
     candidates: list[str] = []
     for node_id, node in parsed_dag.nodes.items():
         if node.node_type != NodeType.MATERIALISATION:
@@ -50,9 +46,8 @@ def apply_relation_existence_gate(
 ) -> None:
     """Stop reusing nodes whose warehouse relation no longer exists.
 
-    Mutates `parsed_dag` in place and never raises: if we cannot read the warehouse we leave
-    reuse decisions exactly as they were, rather than turning a transient metadata failure
-    into a surprise full rebuild.
+    Mutates `parsed_dag` in place. Never raises: a failed check leaves reuse decisions
+    unchanged rather than forcing a surprise rebuild.
     """
     candidates = collect_reuse_candidates(parsed_dag, paths_to_run)
     if not candidates:

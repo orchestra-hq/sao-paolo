@@ -242,12 +242,8 @@ class TestCheckRelationsExist:
         assert calls == []
 
     def test_parallel_path_actually_uses_a_thread_pool(self) -> None:
-        """A bare `MagicMock` for `adapter.config` is truthy for
-        `config.args.single_threaded`, which would silently collapse this onto the
-        sequential path and prove nothing about the threaded one. Configure it explicitly
-        and confirm real threads engaged (a schema listing observed off the test's own
-        thread), not just that the two paths happen to agree on the answer.
-        """
+        """A bare MagicMock config is truthy for `single_threaded`, so config it explicitly
+        and confirm a listing actually ran off the test's own thread."""
         pytest.importorskip("dbt_common.utils.executor")
         from dbt_common.context import set_invocation_context
 
@@ -286,9 +282,7 @@ class TestCheckRelationsExist:
         )
 
     def test_parallel_path_falls_back_to_sequential_when_single_threaded(self) -> None:
-        """The common real-world case (`--single-threaded` / `threads: 1`): confirm we do
-        not spin up an executor we don't need.
-        """
+        """`--single-threaded` / `threads: 1`: no executor spun up."""
         manifest = make_manifest({"model.p.a": ("db", "analytics", "a")})
         adapter, calls = make_adapter({("db", "analytics"): ["a"]})
         adapter.config.args.single_threaded = True

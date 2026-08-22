@@ -8,13 +8,10 @@ from .existence import RelationExistence
 def mark_missing_relations_dirty(
     parsed_dag: ParsedDag, existence: Mapping[str, RelationExistence]
 ) -> int:
-    """Force nodes whose warehouse relation has gone missing back into the run.
+    """Force CLEAN nodes reported MISSING back into the run. Returns the count flipped.
 
-    Only CLEAN nodes reported MISSING are flipped; EXISTS and UNKNOWN leave the DAG alone.
-    Because this runs before `calculate_nodes_to_run`, the usual topological sweep then
-    propagates the new DIRTY state downstream for free.
-
-    Returns the number of nodes flipped.
+    Runs before `calculate_nodes_to_run`, so the existing topological sweep propagates the
+    new DIRTY state downstream.
     """
     flipped = 0
     for node_id, status in existence.items():

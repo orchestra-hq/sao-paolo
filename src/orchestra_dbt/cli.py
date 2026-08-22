@@ -208,9 +208,7 @@ def main(args: tuple[str, ...]) -> None:
             state_load_ok=state_load_ok,
         )
 
-    # A node can be clean on paper but missing from the warehouse (dropped out of band, or a
-    # state file pointed at a fresh target). Force those back into the run before the
-    # timestamp comparison, so the topological sweep also picks up their children.
+    # A node can be clean on paper but missing from the warehouse; force it back into the run.
     if settings.verify_relations_exist:
         apply_relation_existence_gate(parsed_dag, paths_to_run)
 

@@ -55,8 +55,7 @@ class MaterialisationNode(Node):
     freshness: Freshness
     reason: str
     sources: dict[str, datetime]
-    # Fully-rendered warehouse relation (e.g. `"db"."schema"."model"`). dbt leaves this
-    # unset for ephemeral models, so `None` also means "nothing to look for".
+    # Fully-rendered warehouse relation; unset for ephemeral models.
     relation_name: str | None = None
 
 

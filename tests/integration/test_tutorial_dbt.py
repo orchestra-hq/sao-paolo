@@ -72,12 +72,7 @@ def _relation_exists(env: dict[str, str], schema: str, identifier: str) -> bool:
 
 
 def _drop_view(env: dict[str, str], schema: str, identifier: str) -> None:
-    """Drop a relation behind dbt's back, the way a person or another job would.
-
-    CASCADE is required: `int_events_enriched` is a view on top of `stg_events`, so Postgres
-    refuses a plain drop. That means the drop takes out two relations, which is useful -- it
-    exercises both the direct check and downstream propagation.
-    """
+    """Drop a relation behind dbt's back. CASCADE also takes out downstream views."""
     with _connect(env) as connection:
         connection.autocommit = True
         with connection.cursor() as cursor:
@@ -96,34 +91,25 @@ def test_tutorial_dbt_build_succeeds() -> None:
 
 @requires_postgres
 def test_dropped_relation_is_rebuilt_instead_of_reused(tmp_path: Path) -> None:
-    """A model whose relation was deleted must be rerun, not skipped.
-
-    Without the existence check the second build reuses `stg_events` from state and never
-    notices the view is gone.
-    """
+    """A model whose relation was deleted must be rerun, not skipped."""
     state_file = tmp_path / "dbt_state.json"
     state_file.write_text(json.dumps({"state": {}}), encoding="utf-8")
     env = _tutorial_env(state_file)
     staging_schema = f"{env['DBT_SCHEMA']}_staging"
     intermediate_schema = f"{env['DBT_SCHEMA']}_intermediate"
 
-    # 1. Populate state.
     assert _run_build(env, "seed run").returncode == 0
 
-    # 2. With warm state and no changes, dbt-orchestra should be reusing stg_events.
     warm = _run_build(env, "warm run")
     assert warm.returncode == 0
     assert "REUSED model.sao_tutorial.stg_events" in warm.stdout, (
-        "expected stg_events to be reused before we drop it; "
-        "state-aware reuse is not engaging so this test proves nothing"
+        "stg_events should be reused before we drop it, or this test proves nothing"
     )
 
-    # 3. Delete the relation out of band.
     _drop_view(env, staging_schema, "stg_events")
     assert not _relation_exists(env, staging_schema, "stg_events")
     assert not _relation_exists(env, intermediate_schema, "int_events_enriched")
 
-    # 4. The next build must rerun it rather than skip it.
     repaired = _run_build(env, "repair run")
     assert repaired.returncode == 0
     assert "REUSED model.sao_tutorial.stg_events" not in repaired.stdout
@@ -150,7 +136,7 @@ def test_disabling_the_check_reproduces_the_silent_skip(tmp_path: Path) -> None:
     env["ORCHESTRA_VERIFY_RELATIONS_EXIST"] = "false"
     skipped = _run_build(env, "check disabled")
 
-    # The run "succeeds" while the relation stays missing -- the bug the check exists to fix.
+    # The run "succeeds" while the relation stays missing.
     assert skipped.returncode == 0
     assert "REUSED model.sao_tutorial.stg_events" in skipped.stdout
     assert not _relation_exists(env, staging_schema, "stg_events")

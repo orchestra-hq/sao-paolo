@@ -9,25 +9,18 @@ class AdapterUnavailable(RuntimeError):
 
 
 def acquire_in_process_adapter(adapter_type: str | None = None) -> tuple[Any, Any]:
-    """Return the (adapter, manifest) dbt already set up in this process.
+    """Return the (adapter, manifest) dbt already registered in this process.
 
-    `dbt source freshness` runs in-process via `dbtRunner` before we get here, and its
-    `@requires.manifest` decorator registers the adapter and attaches the parsed manifest as
-    the adapter's macro resolver *before* the task body runs -- so this works even for a
-    project with no sources. We need neither a fresh parse nor our own profile/config
-    bootstrap.
+    `dbt source freshness` runs in-process just before this via `dbtRunner`, and its
+    `@requires.manifest` decorator registers the adapter and attaches the manifest as its
+    macro resolver before the task body runs -- so no bootstrap or fresh parse is needed here.
 
-    The "exactly one adapter" assumption below holds by construction, not because dbt
-    preserves the registry between invocations: `adapter_management()` calls
-    `reset_adapters()` on *entry* to every `dbtRunner.invoke()`, clearing whatever the
-    previous in-process invocation (`dbt ls`) registered, then `register_adapter()` fills it
-    back in for that invocation's own `--target`. Since `dbt source freshness` is the last
-    in-process call before we get here, its adapter -- registered against the same target we
-    resolved for it -- is what's left in `FACTORY.adapters`. This is fragile to call-order
-    changes: if another in-process dbtRunner invocation ran after freshness but before this
-    function, it would silently replace what we read here.
+    "Exactly one adapter" holds because `reset_adapters()` runs on entry to every
+    `dbtRunner.invoke()`, so only the freshness invocation's adapter is left registered by the
+    time we get here. Fragile to call-order changes if another in-process invocation ran after
+    freshness.
 
-    Raises AdapterUnavailable when dbt never got that far.
+    Raises AdapterUnavailable if dbt never got that far.
     """
     try:
         from dbt.adapters.factory import FACTORY, get_adapter_by_type

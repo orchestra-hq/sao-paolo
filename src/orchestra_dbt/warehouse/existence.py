@@ -18,12 +18,9 @@ class RelationExistence(str, Enum):
 def normalise_part(part: str | None) -> str:
     """Case-fold and strip quote characters from one relation component.
 
-    Deliberately case-insensitive -- dbt's own relation cache normalisation
-    (`dbt_common.utils.formatting.lowercase`) does the same case-folding, though it does not
-    also strip quote characters the way this does. Either way the comparison biases toward
-    EXISTS -- i.e. toward today's reuse behaviour -- rather than toward a spurious rebuild.
-    `BaseAdapter.get_relation` is not used for this because `BaseRelation.matches` raises
-    `ApproximateMatchError` on a case-only mismatch instead of reporting the relation absent.
+    Deliberately case-insensitive, biasing a mismatch toward EXISTS (today's reuse behaviour)
+    rather than a spurious rebuild. `BaseAdapter.get_relation` isn't used here because
+    `BaseRelation.matches` raises on a case-only mismatch instead of reporting it absent.
     """
     return (part or "").strip('"`[]').strip().lower()
 
@@ -33,13 +30,10 @@ def build_schema_groups(
 ) -> tuple[dict[SchemaKey, Any], dict[SchemaKey, dict[str, str]]]:
     """Group nodes by the schema they materialise into.
 
-    Returns `(schema_relations, members)` where `schema_relations` maps a schema key to a
-    schema-level relation to list, and `members` maps a schema key to
-    `{unique_id: normalised identifier}`.
-
-    Relations are built with `adapter.Relation.create_from`, which layers the adapter's
-    default quote policy, `config.quoting`, and the node's own quoting, and resolves
-    snapshot target database/schema -- none of which raw manifest fields give us.
+    Returns `(schema_relations, members)`: a schema key -> schema-level relation to list, and
+    a schema key -> `{unique_id: normalised identifier}`. Relations are built via
+    `adapter.Relation.create_from`, which applies quoting and snapshot target
+    database/schema correctly -- raw manifest fields don't.
     """
     schema_relations: dict[SchemaKey, Any] = {}
     members: dict[SchemaKey, dict[str, str]] = {}
@@ -110,8 +104,8 @@ def _list_in_parallel(
 ) -> dict[SchemaKey, set[str] | None]:
     """Fan out across schemas using dbt's executor, so each thread gets its own connection.
 
-    `adapter.set_relations_cache` would do this for us but calls `future.result()` bare, so a
-    single unreadable schema would abort the whole batch instead of degrading to UNKNOWN.
+    Not `adapter.set_relations_cache`: it calls `future.result()` bare, so one unreadable
+    schema would abort the whole batch instead of degrading to UNKNOWN.
     """
     from dbt_common.utils.executor import executor
 
@@ -177,8 +171,7 @@ def check_relations_exist(
             continue
 
         if not identifiers:
-            # Either a genuinely empty target schema (which should rebuild) or an adapter that
-            # swallowed an error and returned nothing. Both look the same, so say so out loud.
+            # Could be a genuinely empty schema, or an adapter swallowing an error.
             log_info(
                 f"Schema {key[0]}.{key[1]} contains no relations; "
                 f"{len(node_identifiers)} node(s) will be rerun."
