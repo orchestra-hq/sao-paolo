@@ -12,7 +12,10 @@ def get_source_freshness(target: str | None) -> SourceFreshness | None:
     try:
         from dbt.artifacts.resources.v1.components import FreshnessThreshold
         from dbt.artifacts.schemas.freshness import SourceDefinition
-        from dbt.artifacts.schemas.freshness.v3.freshness import SourceFreshnessResult
+        from dbt.artifacts.schemas.freshness.v3.freshness import (
+            FreshnessNodeResult,
+            SourceFreshnessResult,
+        )
         from dbt.artifacts.schemas.results import FreshnessStatus
         from dbt.cli.main import dbtRunner
         from dbt.task.freshness import FreshnessRunner, FreshnessTask
@@ -37,7 +40,7 @@ def get_source_freshness(target: str | None) -> SourceFreshness | None:
         )
 
     class OrchestraFreshnessRunner(FreshnessRunner):
-        def execute(self, compiled_node, manifest) -> SourceFreshnessResult:
+        def execute(self, compiled_node, manifest) -> FreshnessNodeResult:
             # setting config: freshness: null can impact the execute method
             # below. In this case, set it back to the default FreshnessThreshold
             # object.
