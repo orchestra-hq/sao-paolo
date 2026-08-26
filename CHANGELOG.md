@@ -5,6 +5,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- `--full-refresh` detection (the switch that disables stateful orchestration for a run) now also recognizes the short flag `-f` and the `DBT_FULL_REFRESH` env var, not just a bare `--full-refresh` token. Previously `orc dbt build -f` or `DBT_FULL_REFRESH=true` triggered a real full refresh in the dbt subprocess while orchestra's own state-aware reuse logic ran as if it hadn't. Env var truthiness matches click's exact recognized states (`1/yes/true/on/t/y` vs `0/no/false/off/f/n/""`), and an explicit flag still wins over the environment.
+
 ## [1.1.1] - 2026-07-06
 
 ### Fixed
