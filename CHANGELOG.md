@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `--full-refresh` detection (the switch that disables stateful orchestration for a run) now also recognizes the short flag `-f` and the `DBT_FULL_REFRESH` env var, not just a bare `--full-refresh` token. Previously `orc dbt build -f` or `DBT_FULL_REFRESH=true` triggered a real full refresh in the dbt subprocess while orchestra's own state-aware reuse logic ran as if it hadn't. Env var truthiness matches click's exact recognized states (`1/yes/true/on/t/y` vs `0/no/false/off/f/n/""`), and an explicit flag still wins over the environment.
+- `--target` is now resolved from `--target=<name>`, `-t <name>`, `-tname` and `DBT_TARGET`, not just a bare `--target <name>`. Previously those forms silently fell back to the default target, so anything relying on `find_target_in_args` (currently `dbt source freshness`) could inspect a different warehouse than the one dbt actually built into. Note `-t=<name>` deliberately resolves to the literal target `=<name>`, matching a real quirk of dbt's own `click`-based parsing (short options don't split on `=`) rather than "fixing" it into a disagreement with dbt. Resolved values are also no longer stripped of whitespace, matching click: only a truly empty `DBT_TARGET` is treated as unset.
 
 ## [1.1.1] - 2026-07-06
 
