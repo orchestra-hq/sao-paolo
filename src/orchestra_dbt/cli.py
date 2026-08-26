@@ -15,6 +15,7 @@ from .config import (
 )
 from .constants import SERVICE_NAME
 from .dag import construct_dag
+from .full_refresh_finder import is_full_refresh_requested
 from .logger import log_debug, log_error, log_info, log_reused_nodes, log_warn
 from .ls import get_paths_to_run
 from .models import (
@@ -97,9 +98,7 @@ def _complete_run(
         state=state, parsed_dag=parsed_dag, source_freshness=source_freshness
     )
     try:
-        save_state(
-            state=state, updated_asset_external_ids=updated_asset_external_ids
-        )
+        save_state(state=state, updated_asset_external_ids=updated_asset_external_ids)
     except StateSaveError as e:
         # A save failure is only fatal if we had good state to begin with. If the
         # initial load already failed, we never had reliable state to protect, so
@@ -197,7 +196,7 @@ def main(args: tuple[str, ...]) -> None:
     # Propagate freshness config to upstream nodes
     propagate_freshness_config(parsed_dag)
 
-    if "--full-refresh" in dbt_args:
+    if is_full_refresh_requested(list(dbt_args)):
         log_info("Full refresh detected. Stateful orchestration disabled.")
         _complete_run(
             state,
