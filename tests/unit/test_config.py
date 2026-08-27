@@ -41,6 +41,7 @@ def _clear_orchestra_settings_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "ORCHESTRA_DBT_DEBUG",
         "ORCHESTRA_INTEGRATION_ACCOUNT_ID",
         "ORCHESTRA_SEED_STATE_ORCHESTRATION",
+        "ORCHESTRA_REQUIRE_EXPLICIT_SOURCE_FRESHNESS",
     ):
         monkeypatch.delenv(key, raising=False)
 
@@ -157,6 +158,7 @@ def test_load_orchestra_dbt_settings_defaults(
     assert settings.debug is False
     assert settings.integration_account_id is None
     assert settings.seed_state_orchestration is False
+    assert settings.require_explicit_source_freshness is False
 
 
 def test_load_orchestra_dbt_settings_from_pyproject(
@@ -170,6 +172,7 @@ local_run = true
 debug = true
 integration_account_id = "acct-from-toml"
 seed_state_orchestration = true
+require_explicit_source_freshness = true
 """,
         encoding="utf-8",
     )
@@ -183,6 +186,7 @@ seed_state_orchestration = true
     assert settings.debug is True
     assert settings.integration_account_id == "acct-from-toml"
     assert settings.seed_state_orchestration is True
+    assert settings.require_explicit_source_freshness is True
     assert get_integration_account_id() == "acct-from-toml"
 
 
@@ -192,7 +196,8 @@ def test_load_orchestra_dbt_settings_env_overrides_pyproject(
     (tmp_path / "pyproject.toml").write_text(
         '[tool.orchestra_dbt]\nuse_stateful = true\norchestra_env = "stage"\n'
         'integration_account_id = "from-toml"\n'
-        "seed_state_orchestration = false\n",
+        "seed_state_orchestration = false\n"
+        "require_explicit_source_freshness = false\n",
         encoding="utf-8",
     )
     monkeypatch.chdir(tmp_path)
@@ -200,11 +205,13 @@ def test_load_orchestra_dbt_settings_env_overrides_pyproject(
     monkeypatch.setenv("ORCHESTRA_ENV", "dev")
     monkeypatch.setenv("ORCHESTRA_INTEGRATION_ACCOUNT_ID", "from-env")
     monkeypatch.setenv("ORCHESTRA_SEED_STATE_ORCHESTRATION", "true")
+    monkeypatch.setenv("ORCHESTRA_REQUIRE_EXPLICIT_SOURCE_FRESHNESS", "true")
     settings = load_orchestra_dbt_settings()
     assert settings.use_stateful is False
     assert settings.orchestra_env == "dev"
     assert settings.integration_account_id == "from-env"
     assert settings.seed_state_orchestration is True
+    assert settings.require_explicit_source_freshness is True
 
 
 def test_load_orchestra_dbt_settings_invalid_orchestra_env_in_pyproject(

@@ -207,6 +207,7 @@ Each `[tool.orchestra_dbt]` key can be set in TOML, or omitted and supplied only
 | `local_run` | `ORCHESTRA_LOCAL_RUN` |
 | `debug` | `ORCHESTRA_DBT_DEBUG` |
 | `seed_state_orchestration` | `ORCHESTRA_SEED_STATE_ORCHESTRATION` |
+| `require_explicit_source_freshness` | `ORCHESTRA_REQUIRE_EXPLICIT_SOURCE_FRESHNESS` |
 
 For boolean settings, if the environment variable is **set**, the merged value is `true` only when the value is exactly the string `true` (case-insensitive); otherwise it is `false`. If the variable is **unset**, `pyproject.toml` (or the default) applies.
 
@@ -219,6 +220,7 @@ For boolean settings, if the environment variable is **set**, the merged value i
 | `local_run` | bool | `true` | After reuse, revert patched files (typical for local iteration). |
 | `debug` | bool | `false` | Verbose logging. |
 | `seed_state_orchestration` | bool | `false` | When `true`, seed nodes can be reused from state like models; when `false`, seeds are always treated as dirty for reuse. This feature should be considered experimental and may change in the future. |
+| `require_explicit_source_freshness` | bool | `false` | When `true`, sources without an explicit `loaded_at_field` or `loaded_at_query` are excluded from state-aware orchestration: no implicit/fallback freshness is inferred for them, and models depending on them always run. Use this when implicit freshness is unreliable (for example, sources defined on top of views, where warehouse metadata reflects the view rather than the underlying data). |
 
 ### Resolving multiple backend state configurations
 
@@ -248,6 +250,8 @@ When **both** are omitted, Orchestra can still run **adapter-specific** SQL to i
 | **Other adapters** | varies | No Orchestra fallback unless listed above; use `loaded_at_*` or verify dbt's default behavior for your warehouse. |
 
 For adapters without a registered fallback, if both `loaded_at` settings are missing, Orchestra follows dbt's `FreshnessRunner` behavior (which may surface as warnings or a non-actionable result depending on dbt and the warehouse).
+
+Implicit freshness can be misleading for sources defined on top of **views**: warehouse metadata reports when the view was last altered, not when new data arrived in the underlying tables. To opt out of implicit freshness entirely, set `require_explicit_source_freshness = true` (or `ORCHESTRA_REQUIRE_EXPLICIT_SOURCE_FRESHNESS=true`). Sources without `loaded_at_field`/`loaded_at_query` are then excluded from state-aware orchestration and models depending on them always run; sources with an explicit config keep working as normal.
 
 ### Example snippet
 

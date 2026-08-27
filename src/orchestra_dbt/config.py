@@ -22,6 +22,7 @@ class OrchestraDbtSettings(BaseModel):
     debug: bool = False
     integration_account_id: str | None = None
     seed_state_orchestration: bool = False
+    require_explicit_source_freshness: bool = False
 
     @field_validator("orchestra_env", mode="before")
     @classmethod
@@ -75,8 +76,12 @@ def _merge_env_overrides(settings: OrchestraDbtSettings) -> OrchestraDbtSettings
 
     seed_state = _env_bool("ORCHESTRA_SEED_STATE_ORCHESTRATION")
     if seed_state is not None:
+        settings = settings.model_copy(update={"seed_state_orchestration": seed_state})
+
+    require_explicit = _env_bool("ORCHESTRA_REQUIRE_EXPLICIT_SOURCE_FRESHNESS")
+    if require_explicit is not None:
         settings = settings.model_copy(
-            update={"seed_state_orchestration": seed_state}
+            update={"require_explicit_source_freshness": require_explicit}
         )
 
     return OrchestraDbtSettings.model_validate(settings.model_dump())

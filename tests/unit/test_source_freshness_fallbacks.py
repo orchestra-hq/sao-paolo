@@ -64,6 +64,24 @@ def test_loaded_at_fields_unset(
     assert loaded_at_fields_unset(node) is expected
 
 
+@pytest.mark.parametrize(
+    ("query", "field", "require_explicit", "expected"),
+    [
+        (None, None, True, True),
+        (None, None, False, False),
+        ("select 1", None, True, False),
+        (None, "updated_at", True, False),
+    ],
+)
+def test_should_exclude_source(
+    query: str | None, field: str | None, require_explicit: bool, expected: bool
+) -> None:
+    from src.orchestra_dbt.source_freshness import should_exclude_source
+
+    node = SimpleNamespace(loaded_at_query=query, loaded_at_field=field)
+    assert should_exclude_source(node, require_explicit) is expected
+
+
 def test_build_source_freshness_result_from_loaded_at_no_freshness_config() -> None:
     pytest.importorskip("dbt.artifacts")
     from dbt.artifacts.schemas.results import FreshnessStatus
