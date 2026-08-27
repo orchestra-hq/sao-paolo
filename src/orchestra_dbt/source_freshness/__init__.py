@@ -11,9 +11,6 @@ from .fallbacks.registry import FALLBACK_BY_ADAPTER_TYPE, loaded_at_fields_unset
 def should_exclude_source(
     compiled_node, require_explicit_source_freshness: bool
 ) -> bool:
-    """A source without an explicit loaded_at_field/loaded_at_query has no reliable
-    freshness signal (e.g. a view's metadata reflects the view, not the underlying
-    data), so it can optionally be excluded from state-aware orchestration."""
     return require_explicit_source_freshness and loaded_at_fields_unset(compiled_node)
 
 
@@ -50,9 +47,6 @@ def get_source_freshness(
             age=0,
         )
 
-    # Sources without an explicit loaded_at_field/loaded_at_query, collected so
-    # they can be excluded from the freshness results when
-    # require_explicit_source_freshness is enabled.
     sources_without_explicit_freshness: set[str] = set()
 
     class OrchestraFreshnessRunner(FreshnessRunner):
@@ -94,14 +88,10 @@ def get_source_freshness(
             args.extend(["--target", target])
         dbtRunner().invoke(args=args)
         if sources_without_explicit_freshness:
-            shown = sorted(sources_without_explicit_freshness)[:10]
-            remaining = len(sources_without_explicit_freshness) - len(shown)
             log_warn(
                 f"{len(sources_without_explicit_freshness)} source(s) have no explicit freshness "
                 "config (loaded_at_field or loaded_at_query) and are excluded from state-aware "
-                "orchestration; models depending on them will always run: "
-                + ", ".join(shown)
-                + (f", and {remaining} more" if remaining else "")
+                "orchestration; models depending on them will always run."
             )
         return SourceFreshness(
             sources={
