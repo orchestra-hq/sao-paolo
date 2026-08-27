@@ -258,23 +258,11 @@ Implicit freshness can be misleading for sources defined on top of **views**: wa
 
 State and source freshness alone cannot tell you whether a node's table or view is *actually there*. A model whose relation was dropped out of band, renamed, or never built in this target still looks clean in state, so it would be skipped and the run would "succeed" with a missing relation. Carrying a warm state file to a fresh database or schema has the same effect: everything looks reusable and nothing gets built.
 
-Before the state-aware timestamp comparison runs, `orc` therefore asks the target warehouse which relations exist and forces any missing node back into the run, logging `<node> was deleted from the warehouse hence rerun.` Because this happens before the dependency sweep, models downstream of a missing node are rebuilt too.
+`orc` therefore confirms each reusable node's relation exists before the dependency sweep, forcing any missing node back into the run with `<node> was deleted from the warehouse hence rerun.` Running before the sweep means models downstream of a missing node are rebuilt too.
 
-This is delegated to the dbt adapter's own relation listing rather than SQL Orchestra writes, so it works on every warehouse dbt supports and inherits that adapter's quoting and case-sensitivity rules.
+The lookup is delegated to the dbt adapter's own relation listing rather than SQL Orchestra writes, so it works on every warehouse dbt supports and inherits that adapter's quoting and case-sensitivity rules. `spark` is excluded: its adapter returns an empty list on unrecognised errors, which would read as "the whole schema is gone".
 
-**Cost.** One metadata query per distinct `(database, schema)` that holds a reusable node, plus one connection — **nothing scales with the number of models**. There are no queries at all on a first run, when state is empty or unreadable, with `--full-refresh`, or when nothing is reusable. For scale, this is the same listing dbt itself performs moments later to warm its relation cache.
-
-| Warehouse | dbt adapter type | Per-schema call |
-| --- | --- | --- |
-| **Snowflake** | `snowflake` | `show objects in <schema>` — a metadata command, so no warehouse credits. Paginates above 10,000 objects (`list_relations_per_page`). |
-| **Google BigQuery** | `bigquery` | `tables.list` REST call — not a query job, so no slots or bytes billed. |
-| **Databricks** | `databricks` | Unity Catalog: one `system.information_schema` query. Hive metastore: `SHOW TABLES` plus `SHOW VIEWS`. |
-| **PostgreSQL** | `postgres` | One `pg_catalog` read. |
-| **AWS Redshift** | `redshift` | As PostgreSQL, plus `svv_external_tables` for Spectrum. |
-| **DuckDB / MotherDuck** | `duckdb` | One `information_schema.tables` read. |
-| **Microsoft Fabric** | `fabric` | One `INFORMATION_SCHEMA.TABLES` read. |
-| **Apache Spark** | `spark` | **Excluded** — the adapter returns an empty list on unrecognised errors, which would read as "the whole schema is gone", and its Iceberg fallback degrades to one `describe extended` per table. |
-| **Other adapters** | varies | Whatever that adapter implements for `list_relations_without_caching`. |
+**Cost.** Usually zero extra queries: the `dbt source freshness` run that precedes it already lists every schema in the project, and this reads that cache. When the cache is cold it falls back to one listing per distinct `(database, schema)` holding a reusable node — **nothing scales with the number of models**. There are no queries at all on a first run, when state is empty or unreadable, with `--full-refresh`, or when nothing is reusable.
 
 If a schema cannot be read at all (permissions, a network blip), Orchestra logs a warning and leaves that schema's reuse decisions untouched rather than triggering a surprise rebuild. Set `verify_relations_exist = false` (or `ORCHESTRA_VERIFY_RELATIONS_EXIST=false`) to turn the check off.
 

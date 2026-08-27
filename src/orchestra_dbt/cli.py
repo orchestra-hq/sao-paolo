@@ -32,6 +32,7 @@ from .modify import (
 )
 from .orchestra import is_warn
 from .patcher import patch_seed_properties, patch_sql_files, revert_patching
+from .relation_existence import apply_relation_existence_gate
 from .sao import Freshness, calculate_nodes_to_run
 from .source_freshness import get_source_freshness
 from .state import (
@@ -43,7 +44,6 @@ from .state import (
 )
 from .state_types import StateBackendKind
 from .target_finder import find_target_in_args
-from .warehouse import apply_relation_existence_gate
 
 
 def _usage_program() -> str:
