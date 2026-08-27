@@ -94,11 +94,14 @@ def get_source_freshness(
             args.extend(["--target", target])
         dbtRunner().invoke(args=args)
         if sources_without_explicit_freshness:
+            shown = sorted(sources_without_explicit_freshness)[:10]
+            remaining = len(sources_without_explicit_freshness) - len(shown)
             log_warn(
                 f"{len(sources_without_explicit_freshness)} source(s) have no explicit freshness "
                 "config (loaded_at_field or loaded_at_query) and are excluded from state-aware "
                 "orchestration; models depending on them will always run: "
-                + ", ".join(sorted(sources_without_explicit_freshness))
+                + ", ".join(shown)
+                + (f", and {remaining} more" if remaining else "")
             )
         return SourceFreshness(
             sources={
