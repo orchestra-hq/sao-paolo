@@ -8,7 +8,15 @@ from ..utils import load_json
 from .fallbacks.registry import FALLBACK_BY_ADAPTER_TYPE, loaded_at_fields_unset
 
 
-def get_source_freshness(target: str | None) -> SourceFreshness | None:
+def should_exclude_source(
+    compiled_node, require_explicit_source_freshness: bool
+) -> bool:
+    return require_explicit_source_freshness and loaded_at_fields_unset(compiled_node)
+
+
+def get_source_freshness(
+    target: str | None, require_explicit_source_freshness: bool = False
+) -> SourceFreshness | None:
     try:
         from dbt.artifacts.resources.v1.components import FreshnessThreshold
         from dbt.artifacts.schemas.freshness import SourceDefinition
@@ -39,6 +47,8 @@ def get_source_freshness(target: str | None) -> SourceFreshness | None:
             age=0,
         )
 
+    sources_without_explicit_freshness: set[str] = set()
+
     class OrchestraFreshnessRunner(FreshnessRunner):
         def execute(self, compiled_node, manifest) -> FreshnessNodeResult:
             # setting config: freshness: null can impact the execute method
@@ -46,6 +56,10 @@ def get_source_freshness(target: str | None) -> SourceFreshness | None:
             # object.
             if compiled_node.freshness is None:
                 compiled_node.freshness = FreshnessThreshold()
+
+            if should_exclude_source(compiled_node, require_explicit_source_freshness):
+                sources_without_explicit_freshness.add(compiled_node.unique_id)
+                return default_freshness_result(compiled_node)
 
             if loaded_at_fields_unset(compiled_node):
                 handler = FALLBACK_BY_ADAPTER_TYPE.get(self.adapter.type())
@@ -73,10 +87,17 @@ def get_source_freshness(target: str | None) -> SourceFreshness | None:
         if target:
             args.extend(["--target", target])
         dbtRunner().invoke(args=args)
+        if sources_without_explicit_freshness:
+            log_warn(
+                f"{len(sources_without_explicit_freshness)} source(s) have no explicit freshness "
+                "config (loaded_at_field or loaded_at_query) and are excluded from state-aware "
+                "orchestration; models depending on them will always run."
+            )
         return SourceFreshness(
             sources={
                 source["unique_id"]: source["max_loaded_at"]
                 for source in load_json("target/sources.json")["results"]
+                if source["unique_id"] not in sources_without_explicit_freshness
             }
         )
     except Exception as e:
