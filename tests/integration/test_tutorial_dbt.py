@@ -30,7 +30,15 @@ def _tutorial_env(state_file: Path | None = None) -> dict[str, str]:
     env.setdefault("DBT_SCHEMA", "sao_tutorial")
     env["DBT_PROFILES_DIR"] = str(_TUTORIAL_DBT)
     if state_file is not None:
+        # ORCHESTRA_API_KEY selects the Orchestra HTTP backend regardless of any file
+        # setting, and CI's environment carries one. Drop it so state really lands in the
+        # temp file: these tests are about reuse, and reuse needs state that loads.
+        env.pop("ORCHESTRA_API_KEY", None)
         env["ORCHESTRA_STATE_FILE"] = str(state_file)
+        # Every model in this project descends from the `raw_events` seed, and seeds are
+        # unconditionally dirty unless this is on -- which would make *nothing* reusable
+        # and leave these tests unable to reach the state they are asserting about.
+        env["ORCHESTRA_SEED_STATE_ORCHESTRATION"] = "true"
     return env
 
 
@@ -79,6 +87,13 @@ def _drop_view(env: dict[str, str], schema: str, identifier: str) -> None:
             cursor.execute(f'drop view if exists "{schema}"."{identifier}" cascade')
 
 
+def _assert_state_loaded(result: subprocess.CompletedProcess[str]) -> None:
+    """Reuse is impossible without state, so surface that as the real cause."""
+    assert "Could not load state" not in result.stdout, (
+        "state backend did not load; the run cannot reuse anything"
+    )
+
+
 @requires_postgres
 def test_tutorial_dbt_build_succeeds() -> None:
     result = _run_build(_tutorial_env(), "build")
@@ -102,6 +117,7 @@ def test_dropped_relation_is_rebuilt_instead_of_reused(tmp_path: Path) -> None:
 
     warm = _run_build(env, "warm run")
     assert warm.returncode == 0
+    _assert_state_loaded(warm)
     assert "REUSED model.sao_tutorial.stg_events" in warm.stdout, (
         "stg_events should be reused before we drop it, or this test proves nothing"
     )
@@ -129,6 +145,7 @@ def test_disabling_the_check_reproduces_the_silent_skip(tmp_path: Path) -> None:
     assert _run_build(env, "seed run").returncode == 0
     warm = _run_build(env, "warm run")
     assert warm.returncode == 0
+    _assert_state_loaded(warm)
     assert "REUSED model.sao_tutorial.stg_events" in warm.stdout
 
     _drop_view(env, staging_schema, "stg_events")
