@@ -29,12 +29,14 @@ class FakeRelation:
         schema: str | None,
         identifier: str | None,
         quoted: bool = False,
+        policy: tuple[bool, bool, bool] | None = None,
     ):
         self.database = database
         self.schema = schema
         self.identifier = identifier
+        database_q, schema_q, identifier_q = policy or (quoted, quoted, quoted)
         self.quote_policy = SimpleNamespace(
-            database=quoted, schema=quoted, identifier=quoted
+            database=database_q, schema=schema_q, identifier=identifier_q
         )
 
 
@@ -261,6 +263,40 @@ class TestCaseSensitivity:
         assert find_missing_relations(
             adapter, manifest, dict.fromkeys(manifest.nodes)
         ) == {"model.p.a"}
+
+    def test_differing_quote_policies_get_separate_listings(self) -> None:
+        """An all-lowercase schema normalises identically whether or not it is folded, so
+        without the flags in the key these two would share one listing -- yet a quoted
+        `analytics` and an unquoted one are different schemas in the warehouse.
+        """
+        calls: list[tuple[str, str]] = []
+        adapter = MagicMock()
+        adapter.type.return_value = "postgres"
+        rels = {
+            # identifier folding matches; only the *schema* policy differs
+            "folded": FakeRelation(
+                "db", "analytics", "a", policy=(False, False, False)
+            ),
+            "exact": FakeRelation("db", "analytics", "a", policy=(False, True, False)),
+        }
+        adapter.Relation.create_from.side_effect = lambda quoting, relation_config: (
+            rels[relation_config["alias"]]
+        )
+        manifest = SimpleNamespace(
+            nodes={
+                k: {"alias": k, "database": "db", "schema": "analytics"} for k in rels
+            }
+        )
+
+        def list_relations(database, schema):
+            calls.append((database, schema))
+            return [FakeRelation(database, schema, "a")]
+
+        adapter.list_relations.side_effect = list_relations
+
+        find_missing_relations(adapter, manifest, list(rels))
+
+        assert len(calls) == 2, "each quote policy needs its own listing"
 
     def test_schema_case_follows_its_own_quoting_flag(self) -> None:
         """Schema quoting is independent of identifier quoting."""

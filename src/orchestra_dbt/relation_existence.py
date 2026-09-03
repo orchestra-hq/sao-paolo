@@ -111,8 +111,9 @@ def find_missing_relations(
     `create_from` is used over raw manifest fields: it applies quoting and resolves snapshot
     target database/schema.
     """
-    # Keyed on the fold flags too, so a node whose quoting differs gets its own listing.
-    listed: dict[tuple[str, str, bool], set[str] | None] = {}
+    # Keyed on every fold flag, not just the normalised names: two nodes could normalise
+    # to the same key from genuinely different schemas if their quote policies differed.
+    listed: dict[tuple[str, str, bool, bool, bool], set[str] | None] = {}
     missing: set[str] = set()
 
     for unique_id in candidates:
@@ -139,6 +140,8 @@ def find_missing_relations(
         key = (
             _normalise(relation.database, fold_database),
             _normalise(relation.schema, fold_schema),
+            fold_database,
+            fold_schema,
             fold_identifier,
         )
         if key not in listed:
@@ -150,7 +153,7 @@ def find_missing_relations(
         if identifiers is not None and identifier not in identifiers:
             missing.add(unique_id)
 
-    for (database, schema, _), identifiers in listed.items():
+    for (database, schema, *_flags), identifiers in listed.items():
         if identifiers is not None and not identifiers:
             # Either a genuinely empty schema, or an adapter swallowing an error.
             log_info(f"Schema {database}.{schema} contains no relations.")
