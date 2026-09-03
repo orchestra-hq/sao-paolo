@@ -39,6 +39,8 @@ def _tutorial_env(state_file: Path | None = None) -> dict[str, str]:
         # unconditionally dirty unless this is on -- which would make *nothing* reusable
         # and leave these tests unable to reach the state they are asserting about.
         env["ORCHESTRA_SEED_STATE_ORCHESTRATION"] = "true"
+        # Off by default -- these tests are what proves it works, so opt in.
+        env["ORCHESTRA_VERIFY_RELATIONS_EXIST"] = "true"
     return env
 
 
@@ -150,7 +152,7 @@ def test_disabling_the_check_reproduces_the_silent_skip(tmp_path: Path) -> None:
 
     _drop_view(env, staging_schema, "stg_events")
 
-    env["ORCHESTRA_VERIFY_RELATIONS_EXIST"] = "false"
+    env["ORCHESTRA_VERIFY_RELATIONS_EXIST"] = "false"  # i.e. the default
     skipped = _run_build(env, "check disabled")
 
     # The run "succeeds" while the relation stays missing.
@@ -159,6 +161,6 @@ def test_disabling_the_check_reproduces_the_silent_skip(tmp_path: Path) -> None:
     assert not _relation_exists(env, staging_schema, "stg_events")
 
     # Leave the warehouse usable for anything that runs after this.
-    del env["ORCHESTRA_VERIFY_RELATIONS_EXIST"]
+    env["ORCHESTRA_VERIFY_RELATIONS_EXIST"] = "true"
     assert _run_build(env, "restore").returncode == 0
     assert _relation_exists(env, staging_schema, "stg_events")

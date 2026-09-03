@@ -160,7 +160,7 @@ def test_load_orchestra_dbt_settings_defaults(
     assert settings.integration_account_id is None
     assert settings.seed_state_orchestration is False
     assert settings.require_explicit_source_freshness is False
-    assert settings.verify_relations_exist is True
+    assert settings.verify_relations_exist is False
 
 
 def test_load_orchestra_dbt_settings_from_pyproject(
@@ -175,7 +175,7 @@ debug = true
 integration_account_id = "acct-from-toml"
 seed_state_orchestration = true
 require_explicit_source_freshness = true
-verify_relations_exist = false
+verify_relations_exist = true
 """,
         encoding="utf-8",
     )
@@ -190,7 +190,7 @@ verify_relations_exist = false
     assert settings.integration_account_id == "acct-from-toml"
     assert settings.seed_state_orchestration is True
     assert settings.require_explicit_source_freshness is True
-    assert settings.verify_relations_exist is False
+    assert settings.verify_relations_exist is True
     assert get_integration_account_id() == "acct-from-toml"
 
 

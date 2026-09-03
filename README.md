@@ -222,7 +222,7 @@ For boolean settings, if the environment variable is **set**, the merged value i
 | `debug` | bool | `false` | Verbose logging. |
 | `seed_state_orchestration` | bool | `false` | When `true`, seed nodes can be reused from state like models; when `false`, seeds are always treated as dirty for reuse. This feature should be considered experimental and may change in the future. |
 | `require_explicit_source_freshness` | bool | `false` | When `true`, sources without an explicit `loaded_at_field` or `loaded_at_query` are excluded from state-aware orchestration: no implicit/fallback freshness is inferred for them, and models depending on them always run. Use this when implicit freshness is unreliable (for example, sources defined on top of views, where warehouse metadata reflects the view rather than the underlying data). |
-| `verify_relations_exist` | bool | `true` | Before skipping a node, confirm its table/view is actually in the warehouse (see [Verifying relations still exist](#verifying-relations-still-exist)). Set to `false` to skip the check entirely. |
+| `verify_relations_exist` | bool | `false` | Opt in to confirming a node's table/view is actually in the warehouse before skipping it (see [Verifying relations still exist](#verifying-relations-still-exist)). Off by default, so existing behaviour is unchanged until you enable it. |
 
 ### Resolving multiple backend state configurations
 
@@ -264,7 +264,9 @@ The lookup is delegated to the dbt adapter's own relation listing rather than SQ
 
 **Cost.** Usually zero extra queries: the `dbt source freshness` run that precedes it already lists every schema in the project, and this reads that cache. When the cache is cold it falls back to one listing per distinct `(database, schema)` holding a reusable node — **nothing scales with the number of models**. There are no queries at all on a first run, when state is empty or unreadable, with `--full-refresh`, or when nothing is reusable.
 
-If a schema cannot be read at all (permissions, a network blip), Orchestra logs a warning and leaves that schema's reuse decisions untouched rather than triggering a surprise rebuild. Set `verify_relations_exist = false` (or `ORCHESTRA_VERIFY_RELATIONS_EXIST=false`) to turn the check off.
+If a schema cannot be read at all (permissions, a network blip), Orchestra logs a warning and leaves that schema's reuse decisions untouched rather than triggering a surprise rebuild.
+
+The check is **off by default** while it beds in. Turn it on with `verify_relations_exist = true` in `[tool.orchestra_dbt]`, or `ORCHESTRA_VERIFY_RELATIONS_EXIST=true`.
 
 ### Example snippet
 

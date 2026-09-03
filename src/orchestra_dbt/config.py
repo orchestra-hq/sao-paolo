@@ -23,7 +23,7 @@ class OrchestraDbtSettings(BaseModel):
     integration_account_id: str | None = None
     seed_state_orchestration: bool = False
     require_explicit_source_freshness: bool = False
-    verify_relations_exist: bool = True
+    verify_relations_exist: bool = False
 
     @field_validator("orchestra_env", mode="before")
     @classmethod
