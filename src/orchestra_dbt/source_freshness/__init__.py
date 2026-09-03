@@ -4,13 +4,31 @@ from datetime import datetime
 from ..compatibility import dbt_core_import_error_message
 from ..logger import log_error, log_info, log_warn
 from ..models import SourceFreshness
+from ..target_finder import find_target_in_args
 from ..utils import load_json
 from .fallbacks.registry import FALLBACK_BY_ADAPTER_TYPE, loaded_at_fields_unset
 
 INVALID_SOURCE_FRESHNESS_FLAGS = {"--full-refresh", "--empty"}
 
 
-def get_args_for_source_freshness(user_args: tuple | list[str]) -> list[str]:
+def get_args_for_source_freshness(
+    user_args: tuple | list[str], scope_to_selection: bool = False
+) -> list[str]:
+    """Build the `dbt source freshness` invocation.
+
+    By default (`scope_to_selection=False`) only `--target` is carried over, matching
+    dbt's own freshness behaviour of checking every source in the project. When enabled,
+    the triggering command's own selection (`--select`/`--exclude`/`--selector`) is
+    forwarded too, so freshness is only checked for sources upstream of what's actually
+    being built.
+    """
+    if not scope_to_selection:
+        args: list[str] = ["source", "freshness", "-q"]
+        target = find_target_in_args(list(user_args))
+        if target:
+            args.extend(["--target", target])
+        return args
+
     filtered_user_args = [
         arg for arg in user_args if arg not in INVALID_SOURCE_FRESHNESS_FLAGS
     ]
@@ -24,7 +42,9 @@ def should_exclude_source(
 
 
 def get_source_freshness(
-    user_args: tuple | list[str], require_explicit_source_freshness: bool = False
+    user_args: tuple | list[str],
+    require_explicit_source_freshness: bool = False,
+    scope_to_selection: bool = False,
 ) -> SourceFreshness | None:
     try:
         from dbt.artifacts.resources.v1.components import FreshnessThreshold
@@ -92,7 +112,9 @@ def get_source_freshness(
     FreshnessTask.get_runner_type = lambda self, _: OrchestraFreshnessRunner
 
     try:
-        dbtRunner().invoke(args=get_args_for_source_freshness(user_args))
+        dbtRunner().invoke(
+            args=get_args_for_source_freshness(user_args, scope_to_selection)
+        )
         if sources_without_explicit_freshness:
             log_warn(
                 f"{len(sources_without_explicit_freshness)} source(s) have no explicit freshness "
