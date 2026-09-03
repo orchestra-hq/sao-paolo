@@ -12,7 +12,7 @@ from src.orchestra_dbt.models import (
     SourceNode,
 )
 from src.orchestra_dbt.relation_existence import (
-    _fold_flags,
+    _fold_identifier,
     _normalise,
     apply_relation_existence_gate,
     collect_reuse_candidates,
@@ -34,10 +34,25 @@ class FakeRelation:
         self.database = database
         self.schema = schema
         self.identifier = identifier
-        database_q, schema_q, identifier_q = policy or (quoted, quoted, quoted)
+        self._policy = policy or (quoted, quoted, quoted)
         self.quote_policy = SimpleNamespace(
-            database=database_q, schema=schema_q, identifier=identifier_q
+            database=self._policy[0], schema=self._policy[1], identifier=self._policy[2]
         )
+
+    def without_identifier(self) -> "FakeRelation":
+        return FakeRelation(self.database, self.schema, None, policy=self._policy)
+
+    def _key(self) -> tuple:
+        return (self.database, self.schema, self.identifier, self._policy)
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, FakeRelation) and self._key() == other._key()
+
+    def __hash__(self) -> int:
+        return hash(self._key())
+
+    def __repr__(self) -> str:
+        return f"{self.database}.{self.schema}"
 
 
 def make_manifest(nodes: dict[str, tuple[str, str, str]]) -> SimpleNamespace:
@@ -202,27 +217,14 @@ class TestFindMissingRelations:
 class TestCaseSensitivity:
     """dbt folds case only for *unquoted* components (`BaseAdapter._make_match_kwargs`)."""
 
-    @pytest.mark.parametrize(
-        ("policy", "expected"),
-        [
-            ((False, False, False), (True, True, True)),
-            ((True, True, True), (False, False, False)),
-            ((False, True, False), (True, False, True)),
-        ],
-    )
-    def test_fold_flags_come_from_the_relations_quote_policy(
-        self, policy, expected
-    ) -> None:
-        relation = SimpleNamespace(
-            quote_policy=SimpleNamespace(
-                database=policy[0], schema=policy[1], identifier=policy[2]
-            )
-        )
-        assert _fold_flags(relation) == expected
+    @pytest.mark.parametrize(("quoted", "expected"), [(False, True), (True, False)])
+    def test_fold_comes_from_the_relations_quote_policy(self, quoted, expected) -> None:
+        relation = SimpleNamespace(quote_policy=SimpleNamespace(identifier=quoted))
+        assert _fold_identifier(relation) is expected
 
     def test_unreadable_policy_falls_back_to_folding(self) -> None:
         """Folding biases toward "exists", i.e. toward leaving reuse decisions alone."""
-        assert _fold_flags(SimpleNamespace()) == (True, True, True)
+        assert _fold_identifier(SimpleNamespace()) is True
 
     def test_unquoted_adapter_matches_across_case(self) -> None:
         """Snowflake reports `M` for a model dbt configured as `m`."""

@@ -22,8 +22,8 @@ def _normalise(part: str | None, fold_case: bool = True) -> str:
     return part.lower() if fold_case else part
 
 
-def _fold_flags(relation: Any) -> tuple[bool, bool, bool]:
-    """Whether (database, schema, identifier) may be case-folded, per dbt's own answer.
+def _fold_identifier(relation: Any) -> bool:
+    """Whether the identifier may be case-folded, per dbt's own answer.
 
     `Relation.create_from` has already merged the adapter's default quote policy, the
     project `quoting:` config and any per-node override into `quote_policy` -- so read that
@@ -31,14 +31,9 @@ def _fold_flags(relation: Any) -> tuple[bool, bool, bool]:
     toward leaving reuse decisions alone.
     """
     try:
-        policy = relation.quote_policy
-        return (
-            policy.database is False,
-            policy.schema is False,
-            policy.identifier is False,
-        )
+        return relation.quote_policy.identifier is False
     except Exception:
-        return (True, True, True)
+        return True
 
 
 def _acquire_adapter() -> tuple[Any, Any]:
@@ -111,9 +106,10 @@ def find_missing_relations(
     `create_from` is used over raw manifest fields: it applies quoting and resolves snapshot
     target database/schema.
     """
-    # Keyed on every fold flag, not just the normalised names: two nodes could normalise
-    # to the same key from genuinely different schemas if their quote policies differed.
-    listed: dict[tuple[str, str, bool, bool, bool], set[str] | None] = {}
+    # Keyed on dbt's own schema relation (`without_identifier()`), which is what dbt uses
+    # for its cache schemas: equal for two models in one schema, and unequal when the
+    # quote policies differ, so differing policies can't share a listing.
+    listed: dict[Any, set[str] | None] = {}
     missing: set[str] = set()
 
     for unique_id in candidates:
@@ -132,18 +128,12 @@ def find_missing_relations(
             log_debug(f"Could not build a relation for {unique_id}: {e}")
             continue
 
-        fold_database, fold_schema, fold_identifier = _fold_flags(relation)
+        fold_identifier = _fold_identifier(relation)
         identifier = _normalise(relation.identifier, fold_identifier)
         if not identifier or not relation.schema:
             continue
 
-        key = (
-            _normalise(relation.database, fold_database),
-            _normalise(relation.schema, fold_schema),
-            fold_database,
-            fold_schema,
-            fold_identifier,
-        )
+        key = relation.without_identifier()
         if key not in listed:
             listed[key] = _list_schema(
                 adapter, relation.database, relation.schema, fold_identifier
@@ -153,10 +143,10 @@ def find_missing_relations(
         if identifiers is not None and identifier not in identifiers:
             missing.add(unique_id)
 
-    for (database, schema, *_flags), identifiers in listed.items():
+    for schema_relation, identifiers in listed.items():
         if identifiers is not None and not identifiers:
             # Either a genuinely empty schema, or an adapter swallowing an error.
-            log_info(f"Schema {database}.{schema} contains no relations.")
+            log_info(f"Schema {schema_relation} contains no relations.")
 
     return missing
 
