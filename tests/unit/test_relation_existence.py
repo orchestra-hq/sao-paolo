@@ -12,8 +12,6 @@ from src.orchestra_dbt.models import (
     SourceNode,
 )
 from src.orchestra_dbt.relation_existence import (
-    _fold_identifier,
-    _normalise,
     apply_relation_existence_gate,
     collect_reuse_candidates,
     find_missing_relations,
@@ -69,7 +67,9 @@ def make_adapter(
     listings: dict[tuple[str, str], list[str] | Exception],
     adapter_type: str = "postgres",
     quoted: bool = False,
+    fold: str = "lower",
 ) -> tuple[MagicMock, list[tuple[str, str]]]:
+    """`fold` is the adapter's own casing: the base adapter lowercases, Snowflake uppercases."""
     calls: list[tuple[str, str]] = []
     adapter = MagicMock()
     adapter.type.return_value = adapter_type
@@ -82,8 +82,20 @@ def make_adapter(
         )
     )
 
+    def make_match_kwargs(database, schema, identifier):
+        """Mirrors `BaseAdapter._make_match_kwargs`: fold only unquoted components."""
+        parts = {"database": database, "schema": schema, "identifier": identifier}
+        if not quoted:
+            parts = {
+                k: (v.lower() if fold == "lower" else v.upper()) if v else v
+                for k, v in parts.items()
+            }
+        return {k: v for k, v in parts.items() if v is not None}
+
+    adapter._make_match_kwargs.side_effect = make_match_kwargs
+
     def list_relations(database, schema):
-        key = (_normalise(database), _normalise(schema))
+        key = (database, schema)
         calls.append(key)
         outcome = listings[key]
         if isinstance(outcome, Exception):
@@ -113,24 +125,9 @@ def _node(
     )
 
 
-@pytest.mark.parametrize(
-    ("value", "expected"),
-    [
-        ("MY_MODEL", "my_model"),
-        ('"MyModel"', "mymodel"),
-        # A quoted identifier may legitimately carry spaces; they are part of the name.
-        ('"My Table"', "my table"),
-        ('" x "', " x "),
-        (None, ""),
-    ],
-)
-def test_normalise(value: str | None, expected: str) -> None:
-    assert _normalise(value) == expected
-
-
 class TestFindMissingRelations:
     def test_present_absent_and_case_insensitive(self) -> None:
-        """The warehouse may report a different case than dbt configured."""
+        """The warehouse reports its own casing; the adapter renders what to look for."""
         manifest = make_manifest(
             {
                 "model.p.here": ("db", "analytics", "here"),
@@ -138,7 +135,9 @@ class TestFindMissingRelations:
                 "model.p.gone": ("db", "analytics", "gone"),
             }
         )
-        adapter, _ = make_adapter({("db", "analytics"): ["here", "MY_MODEL"]})
+        adapter, _ = make_adapter(
+            {("db", "analytics"): ["HERE", "MY_MODEL"]}, fold="upper"
+        )
 
         missing = find_missing_relations(
             adapter, manifest, dict.fromkeys(manifest.nodes)
@@ -215,21 +214,22 @@ class TestFindMissingRelations:
 
 
 class TestCaseSensitivity:
-    """dbt folds case only for *unquoted* components (`BaseAdapter._make_match_kwargs`)."""
-
-    @pytest.mark.parametrize(("quoted", "expected"), [(False, True), (True, False)])
-    def test_fold_comes_from_the_relations_quote_policy(self, quoted, expected) -> None:
-        relation = SimpleNamespace(quote_policy=SimpleNamespace(identifier=quoted))
-        assert _fold_identifier(relation) is expected
-
-    def test_unreadable_policy_falls_back_to_folding(self) -> None:
-        """Folding biases toward "exists", i.e. toward leaving reuse decisions alone."""
-        assert _fold_identifier(SimpleNamespace()) is True
+    """Casing is the adapter's call: `_make_match_kwargs` renders the name dbt searches for."""
 
     def test_unquoted_adapter_matches_across_case(self) -> None:
-        """Snowflake reports `M` for a model dbt configured as `m`."""
+        """Snowflake reports `MY_MODEL` for a model dbt configured as `my_model`."""
         manifest = make_manifest({"model.p.a": ("db", "analytics", "my_model")})
-        adapter, _ = make_adapter({("db", "analytics"): ["MY_MODEL"]})
+        adapter, _ = make_adapter({("db", "analytics"): ["MY_MODEL"]}, fold="upper")
+
+        assert (
+            find_missing_relations(adapter, manifest, dict.fromkeys(manifest.nodes))
+            == set()
+        )
+
+    def test_folding_direction_is_not_assumed(self) -> None:
+        """The base adapter lowercases where Snowflake uppercases; we use whichever it gives."""
+        manifest = make_manifest({"model.p.a": ("db", "analytics", "My_Model")})
+        adapter, _ = make_adapter({("db", "analytics"): ["my_model"]}, fold="lower")
 
         assert (
             find_missing_relations(adapter, manifest, dict.fromkeys(manifest.nodes))
@@ -257,6 +257,34 @@ class TestCaseSensitivity:
             == set()
         )
 
+    def test_quoted_alias_keeps_its_case(self) -> None:
+        """`alias: '"MyModel"'` with quoting off: Snowflake's `_make_match_kwargs` strips
+        the quotes and skips folding, so the mixed-case name is what we look for. The
+        adapter owns that precedence -- we would have uppercased it.
+        """
+        manifest = make_manifest({"model.p.a": ("db", "analytics", '"MyModel"')})
+        adapter, _ = make_adapter({("db", "analytics"): ["MyModel"]})
+
+        def snowflake_match_kwargs(database, schema, identifier):
+            if identifier.startswith('"') and identifier.endswith('"'):
+                return {
+                    "database": database,
+                    "schema": schema,
+                    "identifier": identifier.strip('"'),
+                }
+            return {
+                "database": database,
+                "schema": schema,
+                "identifier": identifier.upper(),
+            }
+
+        adapter._make_match_kwargs.side_effect = snowflake_match_kwargs
+
+        assert (
+            find_missing_relations(adapter, manifest, dict.fromkeys(manifest.nodes))
+            == set()
+        )
+
     def test_space_bearing_identifiers_are_not_conflated(self) -> None:
         """Quoted names may carry leading/trailing spaces; ` x ` is not the table `x`."""
         manifest = make_manifest({"model.p.a": ("db", "analytics", " x ")})
@@ -267,15 +295,19 @@ class TestCaseSensitivity:
         ) == {"model.p.a"}
 
     def test_differing_quote_policies_get_separate_listings(self) -> None:
-        """An all-lowercase schema normalises identically whether or not it is folded, so
-        without the flags in the key these two would share one listing -- yet a quoted
-        `analytics` and an unquoted one are different schemas in the warehouse.
+        """A quoted `analytics` and an unquoted one are different schemas in the
+        warehouse, and `without_identifier()` keeps their listings apart.
         """
         calls: list[tuple[str, str]] = []
         adapter = MagicMock()
         adapter.type.return_value = "postgres"
+        adapter._make_match_kwargs.side_effect = lambda database, schema, identifier: {
+            "database": database,
+            "schema": schema,
+            "identifier": identifier,
+        }
         rels = {
-            # identifier folding matches; only the *schema* policy differs
+            # identifier casing matches; only the *schema* policy differs
             "folded": FakeRelation(
                 "db", "analytics", "a", policy=(False, False, False)
             ),
@@ -300,16 +332,18 @@ class TestCaseSensitivity:
 
         assert len(calls) == 2, "each quote policy needs its own listing"
 
-    def test_schema_case_follows_its_own_quoting_flag(self) -> None:
-        """Schema quoting is independent of identifier quoting."""
+    def test_schema_is_listed_exactly_as_dbt_would(self) -> None:
+        """`get_relation` hands the raw schema to `list_relations` and the cache matches
+        case-insensitively, so we pass it through rather than folding it ourselves.
+        """
         manifest = make_manifest({"model.p.a": ("db", "Analytics", "m")})
-        adapter, calls = make_adapter({("db", "analytics"): ["m"]})
+        adapter, calls = make_adapter({("db", "Analytics"): ["m"]})
 
         assert (
             find_missing_relations(adapter, manifest, dict.fromkeys(manifest.nodes))
             == set()
         )
-        assert calls == [("db", "analytics")]
+        assert calls == [("db", "Analytics")]
 
 
 class TestCollectReuseCandidates:

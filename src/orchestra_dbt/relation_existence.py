@@ -10,32 +10,6 @@ _UNSUPPORTED_ADAPTERS = frozenset({"spark"})
 _CONNECTION_NAME = "orchestra_relation_existence"
 
 
-def _normalise(part: str | None, fold_case: bool = True) -> str:
-    """Strip quotes from a relation component, folding case only where that is safe.
-
-    Mirrors `BaseAdapter._make_match_kwargs`: unquoted components take the warehouse's own
-    casing so both sides need folding; quoted ones keep theirs, and on BigQuery `Foo` and
-    `foo` really are different tables. Whitespace is never stripped -- a quoted identifier
-    may legitimately carry leading or trailing spaces, and ` x ` is not the table `x`.
-    """
-    part = (part or "").strip('"`[]')
-    return part.lower() if fold_case else part
-
-
-def _fold_identifier(relation: Any) -> bool:
-    """Whether the identifier may be case-folded, per dbt's own answer.
-
-    `Relation.create_from` has already merged the adapter's default quote policy, the
-    project `quoting:` config and any per-node override into `quote_policy` -- so read that
-    rather than deciding ourselves. Unreadable policy folds, biasing toward "exists" and so
-    toward leaving reuse decisions alone.
-    """
-    try:
-        return relation.quote_policy.identifier is False
-    except Exception:
-        return True
-
-
 def _acquire_adapter() -> tuple[Any, Any]:
     """Return the (adapter, manifest) dbt already registered in this process.
 
@@ -77,18 +51,17 @@ def collect_reuse_candidates(
     return candidates
 
 
-def _list_schema(
-    adapter: Any, database: str | None, schema: str, fold_identifier: bool
-) -> set[str] | None:
-    """Normalised identifiers in one schema, or None if we could not read it.
+def _list_schema(adapter: Any, database: str | None, schema: str) -> set[str] | None:
+    """Identifiers in one schema, or None if we could not read it.
 
     `list_relations` reads dbt's relation cache, which the preceding source-freshness run
     has usually already filled -- so this is normally free, and queries only when cold.
     """
     try:
         return {
-            _normalise(relation.identifier, fold_identifier)
+            relation.identifier
             for relation in adapter.list_relations(database, schema)
+            if relation.identifier
         }
     except Exception as e:
         log_warn(
@@ -103,12 +76,12 @@ def find_missing_relations(
 ) -> set[str]:
     """Candidates with no relation in the warehouse; a schema we can't read yields none.
 
-    `create_from` is used over raw manifest fields: it applies quoting and resolves snapshot
-    target database/schema.
+    Casing and quoting are left to the adapter: `_make_match_kwargs` renders the name dbt
+    would search for, and listed relations are compared exactly -- the branch
+    `BaseRelation._is_exactish_match` takes for anything dbt did not create itself.
     """
     # Keyed on dbt's own schema relation (`without_identifier()`), which is what dbt uses
-    # for its cache schemas: equal for two models in one schema, and unequal when the
-    # quote policies differ, so differing policies can't share a listing.
+    # for its cache schemas: equal for two models in the same schema.
     listed: dict[Any, set[str] | None] = {}
     missing: set[str] = set()
 
@@ -121,23 +94,24 @@ def find_missing_relations(
             continue
 
         try:
+            # `create_from` applies quoting and resolves snapshot target database/schema.
             relation = adapter.Relation.create_from(
                 quoting=adapter.config, relation_config=node
+            )
+            search = adapter._make_match_kwargs(
+                relation.database, relation.schema, relation.identifier
             )
         except Exception as e:
             log_debug(f"Could not build a relation for {unique_id}: {e}")
             continue
 
-        fold_identifier = _fold_identifier(relation)
-        identifier = _normalise(relation.identifier, fold_identifier)
+        identifier = search.get("identifier")
         if not identifier or not relation.schema:
             continue
 
         key = relation.without_identifier()
         if key not in listed:
-            listed[key] = _list_schema(
-                adapter, relation.database, relation.schema, fold_identifier
-            )
+            listed[key] = _list_schema(adapter, relation.database, relation.schema)
 
         identifiers = listed[key]
         if identifiers is not None and identifier not in identifiers:
