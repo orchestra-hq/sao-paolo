@@ -120,8 +120,8 @@ class TestFindMissingRelations:
         assert missing == {"model.p.gone"}
 
     def test_case_sensitive_adapter_does_not_fold(self) -> None:
-        """Where identifiers are quoted (e.g. BigQuery), `Foo` and `foo` are different
-        tables -- folding would call a genuinely missing relation present.
+        """Quoted identifiers (e.g. BigQuery) are case-sensitive: `Foo` and `foo` are
+        different tables, so folding would call a missing relation present.
         """
         manifest = make_manifest({"model.p.a": ("db", "analytics", "Foo")})
         adapter, _ = make_adapter({("db", "analytics"): ["foo"]}, quoted=True)

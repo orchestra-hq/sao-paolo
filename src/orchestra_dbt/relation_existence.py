@@ -11,14 +11,11 @@ _CONNECTION_NAME = "orchestra_relation_existence"
 
 
 def _normalise(part: str | None, fold_case: bool = True) -> str:
-    """Strip quote characters from one relation component, case-folding when appropriate.
+    """Strip quotes from a relation component, folding case only where that is safe.
 
-    Mirrors dbt's own rule (`BaseAdapter._make_match_kwargs`): an *unquoted* component is
-    stored by the warehouse in its own canonical case (Snowflake uppercases, Postgres
-    lowercases), so both sides must be folded to compare. A *quoted* component keeps the
-    case it was written in, and on a case-sensitive warehouse like BigQuery `Foo` and `foo`
-    are genuinely different tables -- folding there would report a missing relation as
-    present and silently skip it, which is the bug this check exists to catch.
+    Mirrors `BaseAdapter._make_match_kwargs`: unquoted components take the warehouse's own
+    casing so both sides need folding; quoted ones keep theirs, and on BigQuery `Foo` and
+    `foo` really are different tables.
     """
     part = (part or "").strip().strip('"`[]')
     return part.lower() if fold_case else part
@@ -42,10 +39,8 @@ def _case_folding(adapter: Any) -> tuple[bool, bool, bool]:
 def _acquire_adapter() -> tuple[Any, Any]:
     """Return the (adapter, manifest) dbt already registered in this process.
 
-    `dbt source freshness` runs in-process just before this and its `@requires.manifest`
-    decorator registers the adapter and attaches the manifest, so no bootstrap is needed.
-    Only that invocation's adapter is left registered (`reset_adapters()` runs on entry to
-    every `dbtRunner.invoke()`), which is why exactly one is expected.
+    The preceding in-process `dbt source freshness` sets both up via `@requires.manifest`,
+    and `reset_adapters()` on each invoke leaves only that one -- hence expecting exactly one.
     """
     from dbt.adapters.factory import FACTORY, get_adapter_by_type
 
@@ -87,9 +82,8 @@ def _list_schema(
 ) -> set[str] | None:
     """Normalised identifiers in one schema, or None if we could not read it.
 
-    `list_relations` serves this from dbt's relation cache, which the preceding
-    `dbt source freshness` invocation has usually already filled for every schema in the
-    project -- so this is normally free. It falls back to a real listing when cold.
+    `list_relations` reads dbt's relation cache, which the preceding source-freshness run
+    has usually already filled -- so this is normally free, and queries only when cold.
     """
     try:
         return {
@@ -107,10 +101,10 @@ def _list_schema(
 def find_missing_relations(
     adapter: Any, manifest: Any, candidates: Collection[str]
 ) -> set[str]:
-    """Which candidates have no relation in the warehouse. A schema we can't read yields none.
+    """Candidates with no relation in the warehouse; a schema we can't read yields none.
 
-    Relations are built via `adapter.Relation.create_from`, which applies quoting and
-    snapshot target database/schema correctly -- raw manifest fields don't.
+    `create_from` is used over raw manifest fields: it applies quoting and resolves snapshot
+    target database/schema.
     """
     fold_database, fold_schema, fold_identifier = _case_folding(adapter)
     listed: dict[tuple[str, str], set[str] | None] = {}
@@ -162,9 +156,8 @@ def apply_relation_existence_gate(
 ) -> None:
     """Stop reusing nodes whose warehouse relation no longer exists.
 
-    Mutates `parsed_dag` in place. Never raises: a failed check leaves reuse decisions
-    unchanged rather than forcing a surprise rebuild. Runs before `calculate_nodes_to_run`,
-    so the existing topological sweep propagates the new DIRTY state downstream.
+    Mutates `parsed_dag` in place and never raises -- a failed check leaves reuse decisions
+    alone. Runs before `calculate_nodes_to_run` so DIRTY propagates downstream.
     """
     candidates = collect_reuse_candidates(parsed_dag, paths_to_run)
     if not candidates:

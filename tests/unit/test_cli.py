@@ -1,8 +1,7 @@
-"""Covers the `cli.py` wiring the unit suite otherwise never exercises.
+"""Covers `cli.py` wiring the unit suite otherwise never exercises.
 
-Both regressions guarded here (running the existence gate after the dependency sweep, and
-ignoring `verify_relations_exist`) silently disable the feature while every other test
-still passes -- the integration tests that would catch them are CI/Postgres-gated.
+Both regressions guarded here silently disable the feature while every other test passes,
+and the integration tests that would catch them are CI/Postgres-gated.
 """
 
 from unittest.mock import MagicMock
