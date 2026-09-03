@@ -1,11 +1,132 @@
+import re
 import threading
 from datetime import datetime
+from functools import lru_cache
+from typing import cast
 
 from ..compatibility import dbt_core_import_error_message
 from ..logger import log_error, log_info, log_warn
 from ..models import SourceFreshness
+from ..target_finder import find_target_in_args
 from ..utils import load_json
 from .fallbacks.registry import FALLBACK_BY_ADAPTER_TYPE, loaded_at_fields_unset
+
+# Flags whose following bare tokens are node-selection criteria (dbt's MultiOption:
+# one flag, then every non-flag token up to the next flag is a separate criterion).
+SELECT_FLAGS = {"-s", "--select", "-m", "--models", "--model"}
+
+_LEADING_ANCESTOR_OPERATOR_RE = re.compile(r"^(\d*\+|@)")
+
+
+def _click_option_names(command) -> set[str]:
+    return {
+        opt
+        for param in command.params
+        for opt in list(param.opts) + list(getattr(param, "secondary_opts", []))
+    }
+
+
+@lru_cache(maxsize=1)
+def _source_freshness_incompatible_flags() -> tuple[frozenset[str], frozenset[str]]:
+    """Flags accepted by `dbt build`/`run`/`test` but not by `dbt source freshness`,
+    split into boolean (no value) and value-taking.
+
+    Derived live from dbt-core's own click command definitions rather than a
+    hand-maintained list, so this always matches whatever dbt-core version is actually
+    installed instead of silently drifting the next time a build/run/test-only flag is
+    added upstream.
+    """
+    import click
+    from dbt.cli.main import cli
+
+    source_group = cast(click.Group, cli.commands["source"])
+    freshness_flags = _click_option_names(source_group.commands["freshness"])
+
+    boolean_flags: set[str] = set()
+    value_flags: set[str] = set()
+    for command_name in ("build", "run", "test"):
+        command = cli.commands.get(command_name)
+        if command is None:
+            continue
+        for param in command.params:
+            opts = list(param.opts) + list(getattr(param, "secondary_opts", []))
+            if all(opt in freshness_flags for opt in opts):
+                continue
+            target = boolean_flags if getattr(param, "is_flag", False) else value_flags
+            target.update(opts)
+    return frozenset(boolean_flags), frozenset(value_flags)
+
+
+def _filter_invalid_source_freshness_args(user_args: tuple | list[str]) -> list[str]:
+    boolean_flags, value_flags = _source_freshness_incompatible_flags()
+    filtered: list[str] = []
+    skip_value = False
+    for arg in user_args:
+        if skip_value:
+            skip_value = False
+            continue
+        flag = arg.split("=", 1)[0]
+        if flag in boolean_flags:
+            continue
+        if flag in value_flags:
+            skip_value = "=" not in arg
+            continue
+        filtered.append(arg)
+    return filtered
+
+
+def _scope_selection_to_ancestors(args: list[str]) -> list[str]:
+    """Prefix each `--select`/`--models` criterion with `+` so freshness is scoped to
+    the sources upstream of the selected nodes, not just the selected nodes themselves.
+
+    dbt's own selection is exact-match by default (`--select my_model` selects only
+    `my_model`); reaching anything upstream needs the explicit ancestor operator.
+    Criteria that already carry a graph operator (`+`, `N+`, `@`) are left alone.
+
+    `--exclude` is forwarded unchanged: excluding a node's ancestors is a different (and
+    ambiguous) operation. `--selector` is also forwarded unchanged -- a named selector
+    can't be rewritten from here; give it its own `+` in the YAML definition if it needs
+    to reach upstream sources.
+    """
+    result: list[str] = []
+    in_select = False
+    for arg in args:
+        if arg in SELECT_FLAGS:
+            in_select = True
+            result.append(arg)
+            continue
+        if arg.startswith("-"):
+            in_select = False
+            result.append(arg)
+            continue
+        if in_select and not _LEADING_ANCESTOR_OPERATOR_RE.match(arg):
+            result.append(f"+{arg}")
+        else:
+            result.append(arg)
+    return result
+
+
+def get_args_for_source_freshness(
+    user_args: tuple | list[str], scope_to_selection: bool = False
+) -> list[str]:
+    """Build the `dbt source freshness` invocation.
+
+    By default (`scope_to_selection=False`) only `--target` is carried over, matching
+    dbt's own freshness behaviour of checking every source in the project. When enabled,
+    the triggering command's own selection (`--select`/`--models`) is forwarded too,
+    expanded to ancestors, so freshness is only checked for sources upstream of what's
+    actually being built.
+    """
+    if not scope_to_selection:
+        args: list[str] = ["source", "freshness", "-q"]
+        target = find_target_in_args(list(user_args))
+        if target:
+            args.extend(["--target", target])
+        return args
+
+    filtered_user_args = _filter_invalid_source_freshness_args(user_args)
+    scoped_args = _scope_selection_to_ancestors(filtered_user_args)
+    return ["source", "freshness", "-q"] + scoped_args
 
 
 def should_exclude_source(
@@ -15,7 +136,9 @@ def should_exclude_source(
 
 
 def get_source_freshness(
-    target: str | None, require_explicit_source_freshness: bool = False
+    user_args: tuple | list[str],
+    require_explicit_source_freshness: bool = False,
+    scope_to_selection: bool = False,
 ) -> SourceFreshness | None:
     try:
         from dbt.artifacts.resources.v1.components import FreshnessThreshold
@@ -83,10 +206,9 @@ def get_source_freshness(
     FreshnessTask.get_runner_type = lambda self, _: OrchestraFreshnessRunner
 
     try:
-        args: list[str] = ["source", "freshness", "-q"]
-        if target:
-            args.extend(["--target", target])
-        dbtRunner().invoke(args=args)
+        dbtRunner().invoke(
+            args=get_args_for_source_freshness(user_args, scope_to_selection)
+        )
         if sources_without_explicit_freshness:
             log_warn(
                 f"{len(sources_without_explicit_freshness)} source(s) have no explicit freshness "

@@ -42,7 +42,6 @@ from .state import (
     update_state,
 )
 from .state_types import StateBackendKind
-from .target_finder import find_target_in_args
 
 
 def _usage_program() -> str:
@@ -171,8 +170,9 @@ def main(args: tuple[str, ...]) -> None:
 
     try:
         source_freshness: SourceFreshness | None = get_source_freshness(
-            target=find_target_in_args(list(dbt_args)),
+            dbt_args[2:],
             require_explicit_source_freshness=settings.require_explicit_source_freshness,
+            scope_to_selection=settings.scope_source_freshness_to_selection,
         )
     except ImportError as import_error:
         log_error(dbt_core_import_error_message(import_error))
