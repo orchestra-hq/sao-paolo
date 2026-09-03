@@ -1,6 +1,8 @@
 import re
 import threading
 from datetime import datetime
+from functools import lru_cache
+from typing import cast
 
 from ..compatibility import dbt_core_import_error_message
 from ..logger import log_error, log_info, log_warn
@@ -9,31 +11,6 @@ from ..target_finder import find_target_in_args
 from ..utils import load_json
 from .fallbacks.registry import FALLBACK_BY_ADAPTER_TYPE, loaded_at_fields_unset
 
-# Flags accepted by `dbt build`/`run`/`test` but not by `dbt source freshness` (checked
-# against dbt-core's own click definitions). Boolean ones take no value; the rest do and
-# must have their value dropped too, or it's left dangling as a bogus positional arg.
-INVALID_SOURCE_FRESHNESS_BOOLEAN_FLAGS = {
-    "-f",
-    "--full-refresh",
-    "--empty",
-    "--no-empty",
-    "--show",
-    "--store-failures",
-    "--export-saved-queries",
-    "--no-export-saved-queries",
-    "--include-saved-query",
-    "--no-include-saved-query",
-}
-INVALID_SOURCE_FRESHNESS_VALUE_FLAGS = {
-    "--event-time-start",
-    "--event-time-end",
-    "--resource-type",
-    "--resource-types",
-    "--exclude-resource-type",
-    "--exclude-resource-types",
-    "--sample",
-}
-
 # Flags whose following bare tokens are node-selection criteria (dbt's MultiOption:
 # one flag, then every non-flag token up to the next flag is a separate criterion).
 SELECT_FLAGS = {"-s", "--select", "-m", "--models", "--model"}
@@ -41,7 +18,47 @@ SELECT_FLAGS = {"-s", "--select", "-m", "--models", "--model"}
 _LEADING_ANCESTOR_OPERATOR_RE = re.compile(r"^(\d*\+|@)")
 
 
+def _click_option_names(command) -> set[str]:
+    return {
+        opt
+        for param in command.params
+        for opt in list(param.opts) + list(getattr(param, "secondary_opts", []))
+    }
+
+
+@lru_cache(maxsize=1)
+def _source_freshness_incompatible_flags() -> tuple[frozenset[str], frozenset[str]]:
+    """Flags accepted by `dbt build`/`run`/`test` but not by `dbt source freshness`,
+    split into boolean (no value) and value-taking.
+
+    Derived live from dbt-core's own click command definitions rather than a
+    hand-maintained list, so this always matches whatever dbt-core version is actually
+    installed instead of silently drifting the next time a build/run/test-only flag is
+    added upstream.
+    """
+    import click
+    from dbt.cli.main import cli
+
+    source_group = cast(click.Group, cli.commands["source"])
+    freshness_flags = _click_option_names(source_group.commands["freshness"])
+
+    boolean_flags: set[str] = set()
+    value_flags: set[str] = set()
+    for command_name in ("build", "run", "test"):
+        command = cli.commands.get(command_name)
+        if command is None:
+            continue
+        for param in command.params:
+            opts = list(param.opts) + list(getattr(param, "secondary_opts", []))
+            if all(opt in freshness_flags for opt in opts):
+                continue
+            target = boolean_flags if getattr(param, "is_flag", False) else value_flags
+            target.update(opts)
+    return frozenset(boolean_flags), frozenset(value_flags)
+
+
 def _filter_invalid_source_freshness_args(user_args: tuple | list[str]) -> list[str]:
+    boolean_flags, value_flags = _source_freshness_incompatible_flags()
     filtered: list[str] = []
     skip_value = False
     for arg in user_args:
@@ -49,9 +66,9 @@ def _filter_invalid_source_freshness_args(user_args: tuple | list[str]) -> list[
             skip_value = False
             continue
         flag = arg.split("=", 1)[0]
-        if flag in INVALID_SOURCE_FRESHNESS_BOOLEAN_FLAGS:
+        if flag in boolean_flags:
             continue
-        if flag in INVALID_SOURCE_FRESHNESS_VALUE_FLAGS:
+        if flag in value_flags:
             skip_value = "=" not in arg
             continue
         filtered.append(arg)
