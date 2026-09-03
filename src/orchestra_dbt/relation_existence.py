@@ -15,9 +15,10 @@ def _normalise(part: str | None, fold_case: bool = True) -> str:
 
     Mirrors `BaseAdapter._make_match_kwargs`: unquoted components take the warehouse's own
     casing so both sides need folding; quoted ones keep theirs, and on BigQuery `Foo` and
-    `foo` really are different tables.
+    `foo` really are different tables. Whitespace is never stripped -- a quoted identifier
+    may legitimately carry leading or trailing spaces, and ` x ` is not the table `x`.
     """
-    part = (part or "").strip().strip('"`[]')
+    part = (part or "").strip('"`[]')
     return part.lower() if fold_case else part
 
 

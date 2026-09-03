@@ -96,7 +96,14 @@ def _node(
 
 @pytest.mark.parametrize(
     ("value", "expected"),
-    [("MY_MODEL", "my_model"), ('"MyModel"', "mymodel"), (None, "")],
+    [
+        ("MY_MODEL", "my_model"),
+        ('"MyModel"', "mymodel"),
+        # A quoted identifier may legitimately carry spaces; they are part of the name.
+        ('"My Table"', "my table"),
+        ('" x "', " x "),
+        (None, ""),
+    ],
 )
 def test_normalise(value: str | None, expected: str) -> None:
     assert _normalise(value) == expected
@@ -249,6 +256,15 @@ class TestCaseSensitivity:
             find_missing_relations(adapter, manifest, dict.fromkeys(manifest.nodes))
             == set()
         )
+
+    def test_space_bearing_identifiers_are_not_conflated(self) -> None:
+        """Quoted names may carry leading/trailing spaces; ` x ` is not the table `x`."""
+        manifest = make_manifest({"model.p.a": ("db", "analytics", " x ")})
+        adapter, _ = make_adapter({("db", "analytics"): ["x"]}, quoted=True)
+
+        assert find_missing_relations(
+            adapter, manifest, dict.fromkeys(manifest.nodes)
+        ) == {"model.p.a"}
 
     def test_schema_case_follows_its_own_quoting_flag(self) -> None:
         """Schema quoting is independent of identifier quoting."""
