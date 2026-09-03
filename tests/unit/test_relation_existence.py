@@ -12,7 +12,7 @@ from src.orchestra_dbt.models import (
     SourceNode,
 )
 from src.orchestra_dbt.relation_existence import (
-    _case_folding,
+    _fold_flags,
     _normalise,
     apply_relation_existence_gate,
     collect_reuse_candidates,
@@ -21,14 +21,21 @@ from src.orchestra_dbt.relation_existence import (
 
 
 class FakeRelation:
-    """Stands in for a dbt BaseRelation."""
+    """Stands in for a dbt BaseRelation, including the quote policy `create_from` merges."""
 
     def __init__(
-        self, database: str | None, schema: str | None, identifier: str | None
+        self,
+        database: str | None,
+        schema: str | None,
+        identifier: str | None,
+        quoted: bool = False,
     ):
         self.database = database
         self.schema = schema
         self.identifier = identifier
+        self.quote_policy = SimpleNamespace(
+            database=quoted, schema=quoted, identifier=quoted
+        )
 
 
 def make_manifest(nodes: dict[str, tuple[str, str, str]]) -> SimpleNamespace:
@@ -49,17 +56,12 @@ def make_adapter(
     calls: list[tuple[str, str]] = []
     adapter = MagicMock()
     adapter.type.return_value = adapter_type
-    # Real adapters expose a quoting policy; dbt folds case only for unquoted components.
-    adapter.config.quoting = {
-        "database": quoted,
-        "schema": quoted,
-        "identifier": quoted,
-    }
     adapter.Relation.create_from.side_effect = lambda quoting, relation_config: (
         FakeRelation(
             relation_config["database"],
             relation_config["schema"],
             relation_config["alias"],
+            quoted,
         )
     )
 
@@ -199,32 +201,26 @@ class TestCaseSensitivity:
     """dbt folds case only for *unquoted* components (`BaseAdapter._make_match_kwargs`)."""
 
     @pytest.mark.parametrize(
-        ("quoting", "expected"),
+        ("policy", "expected"),
         [
-            (
-                {"database": False, "schema": False, "identifier": False},
-                (True, True, True),
-            ),
-            (
-                {"database": True, "schema": True, "identifier": True},
-                (False, False, False),
-            ),
-            (
-                {"database": False, "schema": True, "identifier": False},
-                (True, False, True),
-            ),
+            ((False, False, False), (True, True, True)),
+            ((True, True, True), (False, False, False)),
+            ((False, True, False), (True, False, True)),
         ],
     )
-    def test_fold_flags_follow_the_quoting_policy(self, quoting, expected) -> None:
-        adapter = MagicMock()
-        adapter.config.quoting = quoting
-        assert _case_folding(adapter) == expected
+    def test_fold_flags_come_from_the_relations_quote_policy(
+        self, policy, expected
+    ) -> None:
+        relation = SimpleNamespace(
+            quote_policy=SimpleNamespace(
+                database=policy[0], schema=policy[1], identifier=policy[2]
+            )
+        )
+        assert _fold_flags(relation) == expected
 
-    def test_unreadable_quoting_falls_back_to_folding(self) -> None:
+    def test_unreadable_policy_falls_back_to_folding(self) -> None:
         """Folding biases toward "exists", i.e. toward leaving reuse decisions alone."""
-        adapter = MagicMock()
-        adapter.config.quoting = None  # subscripting this raises
-        assert _case_folding(adapter) == (True, True, True)
+        assert _fold_flags(SimpleNamespace()) == (True, True, True)
 
     def test_unquoted_adapter_matches_across_case(self) -> None:
         """Snowflake reports `M` for a model dbt configured as `m`."""
