@@ -43,10 +43,17 @@ def make_manifest(nodes: dict[str, tuple[str, str, str]]) -> SimpleNamespace:
 def make_adapter(
     listings: dict[tuple[str, str], list[str] | Exception],
     adapter_type: str = "postgres",
+    quoted: bool = False,
 ) -> tuple[MagicMock, list[tuple[str, str]]]:
     calls: list[tuple[str, str]] = []
     adapter = MagicMock()
     adapter.type.return_value = adapter_type
+    # Real adapters expose a quoting policy; dbt folds case only for unquoted components.
+    adapter.config.quoting = {
+        "database": quoted,
+        "schema": quoted,
+        "identifier": quoted,
+    }
     adapter.Relation.create_from.side_effect = lambda quoting, relation_config: (
         FakeRelation(
             relation_config["database"],
@@ -111,6 +118,17 @@ class TestFindMissingRelations:
         )
 
         assert missing == {"model.p.gone"}
+
+    def test_case_sensitive_adapter_does_not_fold(self) -> None:
+        """Where identifiers are quoted (e.g. BigQuery), `Foo` and `foo` are different
+        tables -- folding would call a genuinely missing relation present.
+        """
+        manifest = make_manifest({"model.p.a": ("db", "analytics", "Foo")})
+        adapter, _ = make_adapter({("db", "analytics"): ["foo"]}, quoted=True)
+
+        assert find_missing_relations(
+            adapter, manifest, dict.fromkeys(manifest.nodes)
+        ) == {"model.p.a"}
 
     def test_empty_schema_marks_everything_missing(self) -> None:
         manifest = make_manifest({"model.p.a": ("db", "analytics", "a")})

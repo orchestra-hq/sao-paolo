@@ -10,13 +10,33 @@ _UNSUPPORTED_ADAPTERS = frozenset({"spark"})
 _CONNECTION_NAME = "orchestra_relation_existence"
 
 
-def _normalise(part: str | None) -> str:
-    """Case-fold and strip quote characters from one relation component.
+def _normalise(part: str | None, fold_case: bool = True) -> str:
+    """Strip quote characters from one relation component, case-folding when appropriate.
 
-    Deliberately case-insensitive, biasing a mismatch toward "exists" (today's reuse
-    behaviour) rather than a spurious rebuild.
+    Mirrors dbt's own rule (`BaseAdapter._make_match_kwargs`): an *unquoted* component is
+    stored by the warehouse in its own canonical case (Snowflake uppercases, Postgres
+    lowercases), so both sides must be folded to compare. A *quoted* component keeps the
+    case it was written in, and on a case-sensitive warehouse like BigQuery `Foo` and `foo`
+    are genuinely different tables -- folding there would report a missing relation as
+    present and silently skip it, which is the bug this check exists to catch.
     """
-    return (part or "").strip('"`[]').strip().lower()
+    part = (part or "").strip().strip('"`[]')
+    return part.lower() if fold_case else part
+
+
+def _case_folding(adapter: Any) -> tuple[bool, bool, bool]:
+    """Whether (database, schema, identifier) should be case-folded for this adapter."""
+    try:
+        quoting = adapter.config.quoting
+        return (
+            quoting["database"] is False,
+            quoting["schema"] is False,
+            quoting["identifier"] is False,
+        )
+    except Exception:
+        # Unknown quoting: fold, which biases toward "exists" -- i.e. toward leaving reuse
+        # decisions alone rather than forcing a rebuild we cannot justify.
+        return (True, True, True)
 
 
 def _acquire_adapter() -> tuple[Any, Any]:
@@ -62,7 +82,9 @@ def collect_reuse_candidates(
     return candidates
 
 
-def _list_schema(adapter: Any, database: str | None, schema: str) -> set[str] | None:
+def _list_schema(
+    adapter: Any, database: str | None, schema: str, fold_identifier: bool
+) -> set[str] | None:
     """Normalised identifiers in one schema, or None if we could not read it.
 
     `list_relations` serves this from dbt's relation cache, which the preceding
@@ -71,7 +93,7 @@ def _list_schema(adapter: Any, database: str | None, schema: str) -> set[str] | 
     """
     try:
         return {
-            _normalise(relation.identifier)
+            _normalise(relation.identifier, fold_identifier)
             for relation in adapter.list_relations(database, schema)
         }
     except Exception as e:
@@ -90,6 +112,7 @@ def find_missing_relations(
     Relations are built via `adapter.Relation.create_from`, which applies quoting and
     snapshot target database/schema correctly -- raw manifest fields don't.
     """
+    fold_database, fold_schema, fold_identifier = _case_folding(adapter)
     listed: dict[tuple[str, str], set[str] | None] = {}
     missing: set[str] = set()
 
@@ -109,13 +132,18 @@ def find_missing_relations(
             log_debug(f"Could not build a relation for {unique_id}: {e}")
             continue
 
-        identifier = _normalise(relation.identifier)
+        identifier = _normalise(relation.identifier, fold_identifier)
         if not identifier or not relation.schema:
             continue
 
-        key = (_normalise(relation.database), _normalise(relation.schema))
+        key = (
+            _normalise(relation.database, fold_database),
+            _normalise(relation.schema, fold_schema),
+        )
         if key not in listed:
-            listed[key] = _list_schema(adapter, relation.database, relation.schema)
+            listed[key] = _list_schema(
+                adapter, relation.database, relation.schema, fold_identifier
+            )
 
         identifiers = listed[key]
         if identifiers is not None and identifier not in identifiers:
