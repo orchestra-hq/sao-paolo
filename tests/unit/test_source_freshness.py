@@ -40,16 +40,20 @@ class TestGetArgsForSourceFreshness:
             "-q",
         ]
 
-    def test_scoped_preserves_user_args_in_original_order(self):
+    def test_scoped_expands_select_criteria_to_ancestors(self):
+        """`--select`/`-m`/`--models` criteria are exact-match in dbt, so each one is
+        prefixed with `+` to reach the sources upstream of it. `--exclude` and
+        `--selector` are forwarded unchanged."""
         user_args = (
             "--target",
             "prod",
             "--select",
-            "source:raw.orders+",
+            "model_a",
+            "model_b",
             "--selector",
             "nightly",
             "--exclude",
-            "source:raw.archived_*",
+            "model_c",
         )
 
         assert get_args_for_source_freshness(user_args, scope_to_selection=True) == [
@@ -59,15 +63,53 @@ class TestGetArgsForSourceFreshness:
             "--target",
             "prod",
             "--select",
-            "source:raw.orders+",
+            "+model_a",
+            "+model_b",
             "--selector",
             "nightly",
             "--exclude",
-            "source:raw.archived_*",
+            "model_c",
         ]
 
-    def test_scoped_filters_command_specific_flags(self):
-        user_args = ("--full-refresh", "--empty", "--target", "prod")
+    def test_scoped_does_not_double_prefix_existing_graph_operators(self):
+        user_args = (
+            "--select",
+            "+already_ancestors",
+            "2+depth_limited",
+            "@at_operator",
+            "trailing_descendant+",
+        )
+
+        assert get_args_for_source_freshness(user_args, scope_to_selection=True) == [
+            "source",
+            "freshness",
+            "-q",
+            "--select",
+            "+already_ancestors",
+            "2+depth_limited",
+            "@at_operator",
+            "+trailing_descendant+",
+        ]
+
+    def test_scoped_handles_short_and_alias_select_flags(self):
+        for flag in ("-s", "--select", "-m", "--models", "--model"):
+            assert get_args_for_source_freshness(
+                (flag, "my_model"), scope_to_selection=True
+            ) == ["source", "freshness", "-q", flag, "+my_model"]
+
+    def test_scoped_filters_boolean_command_specific_flags(self):
+        user_args = (
+            "--full-refresh",
+            "-f",
+            "--empty",
+            "--no-empty",
+            "--show",
+            "--store-failures",
+            "--export-saved-queries",
+            "--include-saved-query",
+            "--target",
+            "prod",
+        )
 
         assert get_args_for_source_freshness(user_args, scope_to_selection=True) == [
             "source",
@@ -75,6 +117,39 @@ class TestGetArgsForSourceFreshness:
             "-q",
             "--target",
             "prod",
+        ]
+
+    def test_scoped_filters_value_taking_command_specific_flags(self):
+        user_args = (
+            "--resource-type",
+            "model",
+            "--exclude-resource-types",
+            "seed",
+            "--sample",
+            "type:beginning,n:100",
+            "--event-time-start",
+            "2026-01-01",
+            "--select",
+            "my_model",
+        )
+
+        assert get_args_for_source_freshness(user_args, scope_to_selection=True) == [
+            "source",
+            "freshness",
+            "-q",
+            "--select",
+            "+my_model",
+        ]
+
+    def test_scoped_filters_equals_joined_flags_without_eating_next_token(self):
+        user_args = ("--resource-type=model", "--select", "my_model")
+
+        assert get_args_for_source_freshness(user_args, scope_to_selection=True) == [
+            "source",
+            "freshness",
+            "-q",
+            "--select",
+            "+my_model",
         ]
 
 
@@ -134,7 +209,7 @@ class TestGetSourceFreshness:
             args=["source", "freshness", "-q", "--target", "prod"]
         )
 
-    def test_scoped_passes_selector_args_to_dbt_source_freshness(self):
+    def test_scoped_passes_ancestor_expanded_selector_to_dbt_source_freshness(self):
         mock_runner = Mock()
         mock_runner.invoke.return_value = None
         mock_runner_factory = Mock(return_value=mock_runner)
@@ -158,11 +233,11 @@ class TestGetSourceFreshness:
                         "--target",
                         "prod",
                         "--select",
-                        "source:raw.orders+",
+                        "stg_orders",
                         "--selector",
                         "nightly",
                         "--exclude",
-                        "source:raw.archived_*",
+                        "stg_archived",
                     ),
                     scope_to_selection=True,
                 )
@@ -178,11 +253,11 @@ class TestGetSourceFreshness:
                 "--target",
                 "prod",
                 "--select",
-                "source:raw.orders+",
+                "+stg_orders",
                 "--selector",
                 "nightly",
                 "--exclude",
-                "source:raw.archived_*",
+                "stg_archived",
             ]
         )
 
@@ -214,7 +289,7 @@ class TestGetSourceFreshness:
                 result = get_source_freshness(
                     (
                         "--select",
-                        "model:stg_selected_orders",
+                        "stg_selected_orders",
                     ),
                     scope_to_selection=True,
                 )
@@ -230,6 +305,6 @@ class TestGetSourceFreshness:
                 "freshness",
                 "-q",
                 "--select",
-                "model:stg_selected_orders",
+                "+stg_selected_orders",
             ]
         )
