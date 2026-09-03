@@ -23,6 +23,7 @@ class OrchestraDbtSettings(BaseModel):
     integration_account_id: str | None = None
     seed_state_orchestration: bool = False
     require_explicit_source_freshness: bool = False
+    verify_relations_exist: bool = False
 
     @field_validator("orchestra_env", mode="before")
     @classmethod
@@ -82,6 +83,12 @@ def _merge_env_overrides(settings: OrchestraDbtSettings) -> OrchestraDbtSettings
     if require_explicit is not None:
         settings = settings.model_copy(
             update={"require_explicit_source_freshness": require_explicit}
+        )
+
+    verify_relations_exist = _env_bool("ORCHESTRA_VERIFY_RELATIONS_EXIST")
+    if verify_relations_exist is not None:
+        settings = settings.model_copy(
+            update={"verify_relations_exist": verify_relations_exist}
         )
 
     return OrchestraDbtSettings.model_validate(settings.model_dump())

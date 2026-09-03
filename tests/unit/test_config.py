@@ -42,6 +42,7 @@ def _clear_orchestra_settings_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "ORCHESTRA_INTEGRATION_ACCOUNT_ID",
         "ORCHESTRA_SEED_STATE_ORCHESTRATION",
         "ORCHESTRA_REQUIRE_EXPLICIT_SOURCE_FRESHNESS",
+        "ORCHESTRA_VERIFY_RELATIONS_EXIST",
     ):
         monkeypatch.delenv(key, raising=False)
 
@@ -159,6 +160,7 @@ def test_load_orchestra_dbt_settings_defaults(
     assert settings.integration_account_id is None
     assert settings.seed_state_orchestration is False
     assert settings.require_explicit_source_freshness is False
+    assert settings.verify_relations_exist is False
 
 
 def test_load_orchestra_dbt_settings_from_pyproject(
@@ -173,6 +175,7 @@ debug = true
 integration_account_id = "acct-from-toml"
 seed_state_orchestration = true
 require_explicit_source_freshness = true
+verify_relations_exist = true
 """,
         encoding="utf-8",
     )
@@ -187,6 +190,7 @@ require_explicit_source_freshness = true
     assert settings.integration_account_id == "acct-from-toml"
     assert settings.seed_state_orchestration is True
     assert settings.require_explicit_source_freshness is True
+    assert settings.verify_relations_exist is True
     assert get_integration_account_id() == "acct-from-toml"
 
 
@@ -197,7 +201,8 @@ def test_load_orchestra_dbt_settings_env_overrides_pyproject(
         '[tool.orchestra_dbt]\nuse_stateful = true\norchestra_env = "stage"\n'
         'integration_account_id = "from-toml"\n'
         "seed_state_orchestration = false\n"
-        "require_explicit_source_freshness = false\n",
+        "require_explicit_source_freshness = false\n"
+        "verify_relations_exist = true\n",
         encoding="utf-8",
     )
     monkeypatch.chdir(tmp_path)
@@ -206,12 +211,14 @@ def test_load_orchestra_dbt_settings_env_overrides_pyproject(
     monkeypatch.setenv("ORCHESTRA_INTEGRATION_ACCOUNT_ID", "from-env")
     monkeypatch.setenv("ORCHESTRA_SEED_STATE_ORCHESTRATION", "true")
     monkeypatch.setenv("ORCHESTRA_REQUIRE_EXPLICIT_SOURCE_FRESHNESS", "true")
+    monkeypatch.setenv("ORCHESTRA_VERIFY_RELATIONS_EXIST", "false")
     settings = load_orchestra_dbt_settings()
     assert settings.use_stateful is False
     assert settings.orchestra_env == "dev"
     assert settings.integration_account_id == "from-env"
     assert settings.seed_state_orchestration is True
     assert settings.require_explicit_source_freshness is True
+    assert settings.verify_relations_exist is False
 
 
 def test_load_orchestra_dbt_settings_invalid_orchestra_env_in_pyproject(

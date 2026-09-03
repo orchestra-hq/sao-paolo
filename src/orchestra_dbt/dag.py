@@ -87,9 +87,10 @@ def construct_dag(
         match resource_type:
             case "seed" | "model" | "snapshot":
                 node_id: str = str(node_id)
+                relation_name: str | None = node.get("relation_name")
                 asset_external_id: str = generate_asset_external_id(
                     node_id=node_id,
-                    relation_name=node.get("relation_name"),
+                    relation_name=relation_name,
                     integration_account_id=integration_account_id,
                     local_run=settings.local_run,
                 )
@@ -145,6 +146,7 @@ def construct_dag(
                         if asset_external_id in state.state
                         else None
                     ),
+                    relation_name=relation_name,
                 )
 
                 for dep in depends_on_nodes:

@@ -208,6 +208,7 @@ Each `[tool.orchestra_dbt]` key can be set in TOML, or omitted and supplied only
 | `debug` | `ORCHESTRA_DBT_DEBUG` |
 | `seed_state_orchestration` | `ORCHESTRA_SEED_STATE_ORCHESTRATION` |
 | `require_explicit_source_freshness` | `ORCHESTRA_REQUIRE_EXPLICIT_SOURCE_FRESHNESS` |
+| `verify_relations_exist` | `ORCHESTRA_VERIFY_RELATIONS_EXIST` |
 
 For boolean settings, if the environment variable is **set**, the merged value is `true` only when the value is exactly the string `true` (case-insensitive); otherwise it is `false`. If the variable is **unset**, `pyproject.toml` (or the default) applies.
 
@@ -221,6 +222,7 @@ For boolean settings, if the environment variable is **set**, the merged value i
 | `debug` | bool | `false` | Verbose logging. |
 | `seed_state_orchestration` | bool | `false` | When `true`, seed nodes can be reused from state like models; when `false`, seeds are always treated as dirty for reuse. This feature should be considered experimental and may change in the future. |
 | `require_explicit_source_freshness` | bool | `false` | When `true`, sources without an explicit `loaded_at_field` or `loaded_at_query` are excluded from state-aware orchestration: no implicit/fallback freshness is inferred for them, and models depending on them always run. Use this when implicit freshness is unreliable (for example, sources defined on top of views, where warehouse metadata reflects the view rather than the underlying data). |
+| `verify_relations_exist` | bool | `false` | Opt in to confirming a node's table/view is actually in the warehouse before skipping it (see [Verifying relations still exist](#verifying-relations-still-exist)). Off by default, so existing behaviour is unchanged until you enable it. |
 
 ### Resolving multiple backend state configurations
 
@@ -252,6 +254,17 @@ When **both** are omitted, Orchestra can still run **adapter-specific** SQL to i
 For adapters without a registered fallback, if both `loaded_at` settings are missing, Orchestra follows dbt's `FreshnessRunner` behavior (which may surface as warnings or a non-actionable result depending on dbt and the warehouse).
 
 Implicit freshness can be misleading for sources defined on top of **views**: warehouse metadata reports when the view was last altered, not when new data arrived in the underlying tables. To opt out of implicit freshness entirely, set `require_explicit_source_freshness = true` (or `ORCHESTRA_REQUIRE_EXPLICIT_SOURCE_FRESHNESS=true`). Sources without `loaded_at_field`/`loaded_at_query` are then excluded from state-aware orchestration and models depending on them always run; sources with an explicit config keep working as normal.
+### Verifying relations still exist
+
+State and source freshness cannot tell you whether a node's table or view is *actually there*. A relation dropped out of band, renamed, or never built in this target still looks clean in state, so it gets skipped and the run "succeeds" with a missing relation — as does pointing a warm state file at a fresh database or schema.
+
+`orc` therefore confirms each reusable node's relation exists before the dependency sweep, forcing any missing one back into the run with `<node> was deleted from the warehouse hence rerun.` Running before the sweep means downstream models rebuild too.
+
+The lookup is delegated to the dbt adapter's own relation listing, so it works on every warehouse dbt supports and inherits its quoting and case-sensitivity rules. `spark` is excluded: its adapter returns an empty list on unrecognised errors, which would read as "the whole schema is gone".
+
+**Cost.** Usually no extra queries — the preceding `dbt source freshness` run already lists every schema and this reads that cache, falling back to one listing per distinct `(database, schema)` when cold. Nothing scales with model count, and there are no queries at all on a first run, with `--full-refresh`, or when nothing is reusable. An unreadable schema logs a warning and leaves its reuse decisions alone rather than forcing a rebuild.
+
+**Off by default** while it beds in — enable with `verify_relations_exist = true` or `ORCHESTRA_VERIFY_RELATIONS_EXIST=true`.
 
 ### Example snippet
 
