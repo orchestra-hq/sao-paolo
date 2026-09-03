@@ -209,6 +209,7 @@ Each `[tool.orchestra_dbt]` key can be set in TOML, or omitted and supplied only
 | `seed_state_orchestration` | `ORCHESTRA_SEED_STATE_ORCHESTRATION` |
 | `require_explicit_source_freshness` | `ORCHESTRA_REQUIRE_EXPLICIT_SOURCE_FRESHNESS` |
 | `verify_relations_exist` | `ORCHESTRA_VERIFY_RELATIONS_EXIST` |
+| `scope_source_freshness_to_selection` | `ORCHESTRA_SCOPE_SOURCE_FRESHNESS_TO_SELECTION` |
 
 For boolean settings, if the environment variable is **set**, the merged value is `true` only when the value is exactly the string `true` (case-insensitive); otherwise it is `false`. If the variable is **unset**, `pyproject.toml` (or the default) applies.
 
@@ -223,6 +224,7 @@ For boolean settings, if the environment variable is **set**, the merged value i
 | `seed_state_orchestration` | bool | `false` | When `true`, seed nodes can be reused from state like models; when `false`, seeds are always treated as dirty for reuse. This feature should be considered experimental and may change in the future. |
 | `require_explicit_source_freshness` | bool | `false` | When `true`, sources without an explicit `loaded_at_field` or `loaded_at_query` are excluded from state-aware orchestration: no implicit/fallback freshness is inferred for them, and models depending on them always run. Use this when implicit freshness is unreliable (for example, sources defined on top of views, where warehouse metadata reflects the view rather than the underlying data). |
 | `verify_relations_exist` | bool | `false` | Opt in to confirming a node's table/view is actually in the warehouse before skipping it (see [Verifying relations still exist](#verifying-relations-still-exist)). Off by default, so existing behaviour is unchanged until you enable it. |
+| `scope_source_freshness_to_selection` | bool | `false` | When `true`, the `--select`/`--exclude`/`--selector` from the triggering command are also passed to `dbt source freshness`, so only sources upstream of what's actually being built are checked. When `false` (default), freshness is checked for every source in the project regardless of selection, matching prior behaviour. |
 
 ### Resolving multiple backend state configurations
 
