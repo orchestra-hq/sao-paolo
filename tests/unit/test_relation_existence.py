@@ -12,6 +12,7 @@ from src.orchestra_dbt.models import (
     SourceNode,
 )
 from src.orchestra_dbt.relation_existence import (
+    _case_folding,
     _normalise,
     apply_relation_existence_gate,
     collect_reuse_candidates,
@@ -119,17 +120,6 @@ class TestFindMissingRelations:
 
         assert missing == {"model.p.gone"}
 
-    def test_case_sensitive_adapter_does_not_fold(self) -> None:
-        """Quoted identifiers (e.g. BigQuery) are case-sensitive: `Foo` and `foo` are
-        different tables, so folding would call a missing relation present.
-        """
-        manifest = make_manifest({"model.p.a": ("db", "analytics", "Foo")})
-        adapter, _ = make_adapter({("db", "analytics"): ["foo"]}, quoted=True)
-
-        assert find_missing_relations(
-            adapter, manifest, dict.fromkeys(manifest.nodes)
-        ) == {"model.p.a"}
-
     def test_empty_schema_marks_everything_missing(self) -> None:
         manifest = make_manifest({"model.p.a": ("db", "analytics", "a")})
         adapter, _ = make_adapter({("db", "analytics"): []})
@@ -196,6 +186,80 @@ class TestFindMissingRelations:
 
         assert missing == set()
         assert sorted(calls) == [("db", "analytics"), ("db", "snapshots")]
+
+
+class TestCaseSensitivity:
+    """dbt folds case only for *unquoted* components (`BaseAdapter._make_match_kwargs`)."""
+
+    @pytest.mark.parametrize(
+        ("quoting", "expected"),
+        [
+            (
+                {"database": False, "schema": False, "identifier": False},
+                (True, True, True),
+            ),
+            (
+                {"database": True, "schema": True, "identifier": True},
+                (False, False, False),
+            ),
+            (
+                {"database": False, "schema": True, "identifier": False},
+                (True, False, True),
+            ),
+        ],
+    )
+    def test_fold_flags_follow_the_quoting_policy(self, quoting, expected) -> None:
+        adapter = MagicMock()
+        adapter.config.quoting = quoting
+        assert _case_folding(adapter) == expected
+
+    def test_unreadable_quoting_falls_back_to_folding(self) -> None:
+        """Folding biases toward "exists", i.e. toward leaving reuse decisions alone."""
+        adapter = MagicMock()
+        adapter.config.quoting = None  # subscripting this raises
+        assert _case_folding(adapter) == (True, True, True)
+
+    def test_unquoted_adapter_matches_across_case(self) -> None:
+        """Snowflake reports `M` for a model dbt configured as `m`."""
+        manifest = make_manifest({"model.p.a": ("db", "analytics", "my_model")})
+        adapter, _ = make_adapter({("db", "analytics"): ["MY_MODEL"]})
+
+        assert (
+            find_missing_relations(adapter, manifest, dict.fromkeys(manifest.nodes))
+            == set()
+        )
+
+    def test_quoted_adapter_treats_differing_case_as_missing(self) -> None:
+        """On BigQuery `Foo` and `foo` are different tables, so folding would report a
+        genuinely missing relation as present -- the bug this check exists to catch.
+        """
+        manifest = make_manifest({"model.p.a": ("db", "analytics", "Foo")})
+        adapter, _ = make_adapter({("db", "analytics"): ["foo"]}, quoted=True)
+
+        assert find_missing_relations(
+            adapter, manifest, dict.fromkeys(manifest.nodes)
+        ) == {"model.p.a"}
+
+    def test_quoted_adapter_matches_on_exact_case(self) -> None:
+        """The complement: case-sensitive must not over-reject an exact match."""
+        manifest = make_manifest({"model.p.a": ("db", "analytics", "Foo")})
+        adapter, _ = make_adapter({("db", "analytics"): ["Foo"]}, quoted=True)
+
+        assert (
+            find_missing_relations(adapter, manifest, dict.fromkeys(manifest.nodes))
+            == set()
+        )
+
+    def test_schema_case_follows_its_own_quoting_flag(self) -> None:
+        """Schema quoting is independent of identifier quoting."""
+        manifest = make_manifest({"model.p.a": ("db", "Analytics", "m")})
+        adapter, calls = make_adapter({("db", "analytics"): ["m"]})
+
+        assert (
+            find_missing_relations(adapter, manifest, dict.fromkeys(manifest.nodes))
+            == set()
+        )
+        assert calls == [("db", "analytics")]
 
 
 class TestCollectReuseCandidates:

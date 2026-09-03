@@ -256,17 +256,15 @@ For adapters without a registered fallback, if both `loaded_at` settings are mis
 Implicit freshness can be misleading for sources defined on top of **views**: warehouse metadata reports when the view was last altered, not when new data arrived in the underlying tables. To opt out of implicit freshness entirely, set `require_explicit_source_freshness = true` (or `ORCHESTRA_REQUIRE_EXPLICIT_SOURCE_FRESHNESS=true`). Sources without `loaded_at_field`/`loaded_at_query` are then excluded from state-aware orchestration and models depending on them always run; sources with an explicit config keep working as normal.
 ### Verifying relations still exist
 
-State and source freshness alone cannot tell you whether a node's table or view is *actually there*. A model whose relation was dropped out of band, renamed, or never built in this target still looks clean in state, so it would be skipped and the run would "succeed" with a missing relation. Carrying a warm state file to a fresh database or schema has the same effect: everything looks reusable and nothing gets built.
+State and source freshness cannot tell you whether a node's table or view is *actually there*. A relation dropped out of band, renamed, or never built in this target still looks clean in state, so it gets skipped and the run "succeeds" with a missing relation — as does pointing a warm state file at a fresh database or schema.
 
-`orc` therefore confirms each reusable node's relation exists before the dependency sweep, forcing any missing node back into the run with `<node> was deleted from the warehouse hence rerun.` Running before the sweep means models downstream of a missing node are rebuilt too.
+`orc` therefore confirms each reusable node's relation exists before the dependency sweep, forcing any missing one back into the run with `<node> was deleted from the warehouse hence rerun.` Running before the sweep means downstream models rebuild too.
 
-The lookup is delegated to the dbt adapter's own relation listing rather than SQL Orchestra writes, so it works on every warehouse dbt supports and inherits that adapter's quoting and case-sensitivity rules. `spark` is excluded: its adapter returns an empty list on unrecognised errors, which would read as "the whole schema is gone".
+The lookup is delegated to the dbt adapter's own relation listing, so it works on every warehouse dbt supports and inherits its quoting and case-sensitivity rules. `spark` is excluded: its adapter returns an empty list on unrecognised errors, which would read as "the whole schema is gone".
 
-**Cost.** Usually zero extra queries: the `dbt source freshness` run that precedes it already lists every schema in the project, and this reads that cache. When the cache is cold it falls back to one listing per distinct `(database, schema)` holding a reusable node — **nothing scales with the number of models**. There are no queries at all on a first run, when state is empty or unreadable, with `--full-refresh`, or when nothing is reusable.
+**Cost.** Usually no extra queries — the preceding `dbt source freshness` run already lists every schema and this reads that cache, falling back to one listing per distinct `(database, schema)` when cold. Nothing scales with model count, and there are no queries at all on a first run, with `--full-refresh`, or when nothing is reusable. An unreadable schema logs a warning and leaves its reuse decisions alone rather than forcing a rebuild.
 
-If a schema cannot be read at all (permissions, a network blip), Orchestra logs a warning and leaves that schema's reuse decisions untouched rather than triggering a surprise rebuild.
-
-The check is **off by default** while it beds in. Turn it on with `verify_relations_exist = true` in `[tool.orchestra_dbt]`, or `ORCHESTRA_VERIFY_RELATIONS_EXIST=true`.
+**Off by default** while it beds in — enable with `verify_relations_exist = true` or `ORCHESTRA_VERIFY_RELATIONS_EXIST=true`.
 
 ### Example snippet
 
