@@ -1,3 +1,4 @@
+import re
 import threading
 from datetime import datetime
 
@@ -8,7 +9,84 @@ from ..target_finder import find_target_in_args
 from ..utils import load_json
 from .fallbacks.registry import FALLBACK_BY_ADAPTER_TYPE, loaded_at_fields_unset
 
-INVALID_SOURCE_FRESHNESS_FLAGS = {"--full-refresh", "--empty"}
+# Flags accepted by `dbt build`/`run`/`test` but not by `dbt source freshness` (checked
+# against dbt-core's own click definitions). Boolean ones take no value; the rest do and
+# must have their value dropped too, or it's left dangling as a bogus positional arg.
+INVALID_SOURCE_FRESHNESS_BOOLEAN_FLAGS = {
+    "-f",
+    "--full-refresh",
+    "--empty",
+    "--no-empty",
+    "--show",
+    "--store-failures",
+    "--export-saved-queries",
+    "--no-export-saved-queries",
+    "--include-saved-query",
+    "--no-include-saved-query",
+}
+INVALID_SOURCE_FRESHNESS_VALUE_FLAGS = {
+    "--event-time-start",
+    "--event-time-end",
+    "--resource-type",
+    "--resource-types",
+    "--exclude-resource-type",
+    "--exclude-resource-types",
+    "--sample",
+}
+
+# Flags whose following bare tokens are node-selection criteria (dbt's MultiOption:
+# one flag, then every non-flag token up to the next flag is a separate criterion).
+SELECT_FLAGS = {"-s", "--select", "-m", "--models", "--model"}
+
+_LEADING_ANCESTOR_OPERATOR_RE = re.compile(r"^(\d*\+|@)")
+
+
+def _filter_invalid_source_freshness_args(user_args: tuple | list[str]) -> list[str]:
+    filtered: list[str] = []
+    skip_value = False
+    for arg in user_args:
+        if skip_value:
+            skip_value = False
+            continue
+        flag = arg.split("=", 1)[0]
+        if flag in INVALID_SOURCE_FRESHNESS_BOOLEAN_FLAGS:
+            continue
+        if flag in INVALID_SOURCE_FRESHNESS_VALUE_FLAGS:
+            skip_value = "=" not in arg
+            continue
+        filtered.append(arg)
+    return filtered
+
+
+def _scope_selection_to_ancestors(args: list[str]) -> list[str]:
+    """Prefix each `--select`/`--models` criterion with `+` so freshness is scoped to
+    the sources upstream of the selected nodes, not just the selected nodes themselves.
+
+    dbt's own selection is exact-match by default (`--select my_model` selects only
+    `my_model`); reaching anything upstream needs the explicit ancestor operator.
+    Criteria that already carry a graph operator (`+`, `N+`, `@`) are left alone.
+
+    `--exclude` is forwarded unchanged: excluding a node's ancestors is a different (and
+    ambiguous) operation. `--selector` is also forwarded unchanged -- a named selector
+    can't be rewritten from here; give it its own `+` in the YAML definition if it needs
+    to reach upstream sources.
+    """
+    result: list[str] = []
+    in_select = False
+    for arg in args:
+        if arg in SELECT_FLAGS:
+            in_select = True
+            result.append(arg)
+            continue
+        if arg.startswith("-"):
+            in_select = False
+            result.append(arg)
+            continue
+        if in_select and not _LEADING_ANCESTOR_OPERATOR_RE.match(arg):
+            result.append(f"+{arg}")
+        else:
+            result.append(arg)
+    return result
 
 
 def get_args_for_source_freshness(
@@ -18,9 +96,9 @@ def get_args_for_source_freshness(
 
     By default (`scope_to_selection=False`) only `--target` is carried over, matching
     dbt's own freshness behaviour of checking every source in the project. When enabled,
-    the triggering command's own selection (`--select`/`--exclude`/`--selector`) is
-    forwarded too, so freshness is only checked for sources upstream of what's actually
-    being built.
+    the triggering command's own selection (`--select`/`--models`) is forwarded too,
+    expanded to ancestors, so freshness is only checked for sources upstream of what's
+    actually being built.
     """
     if not scope_to_selection:
         args: list[str] = ["source", "freshness", "-q"]
@@ -29,10 +107,9 @@ def get_args_for_source_freshness(
             args.extend(["--target", target])
         return args
 
-    filtered_user_args = [
-        arg for arg in user_args if arg not in INVALID_SOURCE_FRESHNESS_FLAGS
-    ]
-    return ["source", "freshness", "-q"] + filtered_user_args
+    filtered_user_args = _filter_invalid_source_freshness_args(user_args)
+    scoped_args = _scope_selection_to_ancestors(filtered_user_args)
+    return ["source", "freshness", "-q"] + scoped_args
 
 
 def should_exclude_source(
