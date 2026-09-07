@@ -1,27 +1,23 @@
+import json
 from datetime import datetime
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
+
+import pytest
 
 from src.orchestra_dbt.models import SourceFreshness
 from src.orchestra_dbt.source_freshness import (
     get_args_for_source_freshness,
     get_source_freshness,
+    get_upstream_source_ids,
+    should_exclude_out_of_scope_source,
 )
 
 
 class TestGetArgsForSourceFreshness:
-    def test_default_only_forwards_target(self):
-        """`scope_to_selection` defaults to off, matching dbt's own freshness
-        behaviour of checking every source regardless of what's being built."""
-        user_args = (
-            "--target",
-            "prod",
-            "--select",
-            "source:raw.orders+",
-            "--selector",
-            "nightly",
-            "--exclude",
-            "source:raw.archived_*",
-        )
+    def test_forwards_target_when_present(self):
+        user_args = ("--target", "prod", "--select", "my_model")
 
         assert get_args_for_source_freshness(user_args) == [
             "source",
@@ -31,126 +27,91 @@ class TestGetArgsForSourceFreshness:
             "prod",
         ]
 
-    def test_default_with_no_target_forwards_nothing(self):
-        user_args = ("--select", "source:raw.orders+")
-
-        assert get_args_for_source_freshness(user_args) == [
+    def test_omits_target_when_absent(self):
+        assert get_args_for_source_freshness(("--select", "my_model")) == [
             "source",
             "freshness",
             "-q",
         ]
 
-    def test_scoped_expands_select_criteria_to_ancestors(self):
-        """`--select`/`-m`/`--models` criteria are exact-match in dbt, so each one is
-        prefixed with `+` to reach the sources upstream of it. `--exclude` and
-        `--selector` are forwarded unchanged."""
-        user_args = (
-            "--target",
-            "prod",
-            "--select",
-            "model_a",
-            "model_b",
-            "--selector",
-            "nightly",
-            "--exclude",
-            "model_c",
-        )
 
-        assert get_args_for_source_freshness(user_args, scope_to_selection=True) == [
-            "source",
-            "freshness",
-            "-q",
-            "--target",
-            "prod",
-            "--select",
-            "+model_a",
-            "+model_b",
-            "--selector",
-            "nightly",
-            "--exclude",
-            "model_c",
-        ]
+# model_a -> source X directly; model_b -> intermediate -> source Y (transitive);
+# model_c -> source X too, shared with model_a (diamond); model_d is unrelated.
+FAKE_MANIFEST = {
+    "nodes": {
+        "model.proj.a": {"original_file_path": "models/a.sql"},
+        "model.proj.b": {"original_file_path": "models/b.sql"},
+        "model.proj.intermediate": {"original_file_path": "models/intermediate.sql"},
+        "model.proj.c": {"original_file_path": "models/c.sql"},
+        "model.proj.d": {"original_file_path": "models/d.sql"},
+    },
+    "parent_map": {
+        "model.proj.a": ["source.proj.raw.x"],
+        "model.proj.b": ["model.proj.intermediate"],
+        "model.proj.intermediate": ["source.proj.raw.y"],
+        "model.proj.c": ["source.proj.raw.x"],
+        "model.proj.d": [],
+        "source.proj.raw.x": [],
+        "source.proj.raw.y": [],
+    },
+}
 
-    def test_scoped_does_not_double_prefix_existing_graph_operators(self):
-        user_args = (
-            "--select",
-            "+already_ancestors",
-            "2+depth_limited",
-            "@at_operator",
-            "trailing_descendant+",
-        )
 
-        assert get_args_for_source_freshness(user_args, scope_to_selection=True) == [
-            "source",
-            "freshness",
-            "-q",
-            "--select",
-            "+already_ancestors",
-            "2+depth_limited",
-            "@at_operator",
-            "+trailing_descendant+",
-        ]
+class TestGetUpstreamSourceIds:
+    def _write_manifest(self, tmp_path: Path) -> str:
+        manifest_path = tmp_path / "manifest.json"
+        manifest_path.write_text(json.dumps(FAKE_MANIFEST))
+        return str(manifest_path)
 
-    def test_scoped_handles_short_and_alias_select_flags(self):
-        for flag in ("-s", "--select", "-m", "--models", "--model"):
-            assert get_args_for_source_freshness(
-                (flag, "my_model"), scope_to_selection=True
-            ) == ["source", "freshness", "-q", flag, "+my_model"]
+    def test_returns_direct_source_parent(self, tmp_path: Path):
+        manifest = self._write_manifest(tmp_path)
+        assert get_upstream_source_ids(["models/a.sql"], manifest) == {
+            "source.proj.raw.x"
+        }
 
-    def test_scoped_filters_boolean_command_specific_flags(self):
-        user_args = (
-            "--full-refresh",
-            "-f",
-            "--empty",
-            "--no-empty",
-            "--show",
-            "--store-failures",
-            "--export-saved-queries",
-            "--include-saved-query",
-            "--target",
-            "prod",
-        )
+    def test_walks_transitive_ancestors(self, tmp_path: Path):
+        manifest = self._write_manifest(tmp_path)
+        assert get_upstream_source_ids(["models/b.sql"], manifest) == {
+            "source.proj.raw.y"
+        }
 
-        assert get_args_for_source_freshness(user_args, scope_to_selection=True) == [
-            "source",
-            "freshness",
-            "-q",
-            "--target",
-            "prod",
-        ]
+    def test_deduplicates_shared_source_across_paths(self, tmp_path: Path):
+        manifest = self._write_manifest(tmp_path)
+        assert get_upstream_source_ids(["models/a.sql", "models/c.sql"], manifest) == {
+            "source.proj.raw.x"
+        }
 
-    def test_scoped_filters_value_taking_command_specific_flags(self):
-        user_args = (
-            "--resource-type",
-            "model",
-            "--exclude-resource-types",
-            "seed",
-            "--sample",
-            "type:beginning,n:100",
-            "--event-time-start",
-            "2026-01-01",
-            "--select",
-            "my_model",
-        )
+    def test_unions_across_multiple_unrelated_paths(self, tmp_path: Path):
+        manifest = self._write_manifest(tmp_path)
+        assert get_upstream_source_ids(["models/a.sql", "models/b.sql"], manifest) == {
+            "source.proj.raw.x",
+            "source.proj.raw.y",
+        }
 
-        assert get_args_for_source_freshness(user_args, scope_to_selection=True) == [
-            "source",
-            "freshness",
-            "-q",
-            "--select",
-            "+my_model",
-        ]
+    def test_path_with_no_source_ancestor_returns_empty(self, tmp_path: Path):
+        manifest = self._write_manifest(tmp_path)
+        assert get_upstream_source_ids(["models/d.sql"], manifest) == set()
 
-    def test_scoped_filters_equals_joined_flags_without_eating_next_token(self):
-        user_args = ("--resource-type=model", "--select", "my_model")
+    def test_unknown_path_is_ignored(self, tmp_path: Path):
+        manifest = self._write_manifest(tmp_path)
+        assert get_upstream_source_ids(["models/nonexistent.sql"], manifest) == set()
 
-        assert get_args_for_source_freshness(user_args, scope_to_selection=True) == [
-            "source",
-            "freshness",
-            "-q",
-            "--select",
-            "+my_model",
-        ]
+
+class TestShouldExcludeOutOfScopeSource:
+    @pytest.mark.parametrize(
+        ("unique_id", "sources_in_scope", "expected"),
+        [
+            ("source.proj.raw.x", None, False),
+            ("source.proj.raw.x", {"source.proj.raw.x"}, False),
+            ("source.proj.raw.x", {"source.proj.raw.y"}, True),
+            ("source.proj.raw.x", set(), True),
+        ],
+    )
+    def test_should_exclude_out_of_scope_source(
+        self, unique_id: str, sources_in_scope: set | None, expected: bool
+    ):
+        node = SimpleNamespace(unique_id=unique_id)
+        assert should_exclude_out_of_scope_source(node, sources_in_scope) is expected
 
 
 class TestGetSourceFreshness:
@@ -174,7 +135,7 @@ class TestGetSourceFreshness:
             "dbt_common.exceptions": Mock(DbtRuntimeError=Exception),
         }
 
-    def test_default_ignores_selector_args_and_checks_every_source(self):
+    def test_default_checks_every_source_and_ignores_selection(self):
         mock_runner = Mock()
         mock_runner.invoke.return_value = None
         mock_runner_factory = Mock(return_value=mock_runner)
@@ -182,100 +143,11 @@ class TestGetSourceFreshness:
         freshness_result = {
             "results": [
                 {
-                    "unique_id": "source.project.raw.orders",
-                    "max_loaded_at": datetime(2026, 3, 31),
-                }
-            ]
-        }
-
-        with patch.dict("sys.modules", self._patched_dbt_modules(mock_runner_factory)):
-            with patch(
-                "src.orchestra_dbt.source_freshness.load_json",
-                return_value=freshness_result,
-            ):
-                result = get_source_freshness(
-                    (
-                        "--target",
-                        "prod",
-                        "--select",
-                        "source:raw.orders+",
-                    )
-                )
-
-        assert result == SourceFreshness(
-            sources={"source.project.raw.orders": datetime(2026, 3, 31)}
-        )
-        mock_runner.invoke.assert_called_once_with(
-            args=["source", "freshness", "-q", "--target", "prod"]
-        )
-
-    def test_scoped_passes_ancestor_expanded_selector_to_dbt_source_freshness(self):
-        mock_runner = Mock()
-        mock_runner.invoke.return_value = None
-        mock_runner_factory = Mock(return_value=mock_runner)
-
-        freshness_result = {
-            "results": [
-                {
-                    "unique_id": "source.project.raw.orders",
-                    "max_loaded_at": datetime(2026, 3, 31),
-                }
-            ]
-        }
-
-        with patch.dict("sys.modules", self._patched_dbt_modules(mock_runner_factory)):
-            with patch(
-                "src.orchestra_dbt.source_freshness.load_json",
-                return_value=freshness_result,
-            ):
-                result = get_source_freshness(
-                    (
-                        "--target",
-                        "prod",
-                        "--select",
-                        "stg_orders",
-                        "--selector",
-                        "nightly",
-                        "--exclude",
-                        "stg_archived",
-                    ),
-                    scope_to_selection=True,
-                )
-
-        assert result == SourceFreshness(
-            sources={"source.project.raw.orders": datetime(2026, 3, 31)}
-        )
-        mock_runner.invoke.assert_called_once_with(
-            args=[
-                "source",
-                "freshness",
-                "-q",
-                "--target",
-                "prod",
-                "--select",
-                "+stg_orders",
-                "--selector",
-                "nightly",
-                "--exclude",
-                "stg_archived",
-            ]
-        )
-
-    def test_scoped_returns_only_sources_selected_by_upstream_model_selection(self):
-        mock_runner = Mock()
-        mock_runner.invoke.return_value = None
-        mock_runner_factory = Mock(return_value=mock_runner)
-
-        selected_source = "source.project.raw.selected_upstream_source"
-        unselected_source = "source.project.raw.other_source"
-        freshness_result = {
-            "results": [
-                {
-                    "unique_id": selected_source,
+                    "unique_id": "source.proj.raw.x",
                     "max_loaded_at": datetime(2026, 3, 31),
                 },
                 {
-                    "unique_id": unselected_source,
+                    "unique_id": "source.proj.raw.y",
                     "max_loaded_at": datetime(2026, 3, 30),
                 },
             ]
@@ -284,27 +156,84 @@ class TestGetSourceFreshness:
         with patch.dict("sys.modules", self._patched_dbt_modules(mock_runner_factory)):
             with patch(
                 "src.orchestra_dbt.source_freshness.load_json",
-                return_value={"results": [freshness_result["results"][0]]},
+                return_value=freshness_result,
             ):
                 result = get_source_freshness(
-                    (
-                        "--select",
-                        "stg_selected_orders",
-                    ),
-                    scope_to_selection=True,
+                    ("--target", "prod"), paths_to_run=["models/a.sql"]
                 )
 
-        assert result == SourceFreshness(
-            sources={selected_source: datetime(2026, 3, 31)}
-        )
-        assert result is not None
-        assert unselected_source not in result.sources
+        # scope_to_selection defaults to False: the CLI invocation is untouched by
+        # paths_to_run, and neither source is excluded from the result.
         mock_runner.invoke.assert_called_once_with(
-            args=[
-                "source",
-                "freshness",
-                "-q",
-                "--select",
-                "+stg_selected_orders",
-            ]
+            args=["source", "freshness", "-q", "--target", "prod"]
         )
+        assert result == SourceFreshness(
+            sources={
+                "source.proj.raw.x": datetime(2026, 3, 31),
+                "source.proj.raw.y": datetime(2026, 3, 30),
+            }
+        )
+
+    def test_scoped_computes_sources_in_scope_from_paths_to_run(self):
+        """The dbt invocation itself is unaffected by scoping -- the CLI selection is
+        never rewritten. What `scope_to_selection` controls is whether
+        `get_upstream_source_ids` runs at all, feeding the in-runner exclusion
+        (`should_exclude_out_of_scope_source`, unit-tested above) instead.
+        """
+        mock_runner = Mock()
+        mock_runner.invoke.return_value = None
+        mock_runner_factory = Mock(return_value=mock_runner)
+
+        with patch.dict("sys.modules", self._patched_dbt_modules(mock_runner_factory)):
+            with patch(
+                "src.orchestra_dbt.source_freshness.load_json",
+                return_value={"results": []},
+            ):
+                with patch(
+                    "src.orchestra_dbt.source_freshness.get_upstream_source_ids",
+                    return_value={"source.proj.raw.x"},
+                ) as mock_get_upstream:
+                    get_source_freshness(
+                        ("--target", "prod"),
+                        scope_to_selection=True,
+                        paths_to_run=["models/a.sql"],
+                    )
+
+        mock_get_upstream.assert_called_once_with(["models/a.sql"])
+        mock_runner.invoke.assert_called_once_with(
+            args=["source", "freshness", "-q", "--target", "prod"]
+        )
+
+    def test_unscoped_never_computes_sources_in_scope(self):
+        mock_runner = Mock()
+        mock_runner.invoke.return_value = None
+        mock_runner_factory = Mock(return_value=mock_runner)
+
+        with patch.dict("sys.modules", self._patched_dbt_modules(mock_runner_factory)):
+            with patch(
+                "src.orchestra_dbt.source_freshness.load_json",
+                return_value={"results": []},
+            ):
+                with patch(
+                    "src.orchestra_dbt.source_freshness.get_upstream_source_ids"
+                ) as mock_get_upstream:
+                    get_source_freshness((), paths_to_run=["models/a.sql"])
+
+        mock_get_upstream.assert_not_called()
+
+    def test_scoped_with_no_paths_to_run_falls_back_to_unscoped(self):
+        mock_runner = Mock()
+        mock_runner.invoke.return_value = None
+        mock_runner_factory = Mock(return_value=mock_runner)
+
+        with patch.dict("sys.modules", self._patched_dbt_modules(mock_runner_factory)):
+            with patch(
+                "src.orchestra_dbt.source_freshness.load_json",
+                return_value={"results": []},
+            ):
+                with patch(
+                    "src.orchestra_dbt.source_freshness.get_upstream_source_ids"
+                ) as mock_get_upstream:
+                    get_source_freshness((), scope_to_selection=True, paths_to_run=None)
+
+        mock_get_upstream.assert_not_called()

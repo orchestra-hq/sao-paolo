@@ -171,9 +171,10 @@ def main(args: tuple[str, ...]) -> None:
 
     try:
         source_freshness: SourceFreshness | None = get_source_freshness(
-            dbt_args[2:],
+            user_args=dbt_args[2:],
             require_explicit_source_freshness=settings.require_explicit_source_freshness,
             scope_to_selection=settings.scope_source_freshness_to_selection,
+            paths_to_run=paths_to_run,
         )
     except ImportError as import_error:
         log_error(dbt_core_import_error_message(import_error))

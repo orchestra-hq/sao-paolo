@@ -1,8 +1,5 @@
-import re
 import threading
 from datetime import datetime
-from functools import lru_cache
-from typing import cast
 
 from ..compatibility import dbt_core_import_error_message
 from ..logger import log_error, log_info, log_warn
@@ -11,122 +8,44 @@ from ..target_finder import find_target_in_args
 from ..utils import load_json
 from .fallbacks.registry import FALLBACK_BY_ADAPTER_TYPE, loaded_at_fields_unset
 
-# Flags whose following bare tokens are node-selection criteria (dbt's MultiOption:
-# one flag, then every non-flag token up to the next flag is a separate criterion).
-SELECT_FLAGS = {"-s", "--select", "-m", "--models", "--model"}
 
-_LEADING_ANCESTOR_OPERATOR_RE = re.compile(r"^(\d*\+|@)")
+def get_args_for_source_freshness(user_args: tuple | list[str]) -> list[str]:
+    args: list[str] = ["source", "freshness", "-q"]
+    target = find_target_in_args(list(user_args))
+    if target:
+        args.extend(["--target", target])
+    return args
 
 
-def _click_option_names(command) -> set[str]:
-    return {
-        opt
-        for param in command.params
-        for opt in list(param.opts) + list(getattr(param, "secondary_opts", []))
+def get_upstream_source_ids(
+    paths: list[str], manifest_override: str | None = None
+) -> set[str]:
+    """Sources upstream of the given file paths, via dbt's own `parent_map`.
+
+    `paths` is the same `dbt ls`-resolved selection already used elsewhere for
+    node reuse (`get_paths_to_run`), and `target/manifest.json` is already on disk
+    from that same invocation -- so this just walks a graph dbt already built,
+    rather than re-parsing or re-resolving the CLI selection ourselves.
+    """
+    manifest = load_json(manifest_override or "target/manifest.json")
+    parent_map: dict[str, list[str]] = manifest.get("parent_map", {})
+    path_to_id = {
+        str(node["original_file_path"]): node_id
+        for node_id, node in manifest.get("nodes", {}).items()
     }
 
-
-@lru_cache(maxsize=1)
-def _source_freshness_incompatible_flags() -> tuple[frozenset[str], frozenset[str]]:
-    """Flags accepted by `dbt build`/`run`/`test` but not by `dbt source freshness`,
-    split into boolean (no value) and value-taking.
-
-    Derived live from dbt-core's own click command definitions rather than a
-    hand-maintained list, so this always matches whatever dbt-core version is actually
-    installed instead of silently drifting the next time a build/run/test-only flag is
-    added upstream.
-    """
-    import click
-    from dbt.cli.main import cli
-
-    source_group = cast(click.Group, cli.commands["source"])
-    freshness_flags = _click_option_names(source_group.commands["freshness"])
-
-    boolean_flags: set[str] = set()
-    value_flags: set[str] = set()
-    for command_name in ("build", "run", "test"):
-        command = cli.commands.get(command_name)
-        if command is None:
+    upstream_source_ids: set[str] = set()
+    seen: set[str] = set()
+    queue = [path_to_id[path] for path in paths if path in path_to_id]
+    while queue:
+        node_id = queue.pop()
+        if node_id in seen:
             continue
-        for param in command.params:
-            opts = list(param.opts) + list(getattr(param, "secondary_opts", []))
-            if all(opt in freshness_flags for opt in opts):
-                continue
-            target = boolean_flags if getattr(param, "is_flag", False) else value_flags
-            target.update(opts)
-    return frozenset(boolean_flags), frozenset(value_flags)
-
-
-def _filter_invalid_source_freshness_args(user_args: tuple | list[str]) -> list[str]:
-    boolean_flags, value_flags = _source_freshness_incompatible_flags()
-    filtered: list[str] = []
-    skip_value = False
-    for arg in user_args:
-        if skip_value:
-            skip_value = False
-            continue
-        flag = arg.split("=", 1)[0]
-        if flag in boolean_flags:
-            continue
-        if flag in value_flags:
-            skip_value = "=" not in arg
-            continue
-        filtered.append(arg)
-    return filtered
-
-
-def _scope_selection_to_ancestors(args: list[str]) -> list[str]:
-    """Prefix each `--select`/`--models` criterion with `+` so freshness is scoped to
-    the sources upstream of the selected nodes, not just the selected nodes themselves.
-
-    dbt's own selection is exact-match by default (`--select my_model` selects only
-    `my_model`); reaching anything upstream needs the explicit ancestor operator.
-    Criteria that already carry a graph operator (`+`, `N+`, `@`) are left alone.
-
-    `--exclude` is forwarded unchanged: excluding a node's ancestors is a different (and
-    ambiguous) operation. `--selector` is also forwarded unchanged -- a named selector
-    can't be rewritten from here; give it its own `+` in the YAML definition if it needs
-    to reach upstream sources.
-    """
-    result: list[str] = []
-    in_select = False
-    for arg in args:
-        if arg in SELECT_FLAGS:
-            in_select = True
-            result.append(arg)
-            continue
-        if arg.startswith("-"):
-            in_select = False
-            result.append(arg)
-            continue
-        if in_select and not _LEADING_ANCESTOR_OPERATOR_RE.match(arg):
-            result.append(f"+{arg}")
-        else:
-            result.append(arg)
-    return result
-
-
-def get_args_for_source_freshness(
-    user_args: tuple | list[str], scope_to_selection: bool = False
-) -> list[str]:
-    """Build the `dbt source freshness` invocation.
-
-    By default (`scope_to_selection=False`) only `--target` is carried over, matching
-    dbt's own freshness behaviour of checking every source in the project. When enabled,
-    the triggering command's own selection (`--select`/`--models`) is forwarded too,
-    expanded to ancestors, so freshness is only checked for sources upstream of what's
-    actually being built.
-    """
-    if not scope_to_selection:
-        args: list[str] = ["source", "freshness", "-q"]
-        target = find_target_in_args(list(user_args))
-        if target:
-            args.extend(["--target", target])
-        return args
-
-    filtered_user_args = _filter_invalid_source_freshness_args(user_args)
-    scoped_args = _scope_selection_to_ancestors(filtered_user_args)
-    return ["source", "freshness", "-q"] + scoped_args
+        seen.add(node_id)
+        if node_id.startswith("source."):
+            upstream_source_ids.add(node_id)
+        queue.extend(parent_map.get(node_id, []))
+    return upstream_source_ids
 
 
 def should_exclude_source(
@@ -135,10 +54,19 @@ def should_exclude_source(
     return require_explicit_source_freshness and loaded_at_fields_unset(compiled_node)
 
 
+def should_exclude_out_of_scope_source(
+    compiled_node, sources_in_scope: set[str] | None
+) -> bool:
+    return (
+        sources_in_scope is not None and compiled_node.unique_id not in sources_in_scope
+    )
+
+
 def get_source_freshness(
     user_args: tuple | list[str],
     require_explicit_source_freshness: bool = False,
     scope_to_selection: bool = False,
+    paths_to_run: list[str] | None = None,
 ) -> SourceFreshness | None:
     try:
         from dbt.artifacts.resources.v1.components import FreshnessThreshold
@@ -170,7 +98,12 @@ def get_source_freshness(
             age=0,
         )
 
+    sources_in_scope: set[str] | None = None
+    if scope_to_selection and paths_to_run:
+        sources_in_scope = get_upstream_source_ids(paths_to_run)
+
     sources_without_explicit_freshness: set[str] = set()
+    sources_out_of_scope: set[str] = set()
 
     class OrchestraFreshnessRunner(FreshnessRunner):
         def execute(self, compiled_node, manifest) -> FreshnessNodeResult:
@@ -179,6 +112,10 @@ def get_source_freshness(
             # object.
             if compiled_node.freshness is None:
                 compiled_node.freshness = FreshnessThreshold()
+
+            if should_exclude_out_of_scope_source(compiled_node, sources_in_scope):
+                sources_out_of_scope.add(compiled_node.unique_id)
+                return default_freshness_result(compiled_node)
 
             if should_exclude_source(compiled_node, require_explicit_source_freshness):
                 sources_without_explicit_freshness.add(compiled_node.unique_id)
@@ -206,20 +143,24 @@ def get_source_freshness(
     FreshnessTask.get_runner_type = lambda self, _: OrchestraFreshnessRunner
 
     try:
-        dbtRunner().invoke(
-            args=get_args_for_source_freshness(user_args, scope_to_selection)
-        )
+        dbtRunner().invoke(args=get_args_for_source_freshness(user_args))
         if sources_without_explicit_freshness:
             log_warn(
                 f"{len(sources_without_explicit_freshness)} source(s) have no explicit freshness "
                 "config (loaded_at_field or loaded_at_query) and are excluded from state-aware "
                 "orchestration; models depending on them will always run."
             )
+        if sources_out_of_scope:
+            log_info(
+                f"{len(sources_out_of_scope)} source(s) outside the current selection's "
+                "ancestors skipped."
+            )
+        excluded = sources_without_explicit_freshness | sources_out_of_scope
         return SourceFreshness(
             sources={
                 source["unique_id"]: source["max_loaded_at"]
                 for source in load_json("target/sources.json")["results"]
-                if source["unique_id"] not in sources_without_explicit_freshness
+                if source["unique_id"] not in excluded
             }
         )
     except Exception as e:
