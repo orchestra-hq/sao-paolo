@@ -77,6 +77,15 @@ To add a warehouse:
 3. Register the handler in `source_freshness/fallbacks/registry.py`: add an import and map the exact adapter type string to your function in `FALLBACK_BY_ADAPTER_TYPE`. Unknown adapters are ignored; dbt’s normal path runs when both loaded-at fields are set.
 4. Add or extend unit tests under `tests/unit/` (see `test_source_freshness_fallbacks.py`). Code that imports dbt artifact types can use `pytest.importorskip("dbt.artifacts")` so the suite still runs when only minimal dev extras are installed.
 
+## Relation existence checks: adjusting an adapter
+
+Before reusing a node, `src/orchestra_dbt/relation_existence.py` confirms its relation is actually in the target warehouse and forces missing nodes back into the run (see *Verifying relations still exist* in the root **`README.md`**). Two things keep this cheap, and both are worth preserving:
+
+- It reuses the dbt adapter **already registered in this process** by the in-process `dbt source freshness` invocation, and reads relations through `adapter.list_relations`, which is served from the relation cache that invocation already populated. No second profile bootstrap, no extra project parse, and usually no extra queries.
+- Failure is always soft: a schema that cannot be read leaves its nodes' reuse decisions untouched. Never let a metadata failure become a full rebuild.
+
+To exclude a warehouse whose listing cannot be trusted, add its adapter type string to `_UNSUPPORTED_ADAPTERS`. `spark` is excluded because the adapter returns an empty list on unrecognised errors, which would read as "the whole schema is gone" and rebuild everything. Add tests alongside `tests/unit/test_relation_existence.py`, which uses a `MagicMock` adapter and asserts the one-listing-per-schema budget.
+
 ## State storage: adding a new file-backed backend
 
 Stateful orchestration loads and saves a `StateApiModel` JSON document. Backends implement the `StateBackend` protocol in `src/orchestra_dbt/state_backends/base.py`: `load() -> StateApiModel` and `save(state: StateApiModel) -> None`.

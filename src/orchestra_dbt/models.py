@@ -55,6 +55,8 @@ class MaterialisationNode(Node):
     freshness: Freshness
     reason: str
     sources: dict[str, datetime]
+    # Fully-rendered warehouse relation; unset for ephemeral models.
+    relation_name: str | None = None
 
 
 class Edge(BaseModel):
