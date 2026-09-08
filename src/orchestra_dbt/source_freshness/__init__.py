@@ -9,57 +9,33 @@ from ..utils import load_json
 from .fallbacks.registry import FALLBACK_BY_ADAPTER_TYPE, loaded_at_fields_unset
 
 
-def get_args_for_source_freshness(user_args: tuple | list[str]) -> list[str]:
+def get_args_for_source_freshness(
+    user_args: tuple | list[str],
+    scope_to_selection: bool = False,
+    paths_to_run: list[str] | None = None,
+) -> list[str]:
+    """Build the `dbt source freshness` invocation.
+
+    When scoped, each already-resolved `paths_to_run` entry (however it was selected
+    -- `--select`, `--selector`, whatever) is passed as `+path:<file>`: `+` because
+    dbt's selection is exact-match (a bare path selects nothing upstream), `path:`
+    since it's unambiguous to build from a plain file path. No `--resource-type`
+    filter needed -- `source freshness` only ever checks sources anyway.
+    """
     args: list[str] = ["source", "freshness", "-q"]
     target = find_target_in_args(list(user_args))
     if target:
         args.extend(["--target", target])
+    if scope_to_selection and paths_to_run:
+        args.append("--select")
+        args.extend(f"+path:{path}" for path in paths_to_run)
     return args
-
-
-def get_upstream_source_ids(
-    paths: list[str], manifest_override: str | None = None
-) -> set[str]:
-    """Sources upstream of the given file paths, via dbt's own `parent_map`.
-
-    `paths` is the same `dbt ls`-resolved selection already used elsewhere for
-    node reuse (`get_paths_to_run`), and `target/manifest.json` is already on disk
-    from that same invocation -- so this just walks a graph dbt already built,
-    rather than re-parsing or re-resolving the CLI selection ourselves.
-    """
-    manifest = load_json(manifest_override or "target/manifest.json")
-    parent_map: dict[str, list[str]] = manifest.get("parent_map", {})
-    path_to_id = {
-        str(node["original_file_path"]): node_id
-        for node_id, node in manifest.get("nodes", {}).items()
-    }
-
-    upstream_source_ids: set[str] = set()
-    seen: set[str] = set()
-    queue = [path_to_id[path] for path in paths if path in path_to_id]
-    while queue:
-        node_id = queue.pop()
-        if node_id in seen:
-            continue
-        seen.add(node_id)
-        if node_id.startswith("source."):
-            upstream_source_ids.add(node_id)
-        queue.extend(parent_map.get(node_id, []))
-    return upstream_source_ids
 
 
 def should_exclude_source(
     compiled_node, require_explicit_source_freshness: bool
 ) -> bool:
     return require_explicit_source_freshness and loaded_at_fields_unset(compiled_node)
-
-
-def should_exclude_out_of_scope_source(
-    compiled_node, sources_in_scope: set[str] | None
-) -> bool:
-    return (
-        sources_in_scope is not None and compiled_node.unique_id not in sources_in_scope
-    )
 
 
 def get_source_freshness(
@@ -98,12 +74,7 @@ def get_source_freshness(
             age=0,
         )
 
-    sources_in_scope: set[str] | None = None
-    if scope_to_selection and paths_to_run:
-        sources_in_scope = get_upstream_source_ids(paths_to_run)
-
     sources_without_explicit_freshness: set[str] = set()
-    sources_out_of_scope: set[str] = set()
 
     class OrchestraFreshnessRunner(FreshnessRunner):
         def execute(self, compiled_node, manifest) -> FreshnessNodeResult:
@@ -112,10 +83,6 @@ def get_source_freshness(
             # object.
             if compiled_node.freshness is None:
                 compiled_node.freshness = FreshnessThreshold()
-
-            if should_exclude_out_of_scope_source(compiled_node, sources_in_scope):
-                sources_out_of_scope.add(compiled_node.unique_id)
-                return default_freshness_result(compiled_node)
 
             if should_exclude_source(compiled_node, require_explicit_source_freshness):
                 sources_without_explicit_freshness.add(compiled_node.unique_id)
@@ -143,24 +110,22 @@ def get_source_freshness(
     FreshnessTask.get_runner_type = lambda self, _: OrchestraFreshnessRunner
 
     try:
-        dbtRunner().invoke(args=get_args_for_source_freshness(user_args))
+        dbtRunner().invoke(
+            args=get_args_for_source_freshness(
+                user_args, scope_to_selection, paths_to_run
+            )
+        )
         if sources_without_explicit_freshness:
             log_warn(
                 f"{len(sources_without_explicit_freshness)} source(s) have no explicit freshness "
                 "config (loaded_at_field or loaded_at_query) and are excluded from state-aware "
                 "orchestration; models depending on them will always run."
             )
-        if sources_out_of_scope:
-            log_info(
-                f"{len(sources_out_of_scope)} source(s) outside the current selection's "
-                "ancestors skipped."
-            )
-        excluded = sources_without_explicit_freshness | sources_out_of_scope
         return SourceFreshness(
             sources={
                 source["unique_id"]: source["max_loaded_at"]
                 for source in load_json("target/sources.json")["results"]
-                if source["unique_id"] not in excluded
+                if source["unique_id"] not in sources_without_explicit_freshness
             }
         )
     except Exception as e:
