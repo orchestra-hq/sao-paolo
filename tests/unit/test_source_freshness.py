@@ -1,4 +1,5 @@
 from datetime import datetime
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from src.orchestra_dbt.models import SourceFreshness
@@ -187,3 +188,47 @@ class TestGetSourceFreshness:
         assert result == SourceFreshness(
             sources={"source.proj.raw.x": datetime(2026, 3, 31)}
         )
+
+    def test_scoped_still_runs_databricks_fallback_for_a_used_source(self):
+        """Scoping restricts which sources dbt selects (--select +path:X), it does
+        not change what the runner does for a source dbt does select. A Databricks
+        source with no loaded_at_field/query -- in scope -- must still hit the
+        DESCRIBE HISTORY fallback, exactly as when scoping is off."""
+        mock_runner = Mock()
+        mock_runner.invoke.return_value = None
+        mock_runner_factory = Mock(return_value=mock_runner)
+        modules = self._patched_dbt_modules(mock_runner_factory)
+
+        with patch.dict("sys.modules", modules):
+            with patch(
+                "src.orchestra_dbt.source_freshness.load_json",
+                return_value={"results": []},
+            ):
+                get_source_freshness(
+                    (),
+                    scope_to_selection=True,
+                    paths_to_run=["models/a.sql"],
+                )
+
+        freshness_task = modules["dbt.task.freshness"].FreshnessTask
+        orchestra_freshness_runner = freshness_task.get_runner_type(None, None)
+        runner = orchestra_freshness_runner()
+        runner.adapter = SimpleNamespace(type=lambda: "databricks")
+
+        fallback_result = object()
+        fake_handler = Mock(return_value=fallback_result)
+        compiled_node = SimpleNamespace(
+            freshness=object(),
+            loaded_at_field=None,
+            loaded_at_query=None,
+            unique_id="source.proj.raw.used_by_selection",
+        )
+
+        with patch(
+            "src.orchestra_dbt.source_freshness.FALLBACK_BY_ADAPTER_TYPE",
+            {"databricks": fake_handler},
+        ):
+            result = runner.execute(compiled_node, manifest=None)
+
+        fake_handler.assert_called_once_with(runner, compiled_node, None)
+        assert result is fallback_result
