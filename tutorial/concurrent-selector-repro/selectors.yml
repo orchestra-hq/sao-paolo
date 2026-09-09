@@ -13,3 +13,14 @@ selectors:
       method: fqn
       value: model_a
       children: true
+
+  # Selector Z: a union of two independent criteria (not a bare fqn, not
+  # ancestor/descendant of one node) spanning both of the project's sources.
+  - name: selector_z
+    description: Union of model_a and stg_unused_page_views -- touches both sources.
+    definition:
+      union:
+        - method: fqn
+          value: model_a
+        - method: fqn
+          value: stg_unused_page_views

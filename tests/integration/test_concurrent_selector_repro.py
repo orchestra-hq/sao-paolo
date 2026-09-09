@@ -23,7 +23,7 @@ requires_postgres = pytest.mark.skipif(
 )
 
 
-def _csr_env(tmp_path: Path) -> dict[str, str]:
+def _csr_env(tmp_path: Path, schema: str) -> dict[str, str]:
     env = os.environ.copy()
     env.setdefault("PGPORT", "5432")
     env.setdefault("PGUSER", "postgres")
@@ -45,7 +45,7 @@ concurrent_selector_repro:
       user: {env["PGUSER"]}
       password: {env["PGPASSWORD"]}
       dbname: {env["PGDATABASE"]}
-      schema: csr_source_scoping_test
+      schema: {schema}
       threads: 1
 """,
         encoding="utf-8",
@@ -73,7 +73,7 @@ def test_scoping_only_checks_the_source_a_direct_model_selector_actually_uses(
     no ancestor/descendant operators. With scoping on, only its one source
     (raw.raw_events) should be checked; raw_unused.raw_page_views, which nothing
     here selects, should be skipped entirely."""
-    env = _csr_env(tmp_path)
+    env = _csr_env(tmp_path, "csr_scoping_test_x")
     assert _run(["orc", "dbt", "seed"], env, "seed").returncode == 0
 
     unscoped = _run(
@@ -86,3 +86,39 @@ def test_scoping_only_checks_the_source_a_direct_model_selector_actually_uses(
     scoped = _run(["orc", "dbt", "build", "--selector", "selector_x"], env, "scoped")
     assert scoped.returncode == 0
     assert "Collected 1 source(s) information." in scoped.stdout
+
+
+@requires_postgres
+def test_scoping_with_a_descendant_expanding_selector_still_finds_one_source(
+    tmp_path: Path,
+) -> None:
+    """selector_y is more complex than selector_x: {method: fqn, value: model_a,
+    children: true} resolves to TWO models (model_a and its descendant model_b).
+    Both feed off the same single source, so scoping must still collect exactly
+    that one source -- not double-count it, and not still miss it because
+    paths_to_run now has more than one entry."""
+    env = _csr_env(tmp_path, "csr_scoping_test_y")
+    assert _run(["orc", "dbt", "seed"], env, "seed").returncode == 0
+
+    env["ORCHESTRA_SCOPE_SOURCE_FRESHNESS_TO_SELECTION"] = "true"
+    scoped = _run(["orc", "dbt", "build", "--selector", "selector_y"], env, "scoped")
+    assert scoped.returncode == 0
+    assert "Collected 1 source(s) information." in scoped.stdout
+
+
+@requires_postgres
+def test_scoping_with_a_union_selector_picks_up_both_sources(
+    tmp_path: Path,
+) -> None:
+    """selector_z is a union of two independent, unrelated criteria -- model_a
+    and stg_unused_page_views -- rather than a bare fqn or an ancestor/descendant
+    expansion of one node. It deliberately touches both of the project's sources,
+    so scoping should collect both: the exclusion in the other tests isn't a
+    hardcoded special case, it just follows whatever the selector resolves to."""
+    env = _csr_env(tmp_path, "csr_scoping_test_z")
+    assert _run(["orc", "dbt", "seed"], env, "seed").returncode == 0
+
+    env["ORCHESTRA_SCOPE_SOURCE_FRESHNESS_TO_SELECTION"] = "true"
+    scoped = _run(["orc", "dbt", "build", "--selector", "selector_z"], env, "scoped")
+    assert scoped.returncode == 0
+    assert "Collected 2 source(s) information." in scoped.stdout
