@@ -20,6 +20,22 @@ from .utils import load_json
 _IGNORED_PREFIXES = ("function.",)
 
 
+def source_relation_type(source: dict, state: StateApiModel) -> RelationType | None:
+    """The cached relation kind for a source, when it still bears on freshness.
+
+    A source with `loaded_at_field`/`loaded_at_query` reads real data, so its
+    relation kind is irrelevant -- ignore anything cached from before it was
+    configured. Looked up by relation name, since a source resolves to a
+    different relation per target.
+    """
+    if source.get("loaded_at_field") or source.get("loaded_at_query"):
+        return None
+    relation_name = source.get("relation_name")
+    if not relation_name:
+        return None
+    return RelationType.parse(state.source_relation_types.get(relation_name))
+
+
 def calculate_freshness_on_node(
     asset_external_id: str,
     checksum: str,
@@ -76,13 +92,16 @@ def construct_dag(
             "No integration account ID found. Will use node ID as the asset external ID."
         )
 
+    sources_in_manifest = manifest.get("sources", {})
     for node_id in manifest.get("child_map", {}).keys():
         node_id = str(node_id)
         if not node_id.startswith("source."):
             continue
         nodes[node_id] = SourceNode(
             last_updated=source_freshness.sources.get(node_id),
-            relation_type=RelationType.parse(state.source_relation_types.get(node_id)),
+            relation_type=source_relation_type(
+                sources_in_manifest.get(node_id, {}), state
+            ),
         )
 
     for node_id, node in manifest.get("nodes", {}).items():

@@ -120,3 +120,50 @@ def test_enum_values_match_dbts_own_relation_type() -> None:
     from dbt.adapters.contracts.relation import RelationType as DbtRelationType
 
     assert {m.value for m in DbtRelationType} <= {m.value for m in RelationType}
+
+
+class TestSourceRelationTypeLookup:
+    """construct_dag's view of the cache: re-checked against the manifest
+    each run, and keyed by the target-qualified relation name."""
+
+    def _state(self, **cached: str):
+        from src.orchestra_dbt.models import StateApiModel
+
+        return StateApiModel(state={}, source_relation_types=dict(cached))
+
+    def test_reads_cached_kind_by_relation_name(self) -> None:
+        from src.orchestra_dbt.dag import source_relation_type
+
+        source = {"relation_name": "DB.raw.orders"}
+        state = self._state(**{"DB.raw.orders": "view"})
+
+        assert source_relation_type(source, state) is RelationType.VIEW
+
+    @pytest.mark.parametrize("field", ["loaded_at_field", "loaded_at_query"])
+    def test_ignores_stale_kind_once_loaded_at_is_configured(self, field: str) -> None:
+        """Adding loaded_at_* is the documented remedy -- it must not leave the
+        source pinned dirty forever by a kind cached from before."""
+        from src.orchestra_dbt.dag import source_relation_type
+
+        source = {"relation_name": "DB.raw.orders", field: "updated_at"}
+        state = self._state(**{"DB.raw.orders": "view"})
+
+        assert source_relation_type(source, state) is None
+
+    def test_kind_cached_for_another_target_is_not_reused(self) -> None:
+        """One state file can serve several targets, where the same source id
+        resolves to a different relation."""
+        from src.orchestra_dbt.dag import source_relation_type
+
+        state = self._state(**{"DEVDB.dev_raw.orders": "table"})
+        prod_source = {"relation_name": "PRODDB.prod_raw.orders"}
+
+        assert source_relation_type(prod_source, state) is None
+
+    def test_unknown_source_has_no_relation_type(self) -> None:
+        from src.orchestra_dbt.dag import source_relation_type
+
+        assert source_relation_type({}, self._state()) is None
+        assert (
+            source_relation_type({"relation_name": "DB.raw.x"}, self._state()) is None
+        )

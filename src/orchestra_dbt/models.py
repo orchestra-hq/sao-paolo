@@ -55,12 +55,13 @@ class StateItem(BaseModel):
 
 class StateApiModel(BaseModel):
     state: dict[str, StateItem]
-    # Cache of source unique_id -> RelationType value. Populated once and
-    # reused across runs, since a source's relation kind essentially never
-    # changes. Kept alongside `state` rather than inside it because it
-    # describes the source itself, not any one model depending on it. Stored
-    # as plain strings so an unfamiliar value read back from persisted state
-    # can never fail validation -- see RelationType.parse.
+    # Cache of relation name -> RelationType value, e.g.
+    # "DB.schema_raw.orders" -> "view". Keyed by relation rather than source
+    # id because a source resolves to a different relation per target, and
+    # one state file can serve several. Populated once and reused across
+    # runs, since a relation's kind essentially never changes. Stored as
+    # plain strings so an unfamiliar value read back from persisted state can
+    # never fail validation -- see RelationType.parse.
     source_relation_types: dict[str, str] = {}
 
 
