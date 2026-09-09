@@ -171,7 +171,9 @@ def main(args: tuple[str, ...]) -> None:
 
     try:
         source_freshness: SourceFreshness | None = get_source_freshness(
-            user_args=dbt_args[2:],
+            # find_target_in_args just scans for --target/-t; the leading "dbt
+            # <subcommand>" tokens are harmless noise to it, so no need to slice.
+            user_args=dbt_args,
             require_explicit_source_freshness=settings.require_explicit_source_freshness,
             scope_to_selection=settings.scope_source_freshness_to_selection,
             paths_to_run=paths_to_run,
