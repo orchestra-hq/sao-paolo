@@ -14,14 +14,8 @@ def get_args_for_source_freshness(
     scope_to_selection: bool = False,
     paths_to_run: list[str] | None = None,
 ) -> list[str]:
-    """Build the `dbt source freshness` invocation.
-
-    When scoped, each already-resolved `paths_to_run` entry (however it was selected
-    -- `--select`, `--selector`, whatever) is passed as `+path:<file>`: `+` because
-    dbt's selection is exact-match (a bare path selects nothing upstream), `path:`
-    since it's unambiguous to build from a plain file path. No `--resource-type`
-    filter needed -- `source freshness` only ever checks sources anyway.
-    """
+    """Build the `dbt source freshness` CLI args: forwards `--target`, and when
+    scoped, an ancestor-expanded `--select` built from `paths_to_run`."""
     args: list[str] = ["source", "freshness", "-q"]
     target = find_target_in_args(list(user_args))
     if target:
