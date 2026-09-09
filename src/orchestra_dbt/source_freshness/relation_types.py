@@ -5,17 +5,11 @@ from ..models import RelationType
 
 
 def get_relation_type(adapter: Any, config: Any, node: Any) -> RelationType | None:
-    """Look up a source's relation kind in the warehouse.
+    """Look up a source's relation kind, or None if it can't be determined.
 
-    Adapter-agnostic: `adapter.get_relation()` is generic `BaseAdapter` API
-    backed by each adapter's own `list_relations_without_caching` macro, so
-    no per-warehouse SQL is needed here. Results go through dbt's relation
-    cache, so this costs at most one lightweight "list the relations in this
-    schema" query per schema per run, and nothing for later sources in a
-    schema already listed.
-
-    Returns None when the kind can't be determined, which leaves the caller
-    on its default behaviour rather than acting on a guess.
+    `adapter.get_relation()` is generic dbt API (no per-warehouse SQL) and
+    goes through dbt's relation cache, so this costs at most one schema
+    listing per schema per run.
     """
     try:
         relation = adapter.Relation.create_from(config, node)

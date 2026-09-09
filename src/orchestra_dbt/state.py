@@ -49,10 +49,8 @@ def save_state(
         updated_item = state.state.get(asset_external_id)
         if updated_item is not None:
             latest.state[asset_external_id] = updated_item
-    # The relation-type cache is append-only (a source's relation kind
-    # essentially never changes), so merging our full local copy on top of
-    # the freshly-reread latest is always safe -- no concurrent-run
-    # clobbering risk the way per-model `state` needs the id allowlist above.
+    # Append-only cache, so merging the whole local copy is safe -- no need
+    # for the id allowlist a concurrent run makes necessary above.
     latest.source_relation_types.update(state.source_relation_types)
     backend.save(latest)
 
