@@ -10,6 +10,7 @@ from src.orchestra_dbt.models import (
     MaterialisationNode,
     Node,
     ParsedDag,
+    RelationType,
     SourceNode,
 )
 from src.orchestra_dbt.sao import (
@@ -133,6 +134,34 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     freshness_config=FreshnessConfig(),
                 ),
                 (False, "Source source.test has no new data since last run."),
+            ),
+            # View source, unchanged timestamp -> always dirty (a view's
+            # metadata timestamp doesn't reflect data changes, so an
+            # unchanged timestamp can't be trusted to mean unchanged data).
+            (
+                "source.test",
+                SourceNode(
+                    last_updated=datetime.now() - timedelta(minutes=10),
+                    relation_type=RelationType.VIEW,
+                ),
+                MaterialisationNode(
+                    asset_external_id="integration_account_id.model.a",
+                    freshness=Freshness.CLEAN,
+                    checksum="1",
+                    dbt_path="models/model_a.sql",
+                    file_path="models/model_a.sql",
+                    last_updated=datetime.now() - timedelta(minutes=10),
+                    sources={
+                        "source.test": datetime.now() - timedelta(minutes=10),
+                    },
+                    reason="Node not seen before",
+                    freshness_config=FreshnessConfig(),
+                ),
+                (
+                    True,
+                    "Source source.test is a view; its warehouse metadata does not "
+                    "reliably reflect data changes, so it is always treated as new.",
+                ),
             ),
             # Dirty Source -> Model no config
             (

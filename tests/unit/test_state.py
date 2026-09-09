@@ -155,7 +155,8 @@ class TestSaveState:
                             "source.test": "2024-01-01T11:00:00",
                         },
                     },
-                }
+                },
+                "source_relation_types": {},
             },
         )
         assert (

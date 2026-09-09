@@ -9,6 +9,7 @@ from .models import (
     MaterialisationNode,
     Node,
     ParsedDag,
+    RelationType,
     SourceFreshness,
     SourceNode,
     StateApiModel,
@@ -79,7 +80,10 @@ def construct_dag(
         node_id = str(node_id)
         if not node_id.startswith("source."):
             continue
-        nodes[node_id] = SourceNode(last_updated=source_freshness.sources.get(node_id))
+        nodes[node_id] = SourceNode(
+            last_updated=source_freshness.sources.get(node_id),
+            relation_type=RelationType.parse(state.source_relation_types.get(node_id)),
+        )
 
     for node_id, node in manifest.get("nodes", {}).items():
         resource_type = str(node.get("resource_type"))

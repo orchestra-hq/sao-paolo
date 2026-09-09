@@ -170,22 +170,6 @@ def main(args: tuple[str, ...]) -> None:
         sys.exit(1)
 
     try:
-        source_freshness: SourceFreshness | None = get_source_freshness(
-            # find_target_in_args just scans for --target/-t; the leading "dbt
-            # <subcommand>" tokens are harmless noise to it, so no need to slice.
-            user_args=dbt_args,
-            require_explicit_source_freshness=settings.require_explicit_source_freshness,
-            scope_to_selection=settings.scope_source_freshness_to_selection,
-            paths_to_run=paths_to_run,
-        )
-    except ImportError as import_error:
-        log_error(dbt_core_import_error_message(import_error))
-        sys.exit(1)
-    if not source_freshness:
-        sys.exit(subprocess.run(dbt_args).returncode)
-    log_info(f"Collected {len(source_freshness.sources)} source(s) information.")
-
-    try:
         state = load_state()
         state_load_ok = True
     except StateLoadError as e:
@@ -195,6 +179,23 @@ def main(args: tuple[str, ...]) -> None:
         )
         state = StateApiModel(state={})
         state_load_ok = False
+
+    try:
+        source_freshness: SourceFreshness | None = get_source_freshness(
+            # find_target_in_args just scans for --target/-t; the leading "dbt
+            # <subcommand>" tokens are harmless noise to it, so no need to slice.
+            user_args=dbt_args,
+            require_explicit_source_freshness=settings.require_explicit_source_freshness,
+            scope_to_selection=settings.scope_source_freshness_to_selection,
+            paths_to_run=paths_to_run,
+            state=state,
+        )
+    except ImportError as import_error:
+        log_error(dbt_core_import_error_message(import_error))
+        sys.exit(1)
+    if not source_freshness:
+        sys.exit(subprocess.run(dbt_args).returncode)
+    log_info(f"Collected {len(source_freshness.sources)} source(s) information.")
 
     parsed_dag = construct_dag(source_freshness, state)
 
