@@ -14,8 +14,21 @@ sources:
             warn_after: { count: 24, period: hour }
           loaded_at_field: event_at
 
+  - name: raw_unused
+    schema: "{{ target.schema }}_raw"
+    database: "{{ target.database }}"
+    description: >
+      Nothing in this project selects stg_unused_page_views, so scoping should
+      never check this source's freshness -- proves the unscoped/scoped test
+      case in test_concurrent_selector_repro.py.
+    tables:
+      - name: raw_page_views
+        identifier: raw_page_views
+
 models:
   # A: fed directly by the source. Selector X targets this node alone.
   - name: model_a
   # B: downstream of A only. No source of its own, no build_after config.
   - name: model_b
+  # Deliberately not selected by anything in the tests -- see raw_unused above.
+  - name: stg_unused_page_views

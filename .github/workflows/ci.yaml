@@ -65,6 +65,15 @@ jobs:
           DBT_SCHEMA: sao_tutorial
           ORCHESTRA_STATE_FILE: ".orchestra/dbt_state.json"
         run: uv run pytest tests/integration/test_tutorial_dbt.py -sv
+      - name: Run concurrent-selector-repro scoping test
+        env:
+          CI: "true"
+          PGHOST: localhost
+          PGPORT: "5432"
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: tutorial
+        run: uv run pytest tests/integration/test_concurrent_selector_repro.py -sv
 
   orchestra:
     runs-on: ubuntu-latest
