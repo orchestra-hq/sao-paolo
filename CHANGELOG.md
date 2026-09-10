@@ -7,9 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-10
+
 ### Added
 
 - Verify a node's relation still exists in the target warehouse before reusing it. A model whose table or view was dropped out of band — or a state file pointed at a fresh database or schema — no longer gets silently skipped; it is forced back into the run (`<node> was deleted from the warehouse hence rerun.`) and its downstream models rebuild with it. Delegated to the dbt adapter's own relation listing, so it works on every warehouse dbt supports. Usually costs no extra queries at all — the preceding `dbt source freshness` run already lists every schema and this reads that cache, falling back to one listing per distinct `(database, schema)` when cold. Nothing scales with model count, and there are no queries when nothing is reusable. Off by default while it beds in: opt in with `verify_relations_exist` / `ORCHESTRA_VERIFY_RELATIONS_EXIST`, and existing runs are unaffected until you do. `spark` is excluded.
+- `scope_source_freshness_to_selection` setting (`[tool.orchestra_dbt]` or `ORCHESTRA_SCOPE_SOURCE_FRESHNESS_TO_SELECTION`). When enabled, `dbt source freshness` only checks sources upstream of the selection already resolved for node reuse, instead of every source in the project. Each already-resolved path is forwarded as `--select +path:<file>`, so dbt's own selection engine resolves the ancestor sources — no manifest parsing or graph walking on our side. Off by default, so freshness checking behaviour is unchanged until you opt in.
+
+[1.3.0]: https://github.com/orchestra-hq/sao-paolo/releases/tag/v1.3.0
 
 ## [1.2.0] - 2026-08-27
 
