@@ -477,11 +477,15 @@ class TestApplyRelationExistenceGate:
         """A model's `alias:` config can differ from its file/model name; the check
         must key off the alias dbt actually creates in the warehouse, not the
         unique_id, or a dropped aliased table would be missed.
+
+        The schema lists a table named after the model (`readable_name`) but not the
+        alias (`legacy_alias`): a regression that keyed off the model name instead of
+        the alias would find that table and wrongly leave the node CLEAN.
         """
         manifest = make_manifest(
             {"model.p.readable_name": ("db", "analytics", "legacy_alias")}
         )
-        adapter, _ = make_adapter({("db", "analytics"): []})
+        adapter, _ = make_adapter({("db", "analytics"): ["readable_name"]})
         monkeypatch.setattr(
             relation_existence,
             "_acquire_adapter",
@@ -640,7 +644,9 @@ class TestEndToEndFromStateThroughTheGate:
                 )
             }
         )
-        adapter, _ = make_adapter({("db", "analytics"): []})
+        # Lists a table named after the model but not the alias, so a regression
+        # keying off the model name instead of the alias would wrongly find it.
+        adapter, _ = make_adapter({("db", "analytics"): ["readable_name"]})
         monkeypatch.setattr(
             relation_existence,
             "_acquire_adapter",
@@ -718,7 +724,9 @@ class TestEndToEndFromStateThroughTheGate:
                 )
             }
         )
-        adapter, _ = make_adapter({("db", "analytics"): []})
+        # Lists a table named after the model but not the alias, so a regression
+        # keying off the model name instead of the alias would wrongly find it.
+        adapter, _ = make_adapter({("db", "analytics"): ["readable_name"]})
         monkeypatch.setattr(
             relation_existence,
             "_acquire_adapter",
