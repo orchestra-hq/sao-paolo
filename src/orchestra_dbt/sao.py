@@ -8,6 +8,7 @@ from .models import (
     Node,
     NodeType,
     ParsedDag,
+    RelationType,
     SourceNode,
 )
 
@@ -54,7 +55,17 @@ def should_mark_dirty_from_single_upstream(
     match upstream_node.node_type:
         case NodeType.SOURCE:
             source_node: SourceNode = cast(SourceNode, upstream_node)
-            if upstream_id not in current_node.sources:
+            if source_node.relation_type == RelationType.VIEW:
+                # A view's metadata timestamp tracks when its definition last
+                # changed, not its data, so an unchanged timestamp says
+                # nothing about whether there are new rows to read.
+                upstream_freshness = Freshness.DIRTY
+                reason = (
+                    f"Source {upstream_id} is a view; its warehouse metadata "
+                    "does not reliably reflect data changes, so it is always "
+                    "treated as new."
+                )
+            elif upstream_id not in current_node.sources:
                 upstream_freshness = Freshness.DIRTY
             else:
                 if not source_node.last_updated:

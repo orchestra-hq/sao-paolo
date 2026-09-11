@@ -155,7 +155,8 @@ class TestSaveState:
                             "source.test": "2024-01-01T11:00:00",
                         },
                     },
-                }
+                },
+                "source_relation_types": {},
             },
         )
         assert (
@@ -179,6 +180,36 @@ class TestSaveState:
                     }
                 ),
                 updated_asset_external_ids={"model.test", "model.new"},
+            )
+            is None
+        )
+
+    def test_save_state_keeps_newer_relation_types(self, httpx_mock: HTTPXMock):
+        """A run holding an older copy must not revert a concurrent run's
+        classification -- relation kinds are only ever filled in, never
+        overwritten."""
+        httpx_mock.add_response(
+            method="GET",
+            url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
+            # Saved by a concurrent run after this one loaded its own copy.
+            json={"state": {}, "source_relation_types": {"DB.raw.a": "view"}},
+        )
+        httpx_mock.add_response(
+            method="PATCH",
+            url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
+            match_json={
+                "state": {},
+                "source_relation_types": {"DB.raw.a": "view", "DB.raw.b": "table"},
+            },
+        )
+        assert (
+            save_state(
+                state=StateApiModel(
+                    state={},
+                    # Stale value for a, plus one this run newly classified.
+                    source_relation_types={"DB.raw.a": "table", "DB.raw.b": "table"},
+                ),
+                updated_asset_external_ids=set(),
             )
             is None
         )

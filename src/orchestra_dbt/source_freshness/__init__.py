@@ -3,10 +3,11 @@ from datetime import datetime
 
 from ..compatibility import dbt_core_import_error_message
 from ..logger import log_error, log_info, log_warn
-from ..models import SourceFreshness
+from ..models import SourceFreshness, StateApiModel
 from ..target_finder import find_target_in_args
 from ..utils import load_json
 from .fallbacks.registry import FALLBACK_BY_ADAPTER_TYPE, loaded_at_fields_unset
+from .relation_types import get_relation_type
 
 
 def get_args_for_source_freshness(
@@ -37,7 +38,15 @@ def get_source_freshness(
     require_explicit_source_freshness: bool = False,
     scope_to_selection: bool = False,
     paths_to_run: list[str] | None = None,
+    state: StateApiModel | None = None,
 ) -> SourceFreshness | None:
+    """Run `dbt source freshness` and collect each source's max_loaded_at.
+
+    When `state` is given, `state.source_relation_types` is topped up in
+    place for any newly-seen source whose freshness comes from relation
+    metadata, reusing the connection this freshness run already opens.
+    Sources cached there from a previous run are not looked up again.
+    """
     try:
         from dbt.artifacts.resources.v1.components import FreshnessThreshold
         from dbt.artifacts.schemas.freshness import SourceDefinition
@@ -69,6 +78,7 @@ def get_source_freshness(
         )
 
     sources_without_explicit_freshness: set[str] = set()
+    relation_types = state.source_relation_types if state is not None else {}
 
     class OrchestraFreshnessRunner(FreshnessRunner):
         def execute(self, compiled_node, manifest) -> FreshnessNodeResult:
@@ -89,6 +99,18 @@ def get_source_freshness(
                     if res is not None:
                         return res
                     return default_freshness_result(compiled_node)
+
+                # No loaded_at_* and no fallback, so freshness comes from the
+                # relation's metadata timestamp -- which only tracks data
+                # changes for materialised relations. Record the kind while
+                # we hold a connection so the DAG can weigh it later.
+                relation_name = getattr(compiled_node, "relation_name", None)
+                if relation_name and relation_name not in relation_types:
+                    relation_type = get_relation_type(
+                        self.adapter, self.config, compiled_node
+                    )
+                    if relation_type is not None:
+                        relation_types[relation_name] = relation_type.value
 
             try:
                 return super().execute(compiled_node, manifest)
