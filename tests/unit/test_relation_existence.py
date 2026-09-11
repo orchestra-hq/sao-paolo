@@ -1,21 +1,30 @@
+import re
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
+import src.orchestra_dbt.dag as dag_module
 import src.orchestra_dbt.relation_existence as relation_existence
+from src.orchestra_dbt.config import OrchestraDbtSettings
+from src.orchestra_dbt.dag import construct_dag
 from src.orchestra_dbt.models import (
     Freshness,
     FreshnessConfig,
     MaterialisationNode,
     ParsedDag,
+    SourceFreshness,
     SourceNode,
+    StateApiModel,
+    StateItem,
 )
 from src.orchestra_dbt.relation_existence import (
     apply_relation_existence_gate,
     collect_reuse_candidates,
     find_missing_relations,
 )
+from src.orchestra_dbt.sao import calculate_nodes_to_run
 
 
 class FakeRelation:
@@ -462,6 +471,74 @@ class TestApplyRelationExistenceGate:
 
         adapter.cleanup_connections.assert_called_once()
 
+    def test_dropped_table_detected_via_its_alias_not_its_model_name(
+        self, monkeypatch
+    ) -> None:
+        """A model's `alias:` config can differ from its file/model name; the check
+        must key off the alias dbt actually creates in the warehouse, not the
+        unique_id, or a dropped aliased table would be missed.
+
+        The schema lists a table named after the model (`readable_name`) but not the
+        alias (`legacy_alias`): a regression that keyed off the model name instead of
+        the alias would find that table and wrongly leave the node CLEAN.
+        """
+        manifest = make_manifest(
+            {"model.p.readable_name": ("db", "analytics", "legacy_alias")}
+        )
+        adapter, _ = make_adapter({("db", "analytics"): ["readable_name"]})
+        monkeypatch.setattr(
+            relation_existence,
+            "_acquire_adapter",
+            MagicMock(return_value=(adapter, manifest)),
+        )
+        dag = ParsedDag(
+            nodes={
+                "model.p.readable_name": _node(
+                    "model.p.readable_name",
+                    relation_name="db.analytics.legacy_alias",
+                )
+            },
+            edges=[],
+        )
+
+        apply_relation_existence_gate(dag, None)
+
+        node = dag.nodes["model.p.readable_name"]
+        assert isinstance(node, MaterialisationNode)
+        assert node.freshness == Freshness.DIRTY
+        assert "db.analytics.legacy_alias" in node.reason
+        assert "deleted hence rerun" in node.reason
+
+    def test_logs_how_long_the_check_took(self, monkeypatch, capsys) -> None:
+        self._stub_adapter(monkeypatch, missing={"model.p.a"})
+        dag = ParsedDag(nodes={"model.p.a": _node("model.p.a")}, edges=[])
+
+        apply_relation_existence_gate(dag, None)
+
+        out = capsys.readouterr().out
+        assert re.search(
+            r"Warehouse existence check for 1 node\(s\) took \d+\.\d\ds\.", out
+        )
+
+    @pytest.mark.parametrize(
+        ("kwargs", "label"),
+        [
+            ({"raises": RuntimeError("no adapter")}, "adapter unavailable"),
+            ({"adapter_type": "spark"}, "unsupported adapter"),
+        ],
+    )
+    def test_timing_is_not_logged_on_safety_branches(
+        self, monkeypatch, capsys, kwargs, label
+    ) -> None:
+        """Nothing was actually checked, so a duration would be misleading."""
+        self._stub_adapter(monkeypatch, **kwargs)
+        dag = ParsedDag(nodes={"model.p.a": _node("model.p.a")}, edges=[])
+
+        apply_relation_existence_gate(dag, None)
+
+        out = capsys.readouterr().out
+        assert "took" not in out, label
+
 
 class TestAcquireAdapter:
     @pytest.mark.parametrize(
@@ -507,3 +584,163 @@ class TestAcquireAdapter:
         )
 
         assert relation_existence._acquire_adapter() == (adapter, manifest)
+
+
+class TestEndToEndFromStateThroughTheGate:
+    def test_aliased_model_already_in_state_is_rebuilt_when_its_relation_is_dropped(
+        self, monkeypatch
+    ) -> None:
+        """Full chain: a real manifest with an `alias:`-configured model, a state
+        file that matches its checksum (so `construct_dag` marks it CLEAN, i.e. a
+        candidate for reuse), then the gate discovering the aliased table is gone.
+        """
+        manifest = {
+            "metadata": {"project_name": "test_project"},
+            "nodes": {
+                "model.test_project.readable_name": {
+                    "resource_type": "model",
+                    "checksum": {"checksum": "abc123"},
+                    "config": {},
+                    "package_name": "test_project",
+                    "original_file_path": "models/readable_name.sql",
+                    "relation_name": "db.analytics.legacy_alias",
+                    "depends_on": {"nodes": []},
+                },
+            },
+            "child_map": {},
+        }
+        monkeypatch.setattr(dag_module, "load_json", lambda _: manifest)
+        monkeypatch.setattr(dag_module, "calculate_checksum", lambda *a, **k: "abc123")
+        monkeypatch.setattr(
+            dag_module,
+            "load_orchestra_dbt_settings",
+            lambda: OrchestraDbtSettings(
+                integration_account_id="acct", local_run=False
+            ),
+        )
+        asset_id = "acct.db.analytics.legacy_alias"  # integration_account_id.relation_name
+        state = StateApiModel(
+            state={
+                asset_id: StateItem(
+                    last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                    checksum="abc123",
+                    sources={},
+                ),
+            }
+        )
+
+        dag = construct_dag(SourceFreshness(sources={}), state)
+        node = dag.nodes["model.test_project.readable_name"]
+        assert isinstance(node, MaterialisationNode)
+        assert node.freshness == Freshness.CLEAN, "already in state, so reusable"
+        assert node.relation_name == "db.analytics.legacy_alias"
+
+        manifest_for_check = make_manifest(
+            {
+                "model.test_project.readable_name": (
+                    "db",
+                    "analytics",
+                    "legacy_alias",
+                )
+            }
+        )
+        # Lists a table named after the model but not the alias, so a regression
+        # keying off the model name instead of the alias would wrongly find it.
+        adapter, _ = make_adapter({("db", "analytics"): ["readable_name"]})
+        monkeypatch.setattr(
+            relation_existence,
+            "_acquire_adapter",
+            MagicMock(return_value=(adapter, manifest_for_check)),
+        )
+
+        apply_relation_existence_gate(dag, None)
+
+        assert node.freshness == Freshness.DIRTY
+        assert "db.analytics.legacy_alias" in node.reason
+        assert "deleted hence rerun" in node.reason
+
+    def test_stale_source_does_not_change_the_outcome_or_overwrite_the_reason(
+        self, monkeypatch
+    ) -> None:
+        """Same scenario, plus an upstream source that has new data since last run --
+        a second, independent reason to rebuild. The gate's DIRTY must survive the
+        later dependency sweep (`calculate_nodes_to_run`) unchanged: `_process_node`
+        only escalates CLEAN to DIRTY, it never touches a node already DIRTY.
+        """
+        manifest = {
+            "metadata": {"project_name": "test_project"},
+            "nodes": {
+                "model.test_project.readable_name": {
+                    "resource_type": "model",
+                    "checksum": {"checksum": "abc123"},
+                    "config": {},
+                    "package_name": "test_project",
+                    "original_file_path": "models/readable_name.sql",
+                    "relation_name": "db.analytics.legacy_alias",
+                    "depends_on": {"nodes": ["source.test_db.raw.events"]},
+                },
+            },
+            "child_map": {
+                "source.test_db.raw.events": ["model.test_project.readable_name"],
+            },
+        }
+        monkeypatch.setattr(dag_module, "load_json", lambda _: manifest)
+        monkeypatch.setattr(dag_module, "calculate_checksum", lambda *a, **k: "abc123")
+        monkeypatch.setattr(
+            dag_module,
+            "load_orchestra_dbt_settings",
+            lambda: OrchestraDbtSettings(
+                integration_account_id="acct", local_run=False
+            ),
+        )
+        asset_id = "acct.db.analytics.legacy_alias"
+        state = StateApiModel(
+            state={
+                asset_id: StateItem(
+                    last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                    checksum="abc123",
+                    # The source had new data at 2024-01-03; state only saw 2024-01-01.
+                    sources={
+                        "source.test_db.raw.events": datetime(2024, 1, 1, 0, 0, 0)
+                    },
+                ),
+            }
+        )
+        source_freshness = SourceFreshness(
+            sources={"source.test_db.raw.events": datetime(2024, 1, 3, 0, 0, 0)}
+        )
+
+        dag = construct_dag(source_freshness, state)
+        node = dag.nodes["model.test_project.readable_name"]
+        assert isinstance(node, MaterialisationNode)
+        assert node.freshness == Freshness.CLEAN, "checksum still matches state"
+
+        manifest_for_check = make_manifest(
+            {
+                "model.test_project.readable_name": (
+                    "db",
+                    "analytics",
+                    "legacy_alias",
+                )
+            }
+        )
+        # Lists a table named after the model but not the alias, so a regression
+        # keying off the model name instead of the alias would wrongly find it.
+        adapter, _ = make_adapter({("db", "analytics"): ["readable_name"]})
+        monkeypatch.setattr(
+            relation_existence,
+            "_acquire_adapter",
+            MagicMock(return_value=(adapter, manifest_for_check)),
+        )
+
+        apply_relation_existence_gate(dag, None)
+        assert node.freshness == Freshness.DIRTY
+        reason_after_gate = node.reason
+        assert "deleted hence rerun" in reason_after_gate
+
+        calculate_nodes_to_run(dag)
+
+        assert node.freshness == Freshness.DIRTY
+        assert node.reason == reason_after_gate, (
+            "the sweep must not touch a node the gate already marked dirty"
+        )

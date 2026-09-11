@@ -1,3 +1,4 @@
+from time import perf_counter
 from typing import Any, Collection, cast
 
 from .logger import log_debug, log_info, log_warn
@@ -140,6 +141,7 @@ def apply_relation_existence_gate(
         )
         return
 
+    started_at = perf_counter()
     try:
         adapter, manifest = _acquire_adapter()
         adapter_type: str = adapter.type()
@@ -160,6 +162,11 @@ def apply_relation_existence_gate(
             f"Warehouse existence check failed; reuse decisions are unchanged. {e}"
         )
         return
+
+    log_info(
+        f"Warehouse existence check for {len(candidates)} node(s) took "
+        f"{perf_counter() - started_at:.2f}s."
+    )
 
     for unique_id in missing:
         node = candidates[unique_id]
