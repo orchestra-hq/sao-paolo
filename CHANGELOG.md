@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The warehouse existence check (`verify_relations_exist` / `ORCHESTRA_VERIFY_RELATIONS_EXIST`) now logs how long it took, e.g. `Warehouse existence check for 3 node(s) took 0.42s.`
+
 ## [1.3.0] - 2026-09-10
 
 ### Added
