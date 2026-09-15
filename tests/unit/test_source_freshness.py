@@ -133,6 +133,31 @@ class TestGetSourceFreshness:
             "dbt_common.exceptions": Mock(DbtRuntimeError=Exception),
         }
 
+    def test_forces_has_freshness_so_a_source_without_a_freshness_block_is_checked(
+        self,
+    ):
+        """dbt-core's SourceDefinition.has_freshness defaults to bool(self.freshness)
+        -- False unless a `freshness:` block is configured -- and dbt's own
+        FreshnessSelector only selects sources where has_freshness is True, so a
+        source with only loaded_at_field/loaded_at_query and no `freshness:` block
+        would otherwise never be selected at all. Orchestra overrides the class
+        attribute to True unconditionally so it still gets checked."""
+        mock_runner = Mock()
+        mock_runner.invoke.return_value = None
+        mock_runner_factory = Mock(return_value=mock_runner)
+        modules = self._patched_dbt_modules(mock_runner_factory)
+        source_definition = modules["dbt.artifacts.schemas.freshness"].SourceDefinition
+        assert source_definition.has_freshness is False
+
+        with patch.dict("sys.modules", modules):
+            with patch(
+                "src.orchestra_dbt.source_freshness.load_json",
+                return_value={"results": []},
+            ):
+                get_source_freshness(())
+
+        assert source_definition.has_freshness is True
+
     def test_default_checks_every_source_and_ignores_selection(self):
         mock_runner = Mock()
         mock_runner.invoke.return_value = None
