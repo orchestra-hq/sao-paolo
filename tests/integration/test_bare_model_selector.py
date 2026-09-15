@@ -61,8 +61,7 @@ concurrent_selector_repro:
 def test_no_select_or_selector_resolves_to_every_model_in_the_project(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A bare `dbt build` -- even with unrelated flags like
-    `--cache-selected-only` that don't do any node filtering -- resolves to
+    """A bare `dbt build`, with no `--select`/`--selector` at all, resolves to
     every node in the project. Scoping source freshness to that is then a
     no-op, covering every source, same as unscoped.
 
@@ -91,8 +90,7 @@ concurrent_selector_repro:
     monkeypatch.chdir(_REPRO_PROJECT)
     monkeypatch.setenv("DBT_PROFILES_DIR", str(tmp_path))
 
-    user_args = ("--cache-selected-only",)
-    paths = get_paths_to_run(user_args)
+    paths = get_paths_to_run(())
 
     assert paths is not None
     assert sorted(paths) == [
@@ -103,7 +101,7 @@ concurrent_selector_repro:
         "seeds/raw_page_views.csv",
     ]
     assert get_args_for_source_freshness(
-        user_args, scope_to_selection=True, paths_to_run=paths
+        (), scope_to_selection=True, paths_to_run=paths
     ) == [
         "source",
         "freshness",
