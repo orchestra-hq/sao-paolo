@@ -2,6 +2,8 @@ from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+import pytest
+
 from src.orchestra_dbt.models import SourceFreshness
 from src.orchestra_dbt.source_freshness import (
     get_args_for_source_freshness,
@@ -232,3 +234,64 @@ class TestGetSourceFreshness:
 
         fake_handler.assert_called_once_with(runner, compiled_node, None)
         assert result is fallback_result
+
+
+class TestGetSourceFreshnessOnDbtCoreV2:
+    """dbt-core >=2.0 (Fusion) drops dbt.task.freshness / dbt.adapters, so
+    `get_source_freshness` must fall back to running dbt's native, unpatched
+    `dbt source freshness` instead of crashing."""
+
+    _V1_ONLY_MODULES = {
+        "dbt.artifacts.resources.v1.components": None,
+        "dbt.artifacts.schemas.freshness": None,
+        "dbt.artifacts.schemas.freshness.v3.freshness": None,
+        "dbt.artifacts.schemas.results": None,
+        "dbt.task.freshness": None,
+        "dbt_common.exceptions": None,
+    }
+
+    def test_falls_back_to_native_freshness_when_v1_internals_are_unavailable(self):
+        mock_runner = Mock()
+        mock_runner.invoke.return_value = None
+        mock_runner_factory = Mock(return_value=mock_runner)
+
+        freshness_result = {
+            "results": [
+                {
+                    "unique_id": "source.proj.raw.x",
+                    "max_loaded_at": datetime(2026, 3, 31),
+                    "criteria": {"loaded_at_field": "updated_at"},
+                },
+                {
+                    "unique_id": "source.proj.raw.no_config",
+                    "max_loaded_at": None,
+                    "criteria": {"loaded_at_field": None, "loaded_at_query": None},
+                },
+            ]
+        }
+
+        modules = {
+            **self._V1_ONLY_MODULES,
+            "dbt.cli.main": Mock(dbtRunner=mock_runner_factory),
+        }
+
+        with patch.dict("sys.modules", modules):
+            with patch(
+                "src.orchestra_dbt.source_freshness.load_json",
+                return_value=freshness_result,
+            ):
+                result = get_source_freshness(("--target", "prod"))
+
+        mock_runner.invoke.assert_called_once_with(
+            args=["source", "freshness", "-q", "--target", "prod"]
+        )
+        assert result == SourceFreshness(
+            sources={"source.proj.raw.x": datetime(2026, 3, 31)}
+        )
+
+    def test_still_raises_when_dbt_core_is_entirely_missing(self):
+        modules = {**self._V1_ONLY_MODULES, "dbt.cli.main": None}
+
+        with patch.dict("sys.modules", modules):
+            with pytest.raises(ImportError):
+                get_source_freshness(())
