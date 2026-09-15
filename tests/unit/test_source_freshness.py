@@ -278,3 +278,53 @@ class TestGetSourceFreshness:
 
         fake_handler.assert_called_once_with(runner, compiled_node, None)
         assert result is fallback_result
+
+    def test_loaded_at_query_runs_dbts_native_freshness_not_our_fallback(self):
+        """A source with loaded_at_query set (and no loaded_at_field) -- raw.raw_events's
+        exact shape in test_concurrent_selector_repro.py -- must go straight to
+        dbt-core's own FreshnessRunner.execute. loaded_at_fields_unset() is only
+        True when BOTH loaded_at_field and loaded_at_query are absent, so our
+        fallback registry (Databricks-only; Postgres isn't registered there and
+        dbt-core has no Postgres metadata-based freshness path at all) is never
+        even consulted -- the real max(event_at) value that test asserts on comes
+        from dbt actually running that custom SQL, not a metadata guess."""
+        mock_runner = Mock()
+        mock_runner.invoke.return_value = None
+        mock_runner_factory = Mock(return_value=mock_runner)
+        modules = self._patched_dbt_modules(mock_runner_factory)
+        modules["dbt.task.freshness"].FreshnessRunner.execute = Mock(
+            return_value="native-result"
+        )
+
+        with patch.dict("sys.modules", modules):
+            with patch(
+                "src.orchestra_dbt.source_freshness.load_json",
+                return_value={"results": []},
+            ):
+                get_source_freshness(())
+
+        freshness_task = modules["dbt.task.freshness"].FreshnessTask
+        orchestra_freshness_runner = freshness_task.get_runner_type(None, None)
+        runner = orchestra_freshness_runner()
+        runner.adapter = SimpleNamespace(type=lambda: "postgres")
+
+        # Registered anyway, to prove it's skipped rather than just absent.
+        fake_fallback = Mock()
+        compiled_node = SimpleNamespace(
+            freshness=object(),
+            loaded_at_field=None,
+            loaded_at_query="select max(event_at) as event_at from {{ this }}",
+            unique_id="source.proj.raw.raw_events",
+        )
+
+        with patch(
+            "src.orchestra_dbt.source_freshness.FALLBACK_BY_ADAPTER_TYPE",
+            {"postgres": fake_fallback},
+        ):
+            result = runner.execute(compiled_node, manifest=None)
+
+        fake_fallback.assert_not_called()
+        modules["dbt.task.freshness"].FreshnessRunner.execute.assert_called_once_with(
+            compiled_node, None
+        )
+        assert result == "native-result"
