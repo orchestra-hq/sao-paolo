@@ -54,3 +54,56 @@ concurrent_selector_repro:
         "--select",
         "+path:models/model_a.sql",
     ]
+
+
+def test_no_select_or_selector_resolves_to_every_model_in_the_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A bare `dbt build` -- even with unrelated flags like
+    `--cache-selected-only` that don't do any node filtering -- resolves to
+    every node in the project. Scoping source freshness to that is then a
+    no-op, covering every source, same as unscoped.
+
+    Uses a dummy snowflake profile since dbt-postgres isn't installed here and
+    dbt ls only needs a profile it can render, not a live connection.
+    """
+    (tmp_path / "profiles.yml").write_text(
+        """
+concurrent_selector_repro:
+  target: dev
+  outputs:
+    dev:
+      type: snowflake
+      account: fake_account
+      user: fake_user
+      password: fake_password
+      role: fake_role
+      database: fake_db
+      warehouse: fake_wh
+      schema: fake_schema
+      threads: 1
+"""
+    )
+    monkeypatch.chdir(_REPRO_PROJECT)
+    monkeypatch.setenv("DBT_PROFILES_DIR", str(tmp_path))
+
+    user_args = ("--cache-selected-only",)
+    paths = get_paths_to_run(user_args)
+
+    assert paths is not None
+    assert sorted(paths) == [
+        "models/model_a.sql",
+        "models/model_b.sql",
+        "models/stg_unused_page_views.sql",
+        "seeds/raw_events.csv",
+        "seeds/raw_page_views.csv",
+    ]
+    assert get_args_for_source_freshness(
+        user_args, scope_to_selection=True, paths_to_run=paths
+    ) == [
+        "source",
+        "freshness",
+        "-q",
+        "--select",
+        *(f"+path:{path}" for path in paths),
+    ]
