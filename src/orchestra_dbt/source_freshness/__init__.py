@@ -32,6 +32,69 @@ def should_exclude_source(
     return require_explicit_source_freshness and loaded_at_fields_unset(compiled_node)
 
 
+def _criteria_loaded_at_fields_unset(criteria: dict | None) -> bool:
+    if not criteria:
+        return True
+    return (
+        criteria.get("loaded_at_query") is None
+        and criteria.get("loaded_at_field") is None
+    )
+
+
+def _get_source_freshness_v2(
+    user_args: tuple | list[str],
+    scope_to_selection: bool,
+    paths_to_run: list[str] | None,
+) -> SourceFreshness | None:
+    """dbt-core >=2.0 (Fusion) moved task execution into its Rust engine and no longer
+    exposes `dbt.task.freshness` / `dbt.adapters` for Orchestra to patch in-process.
+
+    This runs dbt's own, unpatched `dbt source freshness` instead: sources with an
+    explicit `loaded_at_field`/`loaded_at_query` behave exactly as on dbt-core 1.x, but
+    Orchestra's adapter-specific fallbacks (e.g. Databricks `DESCRIBE HISTORY`) are
+    unavailable, so any source missing both is excluded from state-aware orchestration
+    -- same as `require_explicit_source_freshness` -- and its downstream models always
+    run rather than risk a wrong reuse decision.
+    """
+    from dbt.cli.main import dbtRunner
+
+    log_info("Calculating source freshness")
+    log_warn(
+        "dbt-core 2.x does not expose the Python freshness runner Orchestra patches; "
+        "running dbt's native `dbt source freshness` without adapter-specific fallbacks."
+    )
+
+    try:
+        dbtRunner().invoke(
+            args=get_args_for_source_freshness(
+                user_args, scope_to_selection, paths_to_run
+            )
+        )
+        results = load_json("target/sources.json")["results"]
+        excluded = {
+            source["unique_id"]
+            for source in results
+            if _criteria_loaded_at_fields_unset(source.get("criteria"))
+        }
+        if excluded:
+            log_warn(
+                f"{len(excluded)} source(s) have no explicit freshness config (loaded_at_field "
+                "or loaded_at_query) and no Orchestra fallback is available on dbt-core 2.x; "
+                "they are excluded from state-aware orchestration and models depending on "
+                "them will always run."
+            )
+        return SourceFreshness(
+            sources={
+                source["unique_id"]: source["max_loaded_at"]
+                for source in results
+                if source["unique_id"] not in excluded and source.get("max_loaded_at")
+            }
+        )
+    except Exception as e:
+        log_warn(f"Error running dbt source freshness: {e}")
+        return None
+
+
 def get_source_freshness(
     user_args: tuple | list[str],
     require_explicit_source_freshness: bool = False,
@@ -50,8 +113,12 @@ def get_source_freshness(
         from dbt.task.freshness import FreshnessRunner, FreshnessTask
         from dbt_common.exceptions import DbtRuntimeError
     except ImportError as missing_dbt_core_error:
-        log_error(dbt_core_import_error_message(missing_dbt_core_error))
-        raise missing_dbt_core_error
+        try:
+            from dbt.cli.main import dbtRunner  # noqa: F401
+        except ImportError:
+            log_error(dbt_core_import_error_message(missing_dbt_core_error))
+            raise missing_dbt_core_error
+        return _get_source_freshness_v2(user_args, scope_to_selection, paths_to_run)
 
     def default_freshness_result(compiled_node) -> SourceFreshnessResult:
         return SourceFreshnessResult(

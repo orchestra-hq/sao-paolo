@@ -13,7 +13,7 @@ There are a few core reasons to use this project:
 ## Compatibility and prerequisites
 
 - **Python:** 3.11, 3.12, and 3.13 only (see `requires-python` in `pyproject.toml`).
-- **dbt-core:** 1.10.x and 1.11.x when using stateful orchestration.
+- **dbt-core:** 1.10.x through 1.12.x for full stateful orchestration. dbt-core 2.x (Fusion) also runs, with a reduced feature set — see [*dbt-core 2.x (Fusion) support*](#dbt-core-2x-fusion-support) below.
 - **A dbt Core project:** an existing dbt Core project where you already run `dbt build` / `dbt run` / `dbt test`.
 
 ## Installing
@@ -256,6 +256,15 @@ When **both** are omitted, Orchestra can still run **adapter-specific** SQL to i
 For adapters without a registered fallback, if both `loaded_at` settings are missing, Orchestra follows dbt's `FreshnessRunner` behavior (which may surface as warnings or a non-actionable result depending on dbt and the warehouse).
 
 Implicit freshness can be misleading for sources defined on top of **views**: warehouse metadata reports when the view was last altered, not when new data arrived in the underlying tables. To opt out of implicit freshness entirely, set `require_explicit_source_freshness = true` (or `ORCHESTRA_REQUIRE_EXPLICIT_SOURCE_FRESHNESS=true`). Sources without `loaded_at_field`/`loaded_at_query` are then excluded from state-aware orchestration and models depending on them always run; sources with an explicit config keep working as normal.
+
+### dbt-core 2.x (Fusion) support
+
+dbt-core 2.x rebuilt task execution on a Rust engine and no longer exposes `dbt.task.freshness` or `dbt.adapters` for Orchestra to patch in-process. On 2.x, `orc` automatically falls back to running dbt's own, unpatched `dbt source freshness`:
+
+- Sources with an explicit `loaded_at_field` or `loaded_at_query` behave exactly as on 1.x.
+- Sources without either are excluded from state-aware orchestration and their downstream models always run — the same outcome as `require_explicit_source_freshness`, since the adapter-specific fallbacks in the table above (e.g. Databricks `DESCRIBE HISTORY`) have no equivalent on 2.x.
+- The relation-existence check (`verify_relations_exist`, below) also needs `dbt.adapters` and is unavailable on 2.x: it fails soft and leaves reuse decisions unchanged, the same as an unreadable schema on 1.x.
+
 ### Verifying relations still exist
 
 State and source freshness cannot tell you whether a node's table or view is *actually there*. A relation dropped out of band, renamed, or never built in this target still looks clean in state, so it gets skipped and the run "succeeds" with a missing relation — as does pointing a warm state file at a fresh database or schema.

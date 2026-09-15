@@ -7,9 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-09-15
+
 ### Added
 
+- Support dbt-core 1.12.x, and run (with a reduced feature set) on dbt-core 2.x (Fusion). dbt-core 2.x moved task execution into its Rust engine and no longer exposes `dbt.task.freshness` / `dbt.adapters` for Orchestra to patch in-process, so on 2.x `orc` falls back to running dbt's own, unpatched `dbt source freshness`: sources with an explicit `loaded_at_field`/`loaded_at_query` behave exactly as on 1.x, while sources without either are excluded from state-aware orchestration (their downstream models always run), since the adapter-specific fallbacks (e.g. Databricks `DESCRIBE HISTORY`) have no 2.x equivalent. The relation-existence check likewise needs `dbt.adapters` and is unavailable on 2.x — it already fails soft and leaves reuse decisions unchanged, same as an unreadable schema on 1.x. See *dbt-core 2.x (Fusion) support* in the README.
 - The warehouse existence check (`verify_relations_exist` / `ORCHESTRA_VERIFY_RELATIONS_EXIST`) now logs how long it took, e.g. `Warehouse existence check for 3 node(s) took 0.42s.`
+
+### Changed
+
+- Widened the documented/supported dbt-core range from `>=1.10,<1.12` to `>=1.10,<1.13`, matching the range already used for development and testing.
+
+[1.4.0]: https://github.com/orchestra-hq/sao-paolo/releases/tag/v1.4.0
 
 ## [1.3.0] - 2026-09-10
 
