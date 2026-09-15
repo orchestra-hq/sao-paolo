@@ -80,7 +80,7 @@ def test_scoping_only_checks_the_source_a_direct_model_selector_actually_uses(
         ["orc", "dbt", "build", "--selector", "selector_x"], env, "unscoped"
     )
     assert unscoped.returncode == 0
-    assert "Collected 2 source(s) information." in unscoped.stdout
+    assert "Collected 3 source(s) information." in unscoped.stdout
 
     env["ORCHESTRA_SCOPE_SOURCE_FRESHNESS_TO_SELECTION"] = "true"
     scoped = _run(["orc", "dbt", "build", "--selector", "selector_x"], env, "scoped")
@@ -112,9 +112,10 @@ def test_scoping_with_a_union_selector_picks_up_both_sources(
 ) -> None:
     """selector_z is a union of two independent, unrelated criteria -- model_a
     and stg_unused_page_views -- rather than a bare fqn or an ancestor/descendant
-    expansion of one node. It deliberately touches both of the project's sources,
-    so scoping should collect both: the exclusion in the other tests isn't a
-    hardcoded special case, it just follows whatever the selector resolves to."""
+    expansion of one node. It deliberately touches both sources any model in
+    this project actually uses (raw and raw_unused), so scoping should collect
+    both: the exclusion in the other tests isn't a hardcoded special case, it
+    just follows whatever the selector resolves to."""
     env = _csr_env(tmp_path, "csr_scoping_test_z")
     assert _run(["orc", "dbt", "seed"], env, "seed").returncode == 0
 
@@ -122,3 +123,28 @@ def test_scoping_with_a_union_selector_picks_up_both_sources(
     scoped = _run(["orc", "dbt", "build", "--selector", "selector_z"], env, "scoped")
     assert scoped.returncode == 0
     assert "Collected 2 source(s) information." in scoped.stdout
+
+
+@requires_postgres
+def test_scoping_with_a_bare_build_still_excludes_a_source_no_model_uses(
+    tmp_path: Path,
+) -> None:
+    """No --select/--selector at all resolves to every model in the project, so
+    scoping is a no-op for the sources those models actually reference: raw
+    (used by model_a, configured with a loaded_at_query and no `freshness:`
+    block) and raw_unused (used by stg_unused_page_views) both still get
+    checked. raw_orphan -- also loaded_at_query, no freshness block, same as
+    raw -- but referenced by no model at all, is excluded regardless, because
+    it was never an ancestor of anything to begin with."""
+    env = _csr_env(tmp_path, "csr_scoping_test_bare")
+    assert _run(["orc", "dbt", "seed"], env, "seed").returncode == 0
+
+    env["ORCHESTRA_SCOPE_SOURCE_FRESHNESS_TO_SELECTION"] = "true"
+    scoped = _run(["orc", "dbt", "build"], env, "scoped bare build")
+    assert scoped.returncode == 0
+    assert "Collected 2 source(s) information." in scoped.stdout
+    assert "raw_orphan" not in scoped.stdout
+    assert (
+        "Unable to calculate source freshness for "
+        "source.concurrent_selector_repro.raw.raw_events"
+    ) not in scoped.stdout
