@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -63,6 +64,14 @@ def _run(
     print(f"\n\n=== {label} STDOUT:\n{result.stdout}")
     print(f"\n\n=== {label} STDERR:\n{result.stderr}")
     return result
+
+
+def _sources_json_results() -> dict[str, dict]:
+    """dbt's own `target/sources.json`, written by the `dbt source freshness`
+    invocation _run just triggered -- keyed by unique_id so tests can check what
+    dbt actually computed for a specific source, not just how many it collected."""
+    raw = json.loads((_REPRO_PROJECT / "target" / "sources.json").read_text())
+    return {result["unique_id"]: result for result in raw["results"]}
 
 
 @requires_postgres
@@ -135,7 +144,12 @@ def test_scoping_with_a_bare_build_still_excludes_a_source_no_model_uses(
     block) and raw_unused (used by stg_unused_page_views) both still get
     checked. raw_orphan -- also loaded_at_query, no freshness block, same as
     raw -- but referenced by no model at all, is excluded regardless, because
-    it was never an ancestor of anything to begin with."""
+    it was never an ancestor of anything to begin with.
+
+    Also inspects dbt's own target/sources.json to confirm raw.raw_events isn't
+    just "not erroring" -- dbt's native loaded_at_query execution actually pulled
+    back the real max(event_at) from the seed (2025-01-03 09:15:00, the latest row
+    in seeds/raw_events.csv), not a fallback/default value."""
     env = _csr_env(tmp_path, "csr_scoping_test_bare")
     assert _run(["orc", "dbt", "seed"], env, "seed").returncode == 0
 
@@ -148,3 +162,12 @@ def test_scoping_with_a_bare_build_still_excludes_a_source_no_model_uses(
         "Unable to calculate source freshness for "
         "source.concurrent_selector_repro.raw.raw_events"
     ) not in scoped.stdout
+
+    sources = _sources_json_results()
+    assert set(sources) == {
+        "source.concurrent_selector_repro.raw.raw_events",
+        "source.concurrent_selector_repro.raw_unused.raw_page_views",
+    }
+    raw_events = sources["source.concurrent_selector_repro.raw.raw_events"]
+    assert raw_events["status"] == "pass"
+    assert raw_events["max_loaded_at"] == "2025-01-03T09:15:00+00:00"
