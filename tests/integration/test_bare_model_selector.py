@@ -69,6 +69,8 @@ def test_no_select_or_selector_resolves_to_every_model_in_the_project(
     Uses a dummy snowflake profile since dbt-postgres isn't installed here and
     dbt ls only needs a profile it can render, not a live connection.
     """
+    pytest.importorskip("dbt.adapters.snowflake")
+
     (tmp_path / "profiles.yml").write_text(
         """
 concurrent_selector_repro:
