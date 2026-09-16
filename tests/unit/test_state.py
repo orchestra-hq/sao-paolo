@@ -1093,7 +1093,9 @@ class TestSaveStateGCS:
             side_effect=DefaultCredentialsError("no credentials"),
         ):
             with pytest.raises(StateSaveError):
-                save_state(StateApiModel(state={}), updated_asset_external_ids=set())
+                save_state(
+                    StateApiModel(state={}), updated_asset_external_ids=set()
+                )
 
 
 class TestAzureStateBackend:

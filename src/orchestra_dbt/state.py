@@ -30,7 +30,9 @@ def load_state() -> StateApiModel:
     return resolved_state_backend().load()
 
 
-def save_state(state: StateApiModel, updated_asset_external_ids: set[str]) -> None:
+def save_state(
+    state: StateApiModel, updated_asset_external_ids: set[str]
+) -> None:
     """Merge only this run's updated nodes onto the latest stored state.
 
     Re-reads state at save time so a run with a narrow selector does not revert

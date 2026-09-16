@@ -618,9 +618,7 @@ class TestEndToEndFromStateThroughTheGate:
                 integration_account_id="acct", local_run=False
             ),
         )
-        asset_id = (
-            "acct.db.analytics.legacy_alias"  # integration_account_id.relation_name
-        )
+        asset_id = "acct.db.analytics.legacy_alias"  # integration_account_id.relation_name
         state = StateApiModel(
             state={
                 asset_id: StateItem(
