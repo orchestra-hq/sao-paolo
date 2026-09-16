@@ -17,7 +17,7 @@ from .constants import SERVICE_NAME
 from .dag import construct_dag
 from .full_refresh_finder import is_full_refresh_requested
 from .logger import log_debug, log_error, log_info, log_reused_nodes, log_warn
-from .ls import get_paths_to_run
+from .ls import get_nodes_to_run
 from .models import (
     MaterialisationNode,
     NodeType,
@@ -164,10 +164,14 @@ def main(args: tuple[str, ...]) -> None:
     _validate_environment()
 
     try:
-        paths_to_run: list[str] | None = get_paths_to_run(dbt_args[2:])
+        nodes_to_run = get_nodes_to_run(dbt_args[2:])
     except ImportError as import_error:
         log_error(dbt_core_import_error_message(import_error))
         sys.exit(1)
+
+    # Paths are matched against node paths from the manifest; freshness scoping
+    # needs fqn selectors instead (see get_args_for_source_freshness).
+    paths_to_run: list[str] | None = nodes_to_run.paths if nodes_to_run else None
 
     try:
         source_freshness: SourceFreshness | None = get_source_freshness(
@@ -176,7 +180,7 @@ def main(args: tuple[str, ...]) -> None:
             user_args=dbt_args,
             require_explicit_source_freshness=settings.require_explicit_source_freshness,
             scope_to_selection=settings.scope_source_freshness_to_selection,
-            paths_to_run=paths_to_run,
+            selectors_to_run=nodes_to_run.selectors if nodes_to_run else None,
         )
     except ImportError as import_error:
         log_error(dbt_core_import_error_message(import_error))

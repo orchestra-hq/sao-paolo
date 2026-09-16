@@ -1,8 +1,29 @@
+import json
+from dataclasses import dataclass, field
+
 from .compatibility import dbt_core_import_error_message
 from .constants import RESOURCE_TYPES_TO_LS
 from .logger import log_debug, log_error, log_info, log_warn
 
 DBT_LS_ARGS_NOT_ACCEPTED = ["--empty"]
+
+
+@dataclass(frozen=True)
+class NodesToRun:
+    """The two forms of "which nodes will this run build", from one `dbt ls`.
+
+    `paths` are `original_file_path`s -- relative to the package that owns each
+    node -- which is what the manifest records and what node paths are compared
+    against elsewhere.
+
+    `selectors` are dotted fqns (`package.dir.name`), the form dbt's own
+    `ls --output selector` emits for feeding a selection back into `--select`.
+    They are NOT interchangeable with `paths`: see get_args_for_source_freshness
+    for why selecting by path breaks on package-owned nodes.
+    """
+
+    paths: list[str] = field(default_factory=list)
+    selectors: list[str] = field(default_factory=list)
 
 
 def get_args_for_ls(user_args: tuple) -> list[str]:
@@ -11,7 +32,17 @@ def get_args_for_ls(user_args: tuple) -> list[str]:
     for resource_type in RESOURCE_TYPES_TO_LS:
         resource_type_args.append("--resource-type")
         resource_type_args.append(resource_type)
-    output_args = ["--output", "path", "-q"]
+    # Both keys in a single invocation: paths and fqn-selectors feed different
+    # consumers, and re-parsing a large project just to get the other form is
+    # expensive (tens of seconds on projects with thousands of nodes).
+    output_args = [
+        "--output",
+        "json",
+        "--output-keys",
+        "original_file_path",
+        "fqn",
+        "-q",
+    ]
 
     # Remove args not accepted by dbt ls
     list_user_args = []
@@ -23,7 +54,20 @@ def get_args_for_ls(user_args: tuple) -> list[str]:
     return command_args + resource_type_args + list_user_args + output_args
 
 
-def get_paths_to_run(args: tuple) -> list[str] | None:
+def parse_ls_output(lines: list[str]) -> NodesToRun:
+    """Turn `dbt ls --output json` lines into both selection forms."""
+    paths: list[str] = []
+    selectors: list[str] = []
+    for line in lines:
+        node = json.loads(line)
+        if path := node.get("original_file_path"):
+            paths.append(path)
+        if fqn := node.get("fqn"):
+            selectors.append(".".join(fqn))
+    return NodesToRun(paths=paths, selectors=selectors)
+
+
+def get_nodes_to_run(args: tuple) -> NodesToRun | None:
     try:
         from dbt.cli.main import (
             dbtRunner,
@@ -33,7 +77,7 @@ def get_paths_to_run(args: tuple) -> list[str] | None:
         log_error(dbt_core_import_error_message(missing_dbt_core_error))
         raise missing_dbt_core_error
 
-    log_info("Finding node paths to be executed:")
+    log_info("Finding nodes to be executed:")
 
     try:
         res: dbtRunnerResult = dbtRunner().invoke(get_args_for_ls(args))
@@ -43,7 +87,7 @@ def get_paths_to_run(args: tuple) -> list[str] | None:
         if isinstance(res.result, list) and all(
             isinstance(item, str) for item in res.result
         ):
-            return res.result
+            return parse_ls_output(res.result)
 
         raise ValueError(f"Unexpected result from dbt ls: {res.result}")
     except Exception as e:

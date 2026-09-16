@@ -28,19 +28,19 @@ class TestGetArgsForSourceFreshness:
             "-q",
         ]
 
-    def test_default_ignores_paths_to_run(self):
-        """scope_to_selection defaults to off: paths_to_run is ignored entirely."""
-        assert get_args_for_source_freshness((), paths_to_run=["models/a.sql"]) == [
+    def test_default_ignores_selectors_to_run(self):
+        """scope_to_selection defaults to off: selectors_to_run is ignored entirely."""
+        assert get_args_for_source_freshness((), selectors_to_run=["proj.a"]) == [
             "source",
             "freshness",
             "-q",
         ]
 
-    def test_scoped_selects_ancestors_of_each_path(self):
+    def test_scoped_selects_ancestors_of_each_node(self):
         args = get_args_for_source_freshness(
             ("--target", "prod"),
             scope_to_selection=True,
-            paths_to_run=["models/a.sql", "models/b.sql"],
+            selectors_to_run=["proj.a", "proj.b"],
         )
 
         assert args == [
@@ -50,32 +50,53 @@ class TestGetArgsForSourceFreshness:
             "--target",
             "prod",
             "--select",
-            "+path:models/a.sql",
-            "+path:models/b.sql",
+            "+proj.a",
+            "+proj.b",
         ]
 
-    def test_scoped_with_no_paths_to_run_omits_select(self):
+    def test_scoped_selects_by_fqn_never_by_path(self):
+        """The selection must not use `path:`. dbt's PathSelectorMethod globs the
+        real filesystem from the project root, so a node owned by an installed
+        package -- whose original_file_path is relative to that package -- never
+        matches. A project whose models all live in packages would select zero
+        nodes and collect zero sources."""
+        args = get_args_for_source_freshness(
+            (),
+            scope_to_selection=True,
+            selectors_to_run=["a_package.staging.stg_thing"],
+        )
+
+        assert args == [
+            "source",
+            "freshness",
+            "-q",
+            "--select",
+            "+a_package.staging.stg_thing",
+        ]
+        assert not any(arg.startswith("+path:") for arg in args)
+
+    def test_scoped_with_no_selectors_to_run_omits_select(self):
         assert get_args_for_source_freshness(
-            (), scope_to_selection=True, paths_to_run=None
+            (), scope_to_selection=True, selectors_to_run=None
         ) == ["source", "freshness", "-q"]
 
         assert get_args_for_source_freshness(
-            (), scope_to_selection=True, paths_to_run=[]
+            (), scope_to_selection=True, selectors_to_run=[]
         ) == ["source", "freshness", "-q"]
 
-    def test_scoped_is_indifferent_to_how_paths_to_run_was_selected(self):
-        """paths_to_run is already resolved (by dbt ls, elsewhere) by the time this
-        runs -- --select, --selector, whatever was used to get there doesn't matter,
-        only the resulting paths do."""
+    def test_scoped_is_indifferent_to_how_selectors_to_run_was_selected(self):
+        """selectors_to_run is already resolved (by dbt ls, elsewhere) by the time
+        this runs -- --select, --selector, whatever was used to get there doesn't
+        matter, only the resulting nodes do."""
         via_selector = get_args_for_source_freshness(
             ("--selector", "nightly"),
             scope_to_selection=True,
-            paths_to_run=["models/a.sql"],
+            selectors_to_run=["proj.a"],
         )
         via_select = get_args_for_source_freshness(
             ("--select", "tag:nightly"),
             scope_to_selection=True,
-            paths_to_run=["models/a.sql"],
+            selectors_to_run=["proj.a"],
         )
 
         assert (
@@ -86,7 +107,7 @@ class TestGetArgsForSourceFreshness:
                 "freshness",
                 "-q",
                 "--select",
-                "+path:models/a.sql",
+                "+proj.a",
             ]
         )
 
@@ -114,7 +135,7 @@ class TestGetSourceFreshness:
 
     def test_default_checks_every_source_and_ignores_selection(self):
         mock_runner = Mock()
-        mock_runner.invoke.return_value = None
+        mock_runner.invoke.return_value = Mock(success=True, exception=None)
         mock_runner_factory = Mock(return_value=mock_runner)
 
         freshness_result = {
@@ -136,7 +157,7 @@ class TestGetSourceFreshness:
                 return_value=freshness_result,
             ):
                 result = get_source_freshness(
-                    ("--target", "prod"), paths_to_run=["models/a.sql"]
+                    ("--target", "prod"), selectors_to_run=["proj.a"]
                 )
 
         mock_runner.invoke.assert_called_once_with(
@@ -151,7 +172,7 @@ class TestGetSourceFreshness:
 
     def test_scoped_passes_ancestor_selection_to_dbt(self):
         mock_runner = Mock()
-        mock_runner.invoke.return_value = None
+        mock_runner.invoke.return_value = Mock(success=True, exception=None)
         mock_runner_factory = Mock(return_value=mock_runner)
 
         freshness_result = {
@@ -171,7 +192,7 @@ class TestGetSourceFreshness:
                 result = get_source_freshness(
                     ("--target", "prod"),
                     scope_to_selection=True,
-                    paths_to_run=["models/a.sql"],
+                    selectors_to_run=["proj.a"],
                 )
 
         mock_runner.invoke.assert_called_once_with(
@@ -182,7 +203,7 @@ class TestGetSourceFreshness:
                 "--target",
                 "prod",
                 "--select",
-                "+path:models/a.sql",
+                "+proj.a",
             ]
         )
         assert result == SourceFreshness(
@@ -190,12 +211,12 @@ class TestGetSourceFreshness:
         )
 
     def test_scoped_still_runs_databricks_fallback_for_a_used_source(self):
-        """Scoping restricts which sources dbt selects (--select +path:X), it does
+        """Scoping restricts which sources dbt selects (--select +<fqn>), it does
         not change what the runner does for a source dbt does select. A Databricks
         source with no loaded_at_field/query -- in scope -- must still hit the
         DESCRIBE HISTORY fallback, exactly as when scoping is off."""
         mock_runner = Mock()
-        mock_runner.invoke.return_value = None
+        mock_runner.invoke.return_value = Mock(success=True, exception=None)
         mock_runner_factory = Mock(return_value=mock_runner)
         modules = self._patched_dbt_modules(mock_runner_factory)
 
@@ -207,7 +228,7 @@ class TestGetSourceFreshness:
                 get_source_freshness(
                     (),
                     scope_to_selection=True,
-                    paths_to_run=["models/a.sql"],
+                    selectors_to_run=["proj.a"],
                 )
 
         freshness_task = modules["dbt.task.freshness"].FreshnessTask
@@ -232,3 +253,93 @@ class TestGetSourceFreshness:
 
         fake_handler.assert_called_once_with(runner, compiled_node, None)
         assert result is fallback_result
+
+    def test_falls_back_to_unscoped_when_scoping_matches_no_sources(self):
+        """A selection matching nothing is not an error to dbt: it warns "Nothing to
+        do" (which our -q swallows) and still writes a valid, empty sources.json. So
+        an empty scoped result is indistinguishable from "this project has no
+        sources" unless we re-run unscoped -- which is what turned the real-world
+        selection bug into a silent "Collected 0 source(s)"."""
+        mock_runner = Mock()
+        mock_runner.invoke.return_value = Mock(success=True, exception=None)
+        mock_runner_factory = Mock(return_value=mock_runner)
+
+        scoped_then_unscoped = [
+            {"results": []},
+            {
+                "results": [
+                    {
+                        "unique_id": "source.proj.raw.x",
+                        "max_loaded_at": datetime(2026, 3, 31),
+                    }
+                ]
+            },
+        ]
+
+        with patch.dict("sys.modules", self._patched_dbt_modules(mock_runner_factory)):
+            with patch(
+                "src.orchestra_dbt.source_freshness.load_json",
+                side_effect=scoped_then_unscoped,
+            ):
+                result = get_source_freshness(
+                    (),
+                    scope_to_selection=True,
+                    selectors_to_run=["a_package.staging.stg_thing"],
+                )
+
+        assert mock_runner.invoke.call_count == 2
+        scoped_args, unscoped_args = [
+            c.kwargs["args"] for c in mock_runner.invoke.call_args_list
+        ]
+        assert "+a_package.staging.stg_thing" in scoped_args
+        assert "--select" not in unscoped_args
+        assert result == SourceFreshness(
+            sources={"source.proj.raw.x": datetime(2026, 3, 31)}
+        )
+
+    def test_does_not_fall_back_when_scoping_legitimately_found_sources(self):
+        mock_runner = Mock()
+        mock_runner.invoke.return_value = Mock(success=True, exception=None)
+        mock_runner_factory = Mock(return_value=mock_runner)
+
+        freshness_result = {
+            "results": [
+                {
+                    "unique_id": "source.proj.raw.x",
+                    "max_loaded_at": datetime(2026, 3, 31),
+                }
+            ]
+        }
+
+        with patch.dict("sys.modules", self._patched_dbt_modules(mock_runner_factory)):
+            with patch(
+                "src.orchestra_dbt.source_freshness.load_json",
+                return_value=freshness_result,
+            ):
+                get_source_freshness(
+                    (), scope_to_selection=True, selectors_to_run=["proj.a"]
+                )
+
+        mock_runner.invoke.assert_called_once()
+
+    def test_warns_when_dbt_reports_the_freshness_run_failed(self):
+        """dbtRunner never raises -- it catches everything and reports via `success`
+        -- so an internal failure is otherwise indistinguishable from a clean run
+        that found nothing."""
+        mock_runner = Mock()
+        mock_runner.invoke.return_value = Mock(
+            success=False, exception=RuntimeError("boom")
+        )
+        mock_runner_factory = Mock(return_value=mock_runner)
+
+        with patch.dict("sys.modules", self._patched_dbt_modules(mock_runner_factory)):
+            with patch(
+                "src.orchestra_dbt.source_freshness.load_json",
+                return_value={"results": []},
+            ):
+                with patch("src.orchestra_dbt.source_freshness.log_warn") as warn:
+                    get_source_freshness(())
+
+        assert any(
+            "did not complete successfully" in str(c) for c in warn.call_args_list
+        )

@@ -74,6 +74,12 @@ jobs:
           PGPASSWORD: postgres
           PGDATABASE: tutorial
         run: uv run pytest tests/integration/test_concurrent_selector_repro.py -sv
+      # These need an adapter *registered* (never connected) to parse and select,
+      # so they skip in the `test` job, which installs dbt-core alone.
+      - name: Run node-selection tests
+        run: |
+          uv run pytest tests/integration/test_package_only_selection.py \
+            tests/integration/test_bare_model_selector.py -sv
 
   orchestra:
     runs-on: ubuntu-latest

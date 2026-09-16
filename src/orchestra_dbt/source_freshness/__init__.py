@@ -12,17 +12,27 @@ from .fallbacks.registry import FALLBACK_BY_ADAPTER_TYPE, loaded_at_fields_unset
 def get_args_for_source_freshness(
     user_args: tuple | list[str],
     scope_to_selection: bool = False,
-    paths_to_run: list[str] | None = None,
+    selectors_to_run: list[str] | None = None,
 ) -> list[str]:
     """Build the `dbt source freshness` CLI args: forwards `--target`, and when
-    scoped, an ancestor-expanded `--select` built from `paths_to_run`."""
+    scoped, an ancestor-expanded `--select` built from `selectors_to_run`.
+
+    Selection is by dotted fqn (`package.dir.name`), NOT by `path:`. dbt's
+    PathSelectorMethod resolves `path:` by globbing the real filesystem from the
+    project root, so a node owned by an installed package -- whose
+    original_file_path is relative to that package, not to the root -- never
+    matches anything. In a project whose models all live in packages, every
+    `path:` criterion misses, dbt selects zero nodes, and source freshness
+    silently comes back empty. fqns are read from the manifest and are
+    package-qualified, so they resolve for root- and package-owned nodes alike.
+    """
     args: list[str] = ["source", "freshness", "-q"]
     target = find_target_in_args(list(user_args))
     if target:
         args.extend(["--target", target])
-    if scope_to_selection and paths_to_run:
+    if scope_to_selection and selectors_to_run:
         args.append("--select")
-        args.extend(f"+path:{path}" for path in paths_to_run)
+        args.extend(f"+{selector}" for selector in selectors_to_run)
     return args
 
 
@@ -36,7 +46,7 @@ def get_source_freshness(
     user_args: tuple | list[str],
     require_explicit_source_freshness: bool = False,
     scope_to_selection: bool = False,
-    paths_to_run: list[str] | None = None,
+    selectors_to_run: list[str] | None = None,
 ) -> SourceFreshness | None:
     try:
         from dbt.artifacts.resources.v1.components import FreshnessThreshold
@@ -103,12 +113,34 @@ def get_source_freshness(
     SourceDefinition.has_freshness = True  # pyright: ignore[reportAttributeAccessIssue]
     FreshnessTask.get_runner_type = lambda self, _: OrchestraFreshnessRunner
 
-    try:
-        dbtRunner().invoke(
-            args=get_args_for_source_freshness(
-                user_args, scope_to_selection, paths_to_run
-            )
+    def run_freshness(scoped: bool) -> list[dict]:
+        result = dbtRunner().invoke(
+            args=get_args_for_source_freshness(user_args, scoped, selectors_to_run)
         )
+        # dbtRunner never raises -- it catches everything and reports via `success`,
+        # so without this an internal failure is indistinguishable from a clean run
+        # that found nothing.
+        if not result.success:
+            log_warn(
+                f"dbt source freshness did not complete successfully: {result.exception}"
+            )
+        return load_json("target/sources.json")["results"]
+
+    try:
+        results = run_freshness(scope_to_selection)
+
+        if scope_to_selection and selectors_to_run and not results:
+            # A selection matching nothing is not an error to dbt: it warns
+            # "Nothing to do" (swallowed by our -q) and still writes a valid,
+            # empty sources.json. Without this fallback that is silently
+            # indistinguishable from "this project has no sources", and every
+            # downstream model loses its freshness signal.
+            log_warn(
+                "Scoped source freshness matched no sources. Falling back to an "
+                "unscoped run so freshness is still collected."
+            )
+            results = run_freshness(False)
+
         if sources_without_explicit_freshness:
             log_warn(
                 f"{len(sources_without_explicit_freshness)} source(s) have no explicit freshness "
@@ -118,7 +150,7 @@ def get_source_freshness(
         return SourceFreshness(
             sources={
                 source["unique_id"]: source["max_loaded_at"]
-                for source in load_json("target/sources.json")["results"]
+                for source in results
                 if source["unique_id"] not in sources_without_explicit_freshness
             }
         )
