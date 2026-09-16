@@ -114,7 +114,9 @@ class TestGetSourceFreshness:
 
     def test_default_checks_every_source_and_ignores_selection(self):
         mock_runner = Mock()
-        mock_runner.invoke.return_value = None
+        mock_runner.invoke.return_value = Mock(
+            success=True, exception=None, result=Mock()
+        )
         mock_runner_factory = Mock(return_value=mock_runner)
 
         freshness_result = {
@@ -151,7 +153,9 @@ class TestGetSourceFreshness:
 
     def test_scoped_passes_ancestor_selection_to_dbt(self):
         mock_runner = Mock()
-        mock_runner.invoke.return_value = None
+        mock_runner.invoke.return_value = Mock(
+            success=True, exception=None, result=Mock()
+        )
         mock_runner_factory = Mock(return_value=mock_runner)
 
         freshness_result = {
@@ -195,7 +199,9 @@ class TestGetSourceFreshness:
         source with no loaded_at_field/query -- in scope -- must still hit the
         DESCRIBE HISTORY fallback, exactly as when scoping is off."""
         mock_runner = Mock()
-        mock_runner.invoke.return_value = None
+        mock_runner.invoke.return_value = Mock(
+            success=True, exception=None, result=Mock()
+        )
         mock_runner_factory = Mock(return_value=mock_runner)
         modules = self._patched_dbt_modules(mock_runner_factory)
 
@@ -232,3 +238,83 @@ class TestGetSourceFreshness:
 
         fake_handler.assert_called_once_with(runner, compiled_node, None)
         assert result is fallback_result
+
+    def test_aborts_rather_than_reading_stale_output_when_the_run_failed(self):
+        """dbtRunner reports failure via the result rather than raising, and a failed
+        run leaves any previous sources.json in place. Reading it would reuse stale
+        timestamps and wrongly mark sources unchanged, so bail out and let the caller
+        run dbt unmodified."""
+        mock_runner = Mock()
+        mock_runner.invoke.return_value = Mock(
+            success=False, exception=RuntimeError("boom"), result=None
+        )
+        mock_runner_factory = Mock(return_value=mock_runner)
+
+        stale = {
+            "results": [
+                {
+                    "unique_id": "source.proj.raw.stale",
+                    "max_loaded_at": datetime(2020, 1, 1),
+                }
+            ]
+        }
+
+        with patch.dict("sys.modules", self._patched_dbt_modules(mock_runner_factory)):
+            with patch(
+                "src.orchestra_dbt.source_freshness.load_json", return_value=stale
+            ) as load_json:
+                result = get_source_freshness(())
+
+        assert result is None
+        load_json.assert_not_called()
+
+    def test_aborts_when_the_run_returned_no_result_at_all(self):
+        """dbtRunner also returns success=True with result=None (a clean ClickExit).
+        There is no fresh output to read in that case either."""
+        mock_runner = Mock()
+        mock_runner.invoke.return_value = Mock(
+            success=True, exception=None, result=None
+        )
+        mock_runner_factory = Mock(return_value=mock_runner)
+
+        with patch.dict("sys.modules", self._patched_dbt_modules(mock_runner_factory)):
+            with patch(
+                "src.orchestra_dbt.source_freshness.load_json",
+                return_value={"results": []},
+            ) as load_json:
+                result = get_source_freshness(())
+
+        assert result is None
+        load_json.assert_not_called()
+
+    def test_a_stale_source_does_not_abort_the_run(self):
+        """A source past its error_after threshold gets FreshnessStatus.Error, which
+        shares dbt's 'error' NodeStatus, so interpret_results reports success=False on
+        a run that executed perfectly. That is the normal thing source freshness exists
+        to detect -- keying the abort off `success` would disable state-aware
+        orchestration whenever any source went stale."""
+        mock_runner = Mock()
+        mock_runner.invoke.return_value = Mock(
+            success=False, exception=None, result=Mock()
+        )
+        mock_runner_factory = Mock(return_value=mock_runner)
+
+        freshness_result = {
+            "results": [
+                {
+                    "unique_id": "source.proj.raw.stale_but_real",
+                    "max_loaded_at": datetime(2020, 1, 1),
+                }
+            ]
+        }
+
+        with patch.dict("sys.modules", self._patched_dbt_modules(mock_runner_factory)):
+            with patch(
+                "src.orchestra_dbt.source_freshness.load_json",
+                return_value=freshness_result,
+            ):
+                result = get_source_freshness(())
+
+        assert result == SourceFreshness(
+            sources={"source.proj.raw.stale_but_real": datetime(2020, 1, 1)}
+        )

@@ -104,11 +104,18 @@ def get_source_freshness(
     FreshnessTask.get_runner_type = lambda self, _: OrchestraFreshnessRunner
 
     try:
-        dbtRunner().invoke(
+        result = dbtRunner().invoke(
             args=get_args_for_source_freshness(
                 user_args, scope_to_selection, paths_to_run
             )
         )
+        # dbtRunner reports failure via the result rather than raising, and a failed
+        # run leaves any previous sources.json untouched -- reading it would reuse
+        # stale timestamps and wrongly mark sources unchanged. Keyed off `exception`,
+        # not `success`: a stale source sets success=False on a run that worked fine.
+        if result.exception is not None or result.result is None:
+            raise RuntimeError(f"dbt source freshness did not run: {result.exception}")
+
         if sources_without_explicit_freshness:
             log_warn(
                 f"{len(sources_without_explicit_freshness)} source(s) have no explicit freshness "
