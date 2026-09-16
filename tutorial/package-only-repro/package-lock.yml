@@ -1,4 +1,0 @@
-packages:
-  - local: vendor/analytics_pkg
-    name: analytics_pkg
-sha1_hash: c4c629b8c60c7fbd6b0890bf043e96a1ae7757f2
