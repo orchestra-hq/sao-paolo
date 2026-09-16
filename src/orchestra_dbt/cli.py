@@ -173,6 +173,15 @@ def main(args: tuple[str, ...]) -> None:
             if settings.scope_source_freshness_to_selection
             else None
         )
+        if settings.scope_source_freshness_to_selection and selectors_to_run is None:
+            # Falling through with no selection means freshness runs unscoped, which
+            # is still correct but ignores the setting -- and could be slow enough to
+            # matter on a project with hundreds of sources. Say so rather than
+            # quietly reverting. (None is a failed resolve; [] is "nothing selected".)
+            log_warn(
+                "Could not resolve the selection for source freshness scoping. "
+                "Checking every source instead."
+            )
     except ImportError as import_error:
         log_error(dbt_core_import_error_message(import_error))
         sys.exit(1)

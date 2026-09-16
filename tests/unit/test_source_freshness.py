@@ -345,6 +345,27 @@ class TestGetSourceFreshness:
         assert result is None
         load_json.assert_not_called()
 
+    def test_aborts_when_the_run_returned_no_result_at_all(self):
+        """dbtRunner also returns success=True with result=None (a clean ClickExit,
+        e.g. nothing to do at the CLI layer). There is no fresh output to read in
+        that case either, so it must abort rather than fall through to whatever
+        sources.json happens to be on disk."""
+        mock_runner = Mock()
+        mock_runner.invoke.return_value = Mock(
+            success=True, exception=None, result=None
+        )
+        mock_runner_factory = Mock(return_value=mock_runner)
+
+        with patch.dict("sys.modules", self._patched_dbt_modules(mock_runner_factory)):
+            with patch(
+                "src.orchestra_dbt.source_freshness.load_json",
+                return_value={"results": []},
+            ) as load_json:
+                result = get_source_freshness(())
+
+        assert result is None
+        load_json.assert_not_called()
+
     def test_a_stale_source_does_not_abort_the_run(self):
         """A source past its error_after threshold gets FreshnessStatus.Error, which
         shares dbt's 'error' NodeStatus, so interpret_results reports success=False
