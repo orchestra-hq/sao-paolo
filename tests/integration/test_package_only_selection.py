@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from src.orchestra_dbt.ls import get_nodes_to_run
+from src.orchestra_dbt.ls import get_args_for_ls, get_nodes_to_run
 from src.orchestra_dbt.source_freshness import get_args_for_source_freshness
 
 _REPRO_PROJECT = Path(__file__).resolve().parents[2] / "tutorial" / "package-only-repro"
@@ -157,20 +157,11 @@ def test_json_paths_are_identical_to_the_previous_path_output(
     emitted. Pin that here, on a project where the paths are package-relative and
     so least likely to match by accident.
     """
-    legacy = package_only_project().invoke(
-        [
-            "ls",
-            "--resource-type",
-            "model",
-            "--resource-type",
-            "snapshot",
-            "--resource-type",
-            "seed",
-            "--output",
-            "path",
-            "-q",
-        ]
-    )
+    # Derived, not hardcoded: if RESOURCE_TYPES_TO_LS ever changes, both sides must
+    # still list the same nodes or this pins nothing.
+    legacy_args = get_args_for_ls(())
+    legacy_args[legacy_args.index("--output") :] = ["--output", "path", "-q"]
+    legacy = package_only_project().invoke(legacy_args)
     assert legacy.success, f"dbt ls failed: {legacy.exception}"
 
     nodes = get_nodes_to_run(())

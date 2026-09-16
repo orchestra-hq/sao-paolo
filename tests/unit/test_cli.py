@@ -78,3 +78,35 @@ def test_gate_is_skipped_when_the_setting_is_disabled(
     _run()
 
     assert stub_run == ["sweep"]
+
+
+def test_warns_when_scoping_is_on_but_the_selection_could_not_be_resolved(
+    stub_run: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed `dbt ls` leaves freshness unscoped, checking every source. Correct,
+    but it ignores the setting, so it must not happen silently -- and unlike an empty
+    result it isn't visible from the `Collected N source(s)` count."""
+    warnings: list[str] = []
+    monkeypatch.setattr(
+        cli,
+        "load_orchestra_dbt_settings",
+        lambda: OrchestraDbtSettings(
+            use_stateful=True, scope_source_freshness_to_selection=True
+        ),
+    )
+    monkeypatch.setattr(cli, "log_warn", lambda msg: warnings.append(msg))
+
+    _run()
+
+    assert any("Could not resolve the selection" in w for w in warnings)
+
+
+def test_stays_quiet_when_scoping_is_off(
+    stub_run: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    warnings: list[str] = []
+    monkeypatch.setattr(cli, "log_warn", lambda msg: warnings.append(msg))
+
+    _run()
+
+    assert not any("Could not resolve the selection" in w for w in warnings)

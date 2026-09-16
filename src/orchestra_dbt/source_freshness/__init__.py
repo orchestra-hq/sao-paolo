@@ -21,6 +21,10 @@ def get_args_for_source_freshness(
     filesystem from the project root, so package-owned nodes -- whose paths are
     relative to their package -- never match. fqns come from the manifest and are
     package-qualified, so they work for both.
+
+    fqns match as a prefix over the subtree, so a model sharing a name with a
+    sibling directory can pull in that directory's sources too. That widens the
+    check rather than narrowing it, so it costs time, never correctness.
     """
     args: list[str] = ["source", "freshness", "-q"]
     target = find_target_in_args(list(user_args))

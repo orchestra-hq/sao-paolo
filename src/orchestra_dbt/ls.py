@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 from typing import NamedTuple
 
@@ -56,8 +58,16 @@ def get_nodes_to_run(args: tuple) -> NodesToRun | None:
     log_info("Finding nodes to be executed:")
 
     try:
-        res: dbtRunnerResult = dbtRunner().invoke(get_args_for_ls(args))
+        # dbt prints every result to stdout even under -q, and with json output that
+        # is a blob per node rather than the readable path list this used to show.
+        # Capture it and print the paths ourselves, replaying the buffer on failure
+        # so dbt's own error text isn't swallowed with it.
+        dbt_stdout = io.StringIO()
+        with contextlib.redirect_stdout(dbt_stdout):
+            res: dbtRunnerResult = dbtRunner().invoke(get_args_for_ls(args))
+
         if not res.success:
+            print(dbt_stdout.getvalue(), end="")
             raise ValueError(f"dbt ls failed to run correctly: {res.exception}")
 
         if isinstance(res.result, list) and all(
@@ -67,11 +77,15 @@ def get_nodes_to_run(args: tuple) -> NodesToRun | None:
             # key raises, which the handler below turns into "couldn't resolve" --
             # better than silently returning two lists that disagree.
             nodes = [json.loads(line) for line in res.result]
-            return NodesToRun(
+            nodes_to_run = NodesToRun(
                 paths=[node["original_file_path"] for node in nodes],
                 selectors=[".".join(node["fqn"]) for node in nodes],
             )
+            for path in nodes_to_run.paths:
+                print(path)
+            return nodes_to_run
 
+        print(dbt_stdout.getvalue(), end="")
         raise ValueError(f"Unexpected result from dbt ls: {res.result}")
     except Exception as e:
         log_debug(e)

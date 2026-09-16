@@ -53,6 +53,15 @@ jobs:
         run: uv python install 3.13
       - name: Install dependencies
         run: uv sync --extra dev --extra adapters
+      # These need an adapter installed to render a profile and parse (nothing
+      # connects), so they skip in the `test` job, which has none. They self-skip
+      # to a green exit, so assert the adapter is present rather than letting the
+      # guard silently evaporate. No postgres service needed, so run them first.
+      - name: Run node-selection tests
+        run: |
+          uv run python -c "import dbt.adapters.postgres"
+          uv run pytest tests/integration/test_package_only_selection.py \
+            tests/integration/test_bare_model_selector.py -sv
       - name: Create .orchestra/dbt_state.json
         run: mkdir -p .orchestra && echo '{"state":{}}' > .orchestra/dbt_state.json
       - name: Run tutorial dbt build
@@ -74,12 +83,6 @@ jobs:
           PGPASSWORD: postgres
           PGDATABASE: tutorial
         run: uv run pytest tests/integration/test_concurrent_selector_repro.py -sv
-      # dbt needs an adapter installed to render a profile and parse, even though
-      # nothing here connects -- so these skip in the `test` job, which has none.
-      - name: Run node-selection tests
-        run: |
-          uv run pytest tests/integration/test_package_only_selection.py \
-            tests/integration/test_bare_model_selector.py -sv
 
   orchestra:
     runs-on: ubuntu-latest
