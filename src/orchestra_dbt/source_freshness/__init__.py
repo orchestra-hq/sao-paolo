@@ -115,17 +115,6 @@ def get_source_freshness(
                 user_args, scope_to_selection, selectors_to_run
             )
         )
-
-        results = load_json("target/sources.json")["results"]
-
-        if scope_to_selection and selectors_to_run and not results:
-            # Also legitimately empty when nothing selected has a source upstream,
-            # so warn rather than re-running unscoped over every source.
-            log_warn(
-                "Scoped source freshness matched no sources. Dependent models will "
-                "rebuild rather than reuse."
-            )
-
         if sources_without_explicit_freshness:
             log_warn(
                 f"{len(sources_without_explicit_freshness)} source(s) have no explicit freshness "
@@ -135,7 +124,7 @@ def get_source_freshness(
         return SourceFreshness(
             sources={
                 source["unique_id"]: source["max_loaded_at"]
-                for source in results
+                for source in load_json("target/sources.json")["results"]
                 if source["unique_id"] not in sources_without_explicit_freshness
             }
         )
