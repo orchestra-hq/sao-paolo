@@ -1,5 +1,3 @@
-import contextlib
-import io
 import json
 from typing import NamedTuple
 
@@ -55,17 +53,10 @@ def get_nodes_to_run(args: tuple) -> NodesToRun | None:
         log_error(dbt_core_import_error_message(missing_dbt_core_error))
         raise missing_dbt_core_error
 
-    log_info("Finding nodes to be executed")
-
-    # dbt writes every result to stdout even under -q, which with json output is a
-    # blob per node. Capture it so it stays out of the run log; on failure it holds
-    # dbt's own error text, so hand that to the debug log rather than dropping it.
-    dbt_stdout = io.StringIO()
+    log_info("Finding nodes to be executed:")
 
     try:
-        with contextlib.redirect_stdout(dbt_stdout):
-            res: dbtRunnerResult = dbtRunner().invoke(get_args_for_ls(args))
-
+        res: dbtRunnerResult = dbtRunner().invoke(get_args_for_ls(args))
         if not res.success:
             raise ValueError(f"dbt ls failed to run correctly: {res.exception}")
 
@@ -83,7 +74,6 @@ def get_nodes_to_run(args: tuple) -> NodesToRun | None:
 
         raise ValueError(f"Unexpected result from dbt ls: {res.result}")
     except Exception as e:
-        log_debug(dbt_stdout.getvalue())
         log_debug(e)
 
     log_warn("Error getting [dbt ls] of nodes that will be executed.")
