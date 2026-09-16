@@ -113,33 +113,38 @@ def get_source_freshness(
     SourceDefinition.has_freshness = True  # pyright: ignore[reportAttributeAccessIssue]
     FreshnessTask.get_runner_type = lambda self, _: OrchestraFreshnessRunner
 
-    def run_freshness(scoped: bool) -> list[dict]:
+    try:
         result = dbtRunner().invoke(
-            args=get_args_for_source_freshness(user_args, scoped, selectors_to_run)
+            args=get_args_for_source_freshness(
+                user_args, scope_to_selection, selectors_to_run
+            )
         )
-        # dbtRunner never raises -- it catches everything and reports via `success`,
-        # so without this an internal failure is indistinguishable from a clean run
-        # that found nothing.
+        # dbtRunner never raises -- it catches everything and reports via `success`
+        # -- and a failed run leaves any previous target/sources.json untouched.
+        # Reading it anyway would silently reuse stale timestamps and mark sources
+        # as having no new data. Abort instead: the caller falls back to running
+        # the dbt command unmodified.
         if not result.success:
-            log_warn(
+            raise RuntimeError(
                 f"dbt source freshness did not complete successfully: {result.exception}"
             )
-        return load_json("target/sources.json")["results"]
 
-    try:
-        results = run_freshness(scope_to_selection)
+        results = load_json("target/sources.json")["results"]
 
         if scope_to_selection and selectors_to_run and not results:
-            # A selection matching nothing is not an error to dbt: it warns
-            # "Nothing to do" (swallowed by our -q) and still writes a valid,
-            # empty sources.json. Without this fallback that is silently
-            # indistinguishable from "this project has no sources", and every
-            # downstream model loses its freshness signal.
+            # dbt's freshness task selects sources only, so "the selection matched
+            # nothing" and "the selection matched models that have no source
+            # upstream" both end up here -- an empty, valid sources.json and a
+            # "Nothing to do" warning our -q swallows. The second is legitimate, so
+            # don't re-run unscoped (that would check every source in the project,
+            # which is the exact thing scoping exists to avoid). Say so loudly
+            # instead: silence is what made this cost days to track down.
             log_warn(
-                "Scoped source freshness matched no sources. Falling back to an "
-                "unscoped run so freshness is still collected."
+                "Scoped source freshness matched no sources. Expected if nothing in "
+                "the selection has a source upstream; otherwise the selection is not "
+                "resolving and dependent models will rebuild rather than reuse. Unset "
+                "ORCHESTRA_SCOPE_SOURCE_FRESHNESS_TO_SELECTION to check every source."
             )
-            results = run_freshness(False)
 
         if sources_without_explicit_freshness:
             log_warn(

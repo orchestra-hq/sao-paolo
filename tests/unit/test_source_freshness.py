@@ -254,50 +254,32 @@ class TestGetSourceFreshness:
         fake_handler.assert_called_once_with(runner, compiled_node, None)
         assert result is fallback_result
 
-    def test_falls_back_to_unscoped_when_scoping_matches_no_sources(self):
-        """A selection matching nothing is not an error to dbt: it warns "Nothing to
-        do" (which our -q swallows) and still writes a valid, empty sources.json. So
-        an empty scoped result is indistinguishable from "this project has no
-        sources" unless we re-run unscoped -- which is what turned the real-world
-        selection bug into a silent "Collected 0 source(s)"."""
+    def test_warns_but_does_not_rerun_when_scoping_matches_no_sources(self):
+        """dbt's freshness task selects sources only, so a selection whose models
+        simply have no source upstream is indistinguishable from one that matched
+        nothing -- both give an empty sources.json. Re-running unscoped would check
+        every source in the project for the legitimate case, so warn instead."""
         mock_runner = Mock()
         mock_runner.invoke.return_value = Mock(success=True, exception=None)
         mock_runner_factory = Mock(return_value=mock_runner)
 
-        scoped_then_unscoped = [
-            {"results": []},
-            {
-                "results": [
-                    {
-                        "unique_id": "source.proj.raw.x",
-                        "max_loaded_at": datetime(2026, 3, 31),
-                    }
-                ]
-            },
-        ]
-
         with patch.dict("sys.modules", self._patched_dbt_modules(mock_runner_factory)):
             with patch(
                 "src.orchestra_dbt.source_freshness.load_json",
-                side_effect=scoped_then_unscoped,
+                return_value={"results": []},
             ):
-                result = get_source_freshness(
-                    (),
-                    scope_to_selection=True,
-                    selectors_to_run=["a_package.staging.stg_thing"],
-                )
+                with patch("src.orchestra_dbt.source_freshness.log_warn") as warn:
+                    result = get_source_freshness(
+                        (),
+                        scope_to_selection=True,
+                        selectors_to_run=["a_package.staging.stg_thing"],
+                    )
 
-        assert mock_runner.invoke.call_count == 2
-        scoped_args, unscoped_args = [
-            c.kwargs["args"] for c in mock_runner.invoke.call_args_list
-        ]
-        assert "+a_package.staging.stg_thing" in scoped_args
-        assert "--select" not in unscoped_args
-        assert result == SourceFreshness(
-            sources={"source.proj.raw.x": datetime(2026, 3, 31)}
-        )
+        mock_runner.invoke.assert_called_once()
+        assert any("matched no sources" in str(c) for c in warn.call_args_list)
+        assert result == SourceFreshness(sources={})
 
-    def test_does_not_fall_back_when_scoping_legitimately_found_sources(self):
+    def test_stays_quiet_when_scoping_legitimately_found_sources(self):
         mock_runner = Mock()
         mock_runner.invoke.return_value = Mock(success=True, exception=None)
         mock_runner_factory = Mock(return_value=mock_runner)
@@ -316,30 +298,39 @@ class TestGetSourceFreshness:
                 "src.orchestra_dbt.source_freshness.load_json",
                 return_value=freshness_result,
             ):
-                get_source_freshness(
-                    (), scope_to_selection=True, selectors_to_run=["proj.a"]
-                )
+                with patch("src.orchestra_dbt.source_freshness.log_warn") as warn:
+                    get_source_freshness(
+                        (), scope_to_selection=True, selectors_to_run=["proj.a"]
+                    )
 
         mock_runner.invoke.assert_called_once()
+        assert not any("matched no sources" in str(c) for c in warn.call_args_list)
 
-    def test_warns_when_dbt_reports_the_freshness_run_failed(self):
-        """dbtRunner never raises -- it catches everything and reports via `success`
-        -- so an internal failure is otherwise indistinguishable from a clean run
-        that found nothing."""
+    def test_aborts_rather_than_reading_stale_output_when_the_run_failed(self):
+        """dbtRunner never raises -- it reports failure via `success` -- and a failed
+        run leaves any previous target/sources.json in place. Reading it would reuse
+        stale timestamps and mark sources as having no new data, so bail out and let
+        the caller run dbt unmodified."""
         mock_runner = Mock()
         mock_runner.invoke.return_value = Mock(
             success=False, exception=RuntimeError("boom")
         )
         mock_runner_factory = Mock(return_value=mock_runner)
 
+        stale = {
+            "results": [
+                {
+                    "unique_id": "source.proj.raw.stale",
+                    "max_loaded_at": datetime(2020, 1, 1),
+                }
+            ]
+        }
+
         with patch.dict("sys.modules", self._patched_dbt_modules(mock_runner_factory)):
             with patch(
-                "src.orchestra_dbt.source_freshness.load_json",
-                return_value={"results": []},
-            ):
-                with patch("src.orchestra_dbt.source_freshness.log_warn") as warn:
-                    get_source_freshness(())
+                "src.orchestra_dbt.source_freshness.load_json", return_value=stale
+            ) as load_json:
+                result = get_source_freshness(())
 
-        assert any(
-            "did not complete successfully" in str(c) for c in warn.call_args_list
-        )
+        assert result is None
+        load_json.assert_not_called()
