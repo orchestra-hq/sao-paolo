@@ -55,11 +55,11 @@ def get_nodes_to_run(args: tuple) -> NodesToRun | None:
         log_error(dbt_core_import_error_message(missing_dbt_core_error))
         raise missing_dbt_core_error
 
-    log_info("Finding nodes to be executed:")
+    log_info("Finding nodes to be executed")
 
-    # dbt prints every result to stdout even under -q, and with json output that is
-    # a blob per node rather than the readable path list this used to show. Capture
-    # it and print the paths ourselves instead.
+    # dbt writes every result to stdout even under -q, which with json output is a
+    # blob per node. Capture it so it stays out of the run log; on failure it holds
+    # dbt's own error text, so hand that to the debug log rather than dropping it.
     dbt_stdout = io.StringIO()
 
     try:
@@ -76,19 +76,14 @@ def get_nodes_to_run(args: tuple) -> NodesToRun | None:
             # key raises, which the handler below turns into "couldn't resolve" --
             # better than silently returning two lists that disagree.
             nodes = [json.loads(line) for line in res.result]
-            nodes_to_run = NodesToRun(
+            return NodesToRun(
                 paths=[node["original_file_path"] for node in nodes],
                 selectors=[".".join(node["fqn"]) for node in nodes],
             )
-            for path in nodes_to_run.paths:
-                print(path)
-            return nodes_to_run
 
         raise ValueError(f"Unexpected result from dbt ls: {res.result}")
     except Exception as e:
-        # Whatever went wrong -- a failed invoke, unparseable output -- dbt's own
-        # error text is sitting in the buffer and is the useful part.
-        print(dbt_stdout.getvalue(), end="")
+        log_debug(dbt_stdout.getvalue())
         log_debug(e)
 
     log_warn("Error getting [dbt ls] of nodes that will be executed.")

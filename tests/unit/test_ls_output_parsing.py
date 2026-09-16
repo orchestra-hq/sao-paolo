@@ -61,10 +61,10 @@ def test_no_nodes_gives_empty_lists_not_none():
     assert nodes.selectors == []
 
 
-def test_dbt_output_is_replayed_when_parsing_fails(capsys):
-    """dbt's stdout is captured so we can print paths instead of JSON blobs. On any
-    failure that text is the useful part, so it has to be replayed rather than
-    swallowed with the buffer."""
+def test_dbt_error_output_reaches_the_debug_log_when_parsing_fails(capsys):
+    """dbt's stdout is captured so json blobs stay out of the run log. On failure that
+    text is the useful part, so it has to reach the debug log rather than be dropped
+    -- and it must not leak to stdout on the way."""
     runner = Mock()
 
     def _invoke(_args):
@@ -72,9 +72,14 @@ def test_dbt_output_is_replayed_when_parsing_fails(capsys):
         return Mock(success=True, exception=None, result=["not json at all"])
 
     runner.invoke.side_effect = _invoke
+    logged: list[str] = []
     with patch.dict(
         "sys.modules", {"dbt.cli.main": Mock(dbtRunner=Mock(return_value=runner))}
     ):
-        assert get_nodes_to_run(()) is None
+        with patch(
+            "src.orchestra_dbt.ls.log_debug", lambda msg: logged.append(str(msg))
+        ):
+            assert get_nodes_to_run(()) is None
 
-    assert "something dbt wants to tell you" in capsys.readouterr().out
+    assert any("something dbt wants to tell you" in entry for entry in logged)
+    assert "something dbt wants to tell you" not in capsys.readouterr().out
