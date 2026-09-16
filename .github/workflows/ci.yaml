@@ -74,8 +74,8 @@ jobs:
           PGPASSWORD: postgres
           PGDATABASE: tutorial
         run: uv run pytest tests/integration/test_concurrent_selector_repro.py -sv
-      # These need an adapter *registered* (never connected) to parse and select,
-      # so they skip in the `test` job, which installs dbt-core alone.
+      # dbt needs an adapter installed to render a profile and parse, even though
+      # nothing here connects -- so these skip in the `test` job, which has none.
       - name: Run node-selection tests
         run: |
           uv run pytest tests/integration/test_package_only_selection.py \

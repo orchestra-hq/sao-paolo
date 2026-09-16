@@ -17,14 +17,10 @@ def get_args_for_source_freshness(
     """Build the `dbt source freshness` CLI args: forwards `--target`, and when
     scoped, an ancestor-expanded `--select` built from `selectors_to_run`.
 
-    Selection is by dotted fqn (`package.dir.name`), NOT by `path:`. dbt's
-    PathSelectorMethod resolves `path:` by globbing the real filesystem from the
-    project root, so a node owned by an installed package -- whose
-    original_file_path is relative to that package, not to the root -- never
-    matches anything. In a project whose models all live in packages, every
-    `path:` criterion misses, dbt selects zero nodes, and source freshness
-    silently comes back empty. fqns are read from the manifest and are
-    package-qualified, so they resolve for root- and package-owned nodes alike.
+    Selects by dotted fqn, not `path:`: dbt resolves `path:` by globbing the real
+    filesystem from the project root, so package-owned nodes -- whose paths are
+    relative to their package -- never match. fqns come from the manifest and are
+    package-qualified, so they work for both.
     """
     args: list[str] = ["source", "freshness", "-q"]
     target = find_target_in_args(list(user_args))
@@ -119,31 +115,21 @@ def get_source_freshness(
                 user_args, scope_to_selection, selectors_to_run
             )
         )
-        # dbtRunner never raises -- it catches everything and reports via `success`
-        # -- and a failed run leaves any previous target/sources.json untouched.
-        # Reading it anyway would silently reuse stale timestamps and mark sources
-        # as having no new data. Abort instead: the caller falls back to running
-        # the dbt command unmodified.
-        if not result.success:
-            raise RuntimeError(
-                f"dbt source freshness did not complete successfully: {result.exception}"
-            )
+        # dbtRunner reports failure via the result rather than raising, and a failed
+        # run leaves any previous sources.json untouched -- reading it would reuse
+        # stale timestamps and wrongly mark sources unchanged. Keyed off `exception`,
+        # not `success`: a stale source sets success=False on a run that worked fine.
+        if result.exception is not None or result.result is None:
+            raise RuntimeError(f"dbt source freshness did not run: {result.exception}")
 
         results = load_json("target/sources.json")["results"]
 
         if scope_to_selection and selectors_to_run and not results:
-            # dbt's freshness task selects sources only, so "the selection matched
-            # nothing" and "the selection matched models that have no source
-            # upstream" both end up here -- an empty, valid sources.json and a
-            # "Nothing to do" warning our -q swallows. The second is legitimate, so
-            # don't re-run unscoped (that would check every source in the project,
-            # which is the exact thing scoping exists to avoid). Say so loudly
-            # instead: silence is what made this cost days to track down.
+            # Also legitimately empty when nothing selected has a source upstream,
+            # so warn rather than re-running unscoped over every source.
             log_warn(
-                "Scoped source freshness matched no sources. Expected if nothing in "
-                "the selection has a source upstream; otherwise the selection is not "
-                "resolving and dependent models will rebuild rather than reuse. Unset "
-                "ORCHESTRA_SCOPE_SOURCE_FRESHNESS_TO_SELECTION to check every source."
+                "Scoped source freshness matched no sources. Dependent models will "
+                "rebuild rather than reuse."
             )
 
         if sources_without_explicit_freshness:

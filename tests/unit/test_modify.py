@@ -444,7 +444,9 @@ class TestSelectorsFileSnapshot:
         # End-to-end: a user selectors.yml is mutated by a generated selector,
         # then fully restored to its pre-run bytes.
         monkeypatch.chdir(tmp_path)
-        original = "selectors:\n  - name: nightly\n    definition:\n      tag: nightly\n"
+        original = (
+            "selectors:\n  - name: nightly\n    definition:\n      tag: nightly\n"
+        )
         f = tmp_path / "selectors.yml"
         f.write_text(original)
 

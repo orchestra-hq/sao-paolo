@@ -10,16 +10,11 @@ DBT_LS_ARGS_NOT_ACCEPTED = ["--empty"]
 
 @dataclass(frozen=True)
 class NodesToRun:
-    """The two forms of "which nodes will this run build", from one `dbt ls`.
+    """Which nodes this run will build, in both forms dbt reports them.
 
-    `paths` are `original_file_path`s -- relative to the package that owns each
-    node -- which is what the manifest records and what node paths are compared
-    against elsewhere.
-
-    `selectors` are dotted fqns (`package.dir.name`), the form dbt's own
-    `ls --output selector` emits for feeding a selection back into `--select`.
-    They are NOT interchangeable with `paths`: see get_args_for_source_freshness
-    for why selecting by path breaks on package-owned nodes.
+    `paths` are `original_file_path`s, matched against node paths elsewhere.
+    `selectors` are dotted fqns, for feeding back into `--select`. Not
+    interchangeable -- see get_args_for_source_freshness.
     """
 
     paths: list[str] = field(default_factory=list)
@@ -32,9 +27,8 @@ def get_args_for_ls(user_args: tuple) -> list[str]:
     for resource_type in RESOURCE_TYPES_TO_LS:
         resource_type_args.append("--resource-type")
         resource_type_args.append(resource_type)
-    # Both keys in a single invocation: paths and fqn-selectors feed different
-    # consumers, and re-parsing a large project just to get the other form is
-    # expensive (tens of seconds on projects with thousands of nodes).
+    # Both keys in one invocation -- re-parsing a large project to get the other
+    # form costs tens of seconds. --output-keys is available from dbt 1.10.
     output_args = [
         "--output",
         "json",
@@ -55,14 +49,18 @@ def get_args_for_ls(user_args: tuple) -> list[str]:
 
 
 def parse_ls_output(lines: list[str]) -> NodesToRun:
-    """Turn `dbt ls --output json` lines into both selection forms."""
+    """Split `dbt ls --output json` -- one JSON object per node, carrying the keys
+    get_args_for_ls asked for -- into the two forms callers need."""
     paths: list[str] = []
     selectors: list[str] = []
     for line in lines:
         node = json.loads(line)
-        if path := node.get("original_file_path"):
+        path = node.get("original_file_path")
+        fqn = node.get("fqn")
+        if path:
             paths.append(path)
-        if fqn := node.get("fqn"):
+        if fqn:
+            # dbt joins fqn parts with "." to make a selector; see its ListTask.
             selectors.append(".".join(fqn))
     return NodesToRun(paths=paths, selectors=selectors)
 
