@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The warehouse existence check (`verify_relations_exist` / `ORCHESTRA_VERIFY_RELATIONS_EXIST`) now logs how long it took, e.g. `Warehouse existence check for 3 node(s) took 0.42s.`
 
+### Fixed
+
+- `dbt source freshness` failing no longer leaves a previous run's `target/sources.json` to be read as if it were current. `dbtRunner` reports failure through its result rather than raising, and a failed run leaves that file untouched, so the stale `max_loaded_at` values were read back and every source looked unchanged — silently reusing models that should have rebuilt. A source merely being *stale* still proceeds normally: that is a data state, not a run failure.
+
 ## [1.3.0] - 2026-09-10
 
 ### Added
