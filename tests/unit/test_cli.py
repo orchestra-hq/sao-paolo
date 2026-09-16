@@ -25,7 +25,8 @@ def stub_run(monkeypatch: pytest.MonkeyPatch) -> list[str]:
         lambda: OrchestraDbtSettings(use_stateful=True, verify_relations_exist=True),
     )
     monkeypatch.setattr(cli, "_validate_environment", lambda: None)
-    monkeypatch.setattr(cli, "get_nodes_to_run", lambda *a, **k: None)
+    monkeypatch.setattr(cli, "get_paths_to_run", lambda *a, **k: None)
+    monkeypatch.setattr(cli, "get_selectors_to_run", lambda *a, **k: None)
     # Tolerate added kwargs: this fixture must not break when a caller gains an option.
     monkeypatch.setattr(
         cli, "get_source_freshness", lambda **k: SourceFreshness(sources={})
