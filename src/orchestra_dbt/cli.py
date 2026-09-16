@@ -169,11 +169,9 @@ def main(args: tuple[str, ...]) -> None:
         log_error(dbt_core_import_error_message(import_error))
         sys.exit(1)
 
-    # Paths are matched against node paths; scoping needs fqns (see
-    # get_args_for_source_freshness). Unresolved means freshness runs unscoped --
-    # still correct, but it ignores the setting, so say so.
     paths_to_run: list[str] | None = nodes_to_run.paths if nodes_to_run else None
     if settings.scope_source_freshness_to_selection and nodes_to_run is None:
+        # With no selection to scope to, freshness checks every source instead.
         log_warn(
             "Could not resolve the selection for source freshness scoping. "
             "Checking every source instead."

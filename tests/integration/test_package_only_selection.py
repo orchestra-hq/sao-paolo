@@ -145,3 +145,35 @@ def test_scoped_freshness_args_resolve_to_the_source(package_only_project) -> No
 
     criteria = args[args.index("--select") + 1]
     assert _sources_selected_by(package_only_project, criteria) == [_SOURCE]
+
+
+def test_json_paths_are_identical_to_the_previous_path_output(
+    package_only_project,
+) -> None:
+    """Switching `dbt ls` to JSON must not change the paths themselves.
+
+    They are compared against each node's `dbt_path`, which construct_dag reads
+    from the manifest's `original_file_path` -- the same field `--output path`
+    emitted. Pin that here, on a project where the paths are package-relative and
+    so least likely to match by accident.
+    """
+    legacy = package_only_project().invoke(
+        [
+            "ls",
+            "--resource-type",
+            "model",
+            "--resource-type",
+            "snapshot",
+            "--resource-type",
+            "seed",
+            "--output",
+            "path",
+            "-q",
+        ]
+    )
+    assert legacy.success, f"dbt ls failed: {legacy.exception}"
+
+    nodes = get_nodes_to_run(())
+
+    assert nodes is not None
+    assert nodes.paths == list(legacy.result)
