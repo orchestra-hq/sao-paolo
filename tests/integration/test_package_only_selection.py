@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from src.orchestra_dbt.ls import get_paths_to_run, get_selectors_to_run
+from src.orchestra_dbt.ls import get_nodes_to_run
 from src.orchestra_dbt.source_freshness import get_args_for_source_freshness
 
 _REPRO_PROJECT = Path(__file__).resolve().parents[2] / "tutorial" / "package-only-repro"
@@ -108,8 +108,11 @@ def test_ls_reports_package_relative_paths_that_do_not_exist_at_the_root(
 ) -> None:
     """The premise of the bug: the reported path is real to dbt but is not a real
     file relative to the project root, because the package owns it."""
-    assert get_paths_to_run(()) == [_MODEL_PATH]
-    assert get_selectors_to_run(()) == [_MODEL_FQN]
+    nodes = get_nodes_to_run(())
+
+    assert nodes is not None
+    assert nodes.paths == [_MODEL_PATH]
+    assert nodes.selectors == [_MODEL_FQN]
 
     assert not (_REPRO_PROJECT / _MODEL_PATH).exists()
     assert (_REPRO_PROJECT / "dbt_packages" / "analytics_pkg" / _MODEL_PATH).exists()
@@ -131,8 +134,11 @@ def test_path_selection_finds_nothing_but_fqn_selection_finds_the_source(
 def test_scoped_freshness_args_resolve_to_the_source(package_only_project) -> None:
     """End to end: what get_args_for_source_freshness builds for this project has to
     actually select the source when handed back to dbt."""
+    nodes = get_nodes_to_run(())
+    assert nodes is not None
+
     args = get_args_for_source_freshness(
-        (), scope_to_selection=True, selectors_to_run=get_selectors_to_run(())
+        (), scope_to_selection=True, selectors_to_run=nodes.selectors
     )
 
     assert args == ["source", "freshness", "-q", "--select", f"+{_MODEL_FQN}"]
