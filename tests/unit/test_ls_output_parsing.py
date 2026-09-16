@@ -59,3 +59,22 @@ def test_no_nodes_gives_empty_lists_not_none():
     assert nodes is not None
     assert nodes.paths == []
     assert nodes.selectors == []
+
+
+def test_dbt_output_is_replayed_when_parsing_fails(capsys):
+    """dbt's stdout is captured so we can print paths instead of JSON blobs. On any
+    failure that text is the useful part, so it has to be replayed rather than
+    swallowed with the buffer."""
+    runner = Mock()
+
+    def _invoke(_args):
+        print("Encountered an error:\nRuntime Error: something dbt wants to tell you")
+        return Mock(success=True, exception=None, result=["not json at all"])
+
+    runner.invoke.side_effect = _invoke
+    with patch.dict(
+        "sys.modules", {"dbt.cli.main": Mock(dbtRunner=Mock(return_value=runner))}
+    ):
+        assert get_nodes_to_run(()) is None
+
+    assert "something dbt wants to tell you" in capsys.readouterr().out

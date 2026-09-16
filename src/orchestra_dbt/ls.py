@@ -57,17 +57,16 @@ def get_nodes_to_run(args: tuple) -> NodesToRun | None:
 
     log_info("Finding nodes to be executed:")
 
+    # dbt prints every result to stdout even under -q, and with json output that is
+    # a blob per node rather than the readable path list this used to show. Capture
+    # it and print the paths ourselves instead.
+    dbt_stdout = io.StringIO()
+
     try:
-        # dbt prints every result to stdout even under -q, and with json output that
-        # is a blob per node rather than the readable path list this used to show.
-        # Capture it and print the paths ourselves, replaying the buffer on failure
-        # so dbt's own error text isn't swallowed with it.
-        dbt_stdout = io.StringIO()
         with contextlib.redirect_stdout(dbt_stdout):
             res: dbtRunnerResult = dbtRunner().invoke(get_args_for_ls(args))
 
         if not res.success:
-            print(dbt_stdout.getvalue(), end="")
             raise ValueError(f"dbt ls failed to run correctly: {res.exception}")
 
         if isinstance(res.result, list) and all(
@@ -85,9 +84,11 @@ def get_nodes_to_run(args: tuple) -> NodesToRun | None:
                 print(path)
             return nodes_to_run
 
-        print(dbt_stdout.getvalue(), end="")
         raise ValueError(f"Unexpected result from dbt ls: {res.result}")
     except Exception as e:
+        # Whatever went wrong -- a failed invoke, unparseable output -- dbt's own
+        # error text is sitting in the buffer and is the useful part.
+        print(dbt_stdout.getvalue(), end="")
         log_debug(e)
 
     log_warn("Error getting [dbt ls] of nodes that will be executed.")
