@@ -14,7 +14,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `scope_source_freshness_to_selection` collected **zero** sources in projects whose models live in installed packages, silently disabling reuse for every model. The selection was built as `--select +path:<file>`, and dbt resolves `path:` by globbing the real filesystem from the project root — but `dbt ls` reports each node's path relative to the package that owns it, so a package-owned model never matched. dbt treats an empty selection as "Nothing to do": a warning (suppressed by the `-q` we pass) plus a valid, empty `sources.json`, so it surfaced only as `Collected 0 source(s) information.` with no error. Selection is now by dotted fqn (`--select +<fqn>`), which comes from the manifest and is package-qualified.
-- `dbt source freshness` failing no longer leaves a previous run's `target/sources.json` to be read as if it were current, which reported stale `max_loaded_at` values and marked sources unchanged. A source merely being *stale* still proceeds normally — that is a data state, not a run failure.
 
 ## [1.3.0] - 2026-09-10
 
