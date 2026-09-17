@@ -12,17 +12,27 @@ from .fallbacks.registry import FALLBACK_BY_ADAPTER_TYPE, loaded_at_fields_unset
 def get_args_for_source_freshness(
     user_args: tuple | list[str],
     scope_to_selection: bool = False,
-    paths_to_run: list[str] | None = None,
+    selectors_to_run: list[str] | None = None,
 ) -> list[str]:
     """Build the `dbt source freshness` CLI args: forwards `--target`, and when
-    scoped, an ancestor-expanded `--select` built from `paths_to_run`."""
+    scoped, an ancestor-expanded `--select` built from `selectors_to_run`.
+
+    Selects by dotted fqn, not `path:`: dbt resolves `path:` by globbing the real
+    filesystem from the project root, so package-owned nodes -- whose paths are
+    relative to their package -- never match. fqns come from the manifest and are
+    package-qualified, so they work for both.
+
+    fqns match as a prefix over the subtree, so a model sharing a name with a
+    sibling directory can pull in that directory's sources too. That widens the
+    check rather than narrowing it, so it costs time, never correctness.
+    """
     args: list[str] = ["source", "freshness", "-q"]
     target = find_target_in_args(list(user_args))
     if target:
         args.extend(["--target", target])
-    if scope_to_selection and paths_to_run:
+    if scope_to_selection and selectors_to_run:
         args.append("--select")
-        args.extend(f"+path:{path}" for path in paths_to_run)
+        args.extend(f"+{selector}" for selector in selectors_to_run)
     return args
 
 
@@ -36,7 +46,7 @@ def get_source_freshness(
     user_args: tuple | list[str],
     require_explicit_source_freshness: bool = False,
     scope_to_selection: bool = False,
-    paths_to_run: list[str] | None = None,
+    selectors_to_run: list[str] | None = None,
 ) -> SourceFreshness | None:
     try:
         from dbt.artifacts.resources.v1.components import FreshnessThreshold
@@ -106,7 +116,7 @@ def get_source_freshness(
     try:
         dbtRunner().invoke(
             args=get_args_for_source_freshness(
-                user_args, scope_to_selection, paths_to_run
+                user_args, scope_to_selection, selectors_to_run
             )
         )
         if sources_without_explicit_freshness:

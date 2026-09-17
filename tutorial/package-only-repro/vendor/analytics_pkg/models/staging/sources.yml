@@ -1,0 +1,10 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: raw_schema
+    tables:
+      - name: raw_orders
+        description: "The one source this fixture's single model depends on."
+        config:
+          loaded_at_field: updated_at

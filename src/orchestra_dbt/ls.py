@@ -1,8 +1,19 @@
+import json
+from typing import NamedTuple
+
 from .compatibility import dbt_core_import_error_message
 from .constants import RESOURCE_TYPES_TO_LS
 from .logger import log_debug, log_error, log_info, log_warn
 
 DBT_LS_ARGS_NOT_ACCEPTED = ["--empty"]
+
+
+class NodesToRun(NamedTuple):
+    """`paths` are matched against node paths elsewhere; `selectors` are dotted
+    fqns for feeding back into `--select` (see get_args_for_source_freshness)."""
+
+    paths: list[str]
+    selectors: list[str]
 
 
 def get_args_for_ls(user_args: tuple) -> list[str]:
@@ -11,7 +22,16 @@ def get_args_for_ls(user_args: tuple) -> list[str]:
     for resource_type in RESOURCE_TYPES_TO_LS:
         resource_type_args.append("--resource-type")
         resource_type_args.append(resource_type)
-    output_args = ["--output", "path", "-q"]
+    # Both forms from one invocation -- asking twice re-resolves the same
+    # selection. --output-keys is available from dbt 1.10.
+    output_args = [
+        "--output",
+        "json",
+        "--output-keys",
+        "original_file_path",
+        "fqn",
+        "-q",
+    ]
 
     # Remove args not accepted by dbt ls
     list_user_args = []
@@ -23,7 +43,7 @@ def get_args_for_ls(user_args: tuple) -> list[str]:
     return command_args + resource_type_args + list_user_args + output_args
 
 
-def get_paths_to_run(args: tuple) -> list[str] | None:
+def get_nodes_to_run(args: tuple) -> NodesToRun | None:
     try:
         from dbt.cli.main import (
             dbtRunner,
@@ -33,7 +53,7 @@ def get_paths_to_run(args: tuple) -> list[str] | None:
         log_error(dbt_core_import_error_message(missing_dbt_core_error))
         raise missing_dbt_core_error
 
-    log_info("Finding node paths to be executed:")
+    log_info("Finding nodes to be executed:")
 
     try:
         res: dbtRunnerResult = dbtRunner().invoke(get_args_for_ls(args))
@@ -43,7 +63,14 @@ def get_paths_to_run(args: tuple) -> list[str] | None:
         if isinstance(res.result, list) and all(
             isinstance(item, str) for item in res.result
         ):
-            return res.result
+            # One JSON object per node, carrying the keys asked for above. A missing
+            # key raises, which the handler below turns into "couldn't resolve" --
+            # better than silently returning two lists that disagree.
+            nodes = [json.loads(line) for line in res.result]
+            return NodesToRun(
+                paths=[node["original_file_path"] for node in nodes],
+                selectors=[".".join(node["fqn"]) for node in nodes],
+            )
 
         raise ValueError(f"Unexpected result from dbt ls: {res.result}")
     except Exception as e:

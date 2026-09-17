@@ -1,0 +1,3 @@
+packages:
+  # Vendored locally so the fixture needs no network to `dbt deps`.
+  - local: vendor/analytics_pkg

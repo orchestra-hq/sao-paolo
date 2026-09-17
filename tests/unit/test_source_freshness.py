@@ -28,19 +28,19 @@ class TestGetArgsForSourceFreshness:
             "-q",
         ]
 
-    def test_default_ignores_paths_to_run(self):
-        """scope_to_selection defaults to off: paths_to_run is ignored entirely."""
-        assert get_args_for_source_freshness((), paths_to_run=["models/a.sql"]) == [
+    def test_default_ignores_selectors_to_run(self):
+        """scope_to_selection defaults to off: selectors_to_run is ignored entirely."""
+        assert get_args_for_source_freshness((), selectors_to_run=["proj.a"]) == [
             "source",
             "freshness",
             "-q",
         ]
 
-    def test_scoped_selects_ancestors_of_each_path(self):
+    def test_scoped_selects_ancestors_of_each_node(self):
         args = get_args_for_source_freshness(
             ("--target", "prod"),
             scope_to_selection=True,
-            paths_to_run=["models/a.sql", "models/b.sql"],
+            selectors_to_run=["proj.a", "proj.b"],
         )
 
         assert args == [
@@ -50,32 +50,53 @@ class TestGetArgsForSourceFreshness:
             "--target",
             "prod",
             "--select",
-            "+path:models/a.sql",
-            "+path:models/b.sql",
+            "+proj.a",
+            "+proj.b",
         ]
 
-    def test_scoped_with_no_paths_to_run_omits_select(self):
+    def test_scoped_selects_by_fqn_never_by_path(self):
+        """The selection must not use `path:`. dbt's PathSelectorMethod globs the
+        real filesystem from the project root, so a node owned by an installed
+        package -- whose original_file_path is relative to that package -- never
+        matches. A project whose models all live in packages would select zero
+        nodes and collect zero sources."""
+        args = get_args_for_source_freshness(
+            (),
+            scope_to_selection=True,
+            selectors_to_run=["a_package.staging.stg_thing"],
+        )
+
+        assert args == [
+            "source",
+            "freshness",
+            "-q",
+            "--select",
+            "+a_package.staging.stg_thing",
+        ]
+        assert not any(arg.startswith("+path:") for arg in args)
+
+    def test_scoped_with_no_selectors_to_run_omits_select(self):
         assert get_args_for_source_freshness(
-            (), scope_to_selection=True, paths_to_run=None
+            (), scope_to_selection=True, selectors_to_run=None
         ) == ["source", "freshness", "-q"]
 
         assert get_args_for_source_freshness(
-            (), scope_to_selection=True, paths_to_run=[]
+            (), scope_to_selection=True, selectors_to_run=[]
         ) == ["source", "freshness", "-q"]
 
-    def test_scoped_is_indifferent_to_how_paths_to_run_was_selected(self):
-        """paths_to_run is already resolved (by dbt ls, elsewhere) by the time this
-        runs -- --select, --selector, whatever was used to get there doesn't matter,
-        only the resulting paths do."""
+    def test_scoped_is_indifferent_to_how_selectors_to_run_was_selected(self):
+        """selectors_to_run is already resolved (by dbt ls, elsewhere) by the time
+        this runs -- --select, --selector, whatever was used to get there doesn't
+        matter, only the resulting nodes do."""
         via_selector = get_args_for_source_freshness(
             ("--selector", "nightly"),
             scope_to_selection=True,
-            paths_to_run=["models/a.sql"],
+            selectors_to_run=["proj.a"],
         )
         via_select = get_args_for_source_freshness(
             ("--select", "tag:nightly"),
             scope_to_selection=True,
-            paths_to_run=["models/a.sql"],
+            selectors_to_run=["proj.a"],
         )
 
         assert (
@@ -86,7 +107,7 @@ class TestGetArgsForSourceFreshness:
                 "freshness",
                 "-q",
                 "--select",
-                "+path:models/a.sql",
+                "+proj.a",
             ]
         )
 
@@ -136,7 +157,7 @@ class TestGetSourceFreshness:
                 return_value=freshness_result,
             ):
                 result = get_source_freshness(
-                    ("--target", "prod"), paths_to_run=["models/a.sql"]
+                    ("--target", "prod"), selectors_to_run=["proj.a"]
                 )
 
         mock_runner.invoke.assert_called_once_with(
@@ -171,7 +192,7 @@ class TestGetSourceFreshness:
                 result = get_source_freshness(
                     ("--target", "prod"),
                     scope_to_selection=True,
-                    paths_to_run=["models/a.sql"],
+                    selectors_to_run=["proj.a"],
                 )
 
         mock_runner.invoke.assert_called_once_with(
@@ -182,7 +203,7 @@ class TestGetSourceFreshness:
                 "--target",
                 "prod",
                 "--select",
-                "+path:models/a.sql",
+                "+proj.a",
             ]
         )
         assert result == SourceFreshness(
@@ -190,7 +211,7 @@ class TestGetSourceFreshness:
         )
 
     def test_scoped_still_runs_databricks_fallback_for_a_used_source(self):
-        """Scoping restricts which sources dbt selects (--select +path:X), it does
+        """Scoping restricts which sources dbt selects (--select +<fqn>), it does
         not change what the runner does for a source dbt does select. A Databricks
         source with no loaded_at_field/query -- in scope -- must still hit the
         DESCRIBE HISTORY fallback, exactly as when scoping is off."""
@@ -207,7 +228,7 @@ class TestGetSourceFreshness:
                 get_source_freshness(
                     (),
                     scope_to_selection=True,
-                    paths_to_run=["models/a.sql"],
+                    selectors_to_run=["proj.a"],
                 )
 
         freshness_task = modules["dbt.task.freshness"].FreshnessTask
