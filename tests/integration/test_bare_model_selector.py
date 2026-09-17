@@ -65,10 +65,12 @@ def test_no_select_or_selector_resolves_to_every_model_in_the_project(
     every node in the project. Scoping source freshness to that is then a
     no-op, covering every source, same as unscoped.
 
-    Uses a dummy snowflake profile since dbt-postgres isn't installed here and
-    dbt ls only needs a profile it can render, not a live connection.
+    Uses the same dummy postgres profile as the sibling test above -- dbt ls
+    only needs a profile it can render, not a live connection -- since that's
+    the only adapter CI's `tutorial-dbt` job (the one that runs this file, per
+    ci.yaml) installs.
     """
-    pytest.importorskip("dbt.adapters.snowflake")
+    pytest.importorskip("dbt.adapters.postgres")
 
     (tmp_path / "profiles.yml").write_text(
         """
@@ -76,36 +78,43 @@ concurrent_selector_repro:
   target: dev
   outputs:
     dev:
-      type: snowflake
-      account: fake_account
-      user: fake_user
-      password: fake_password
-      role: fake_role
-      database: fake_db
-      warehouse: fake_wh
-      schema: fake_schema
+      type: postgres
+      host: localhost
+      port: 5432
+      user: postgres
+      password: postgres
+      dbname: postgres
+      schema: csr_bare_test
       threads: 1
 """
     )
     monkeypatch.chdir(_REPRO_PROJECT)
     monkeypatch.setenv("DBT_PROFILES_DIR", str(tmp_path))
 
-    paths = get_paths_to_run(())
+    nodes = get_nodes_to_run(())
 
-    assert paths is not None
-    assert sorted(paths) == [
+    assert nodes is not None
+    assert sorted(nodes.paths) == [
         "models/model_a.sql",
         "models/model_b.sql",
         "models/stg_unused_page_views.sql",
         "seeds/raw_events.csv",
         "seeds/raw_page_views.csv",
     ]
+    selectors = sorted(nodes.selectors)
+    assert selectors == [
+        "concurrent_selector_repro.model_a",
+        "concurrent_selector_repro.model_b",
+        "concurrent_selector_repro.raw_events",
+        "concurrent_selector_repro.raw_page_views",
+        "concurrent_selector_repro.stg_unused_page_views",
+    ]
     assert get_args_for_source_freshness(
-        (), scope_to_selection=True, paths_to_run=paths
+        (), scope_to_selection=True, selectors_to_run=selectors
     ) == [
         "source",
         "freshness",
         "-q",
         "--select",
-        *(f"+path:{path}" for path in paths),
+        *(f"+{selector}" for selector in selectors),
     ]
