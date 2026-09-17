@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from src.orchestra_dbt.ls import get_paths_to_run
+from src.orchestra_dbt.ls import get_nodes_to_run
 from src.orchestra_dbt.source_freshness import get_args_for_source_freshness
 
 _REPRO_PROJECT = (
@@ -42,17 +42,19 @@ concurrent_selector_repro:
     monkeypatch.chdir(_REPRO_PROJECT)
     monkeypatch.setenv("DBT_PROFILES_DIR", str(tmp_path))
 
-    paths = get_paths_to_run(("--selector", "selector_x"))
+    nodes = get_nodes_to_run(("--selector", "selector_x"))
 
-    assert paths == ["models/model_a.sql"]
+    assert nodes is not None
+    assert nodes.paths == ["models/model_a.sql"]
+    assert nodes.selectors == ["concurrent_selector_repro.model_a"]
     assert get_args_for_source_freshness(
-        (), scope_to_selection=True, paths_to_run=paths
+        (), scope_to_selection=True, selectors_to_run=nodes.selectors
     ) == [
         "source",
         "freshness",
         "-q",
         "--select",
-        "+path:models/model_a.sql",
+        "+concurrent_selector_repro.model_a",
     ]
 
 
