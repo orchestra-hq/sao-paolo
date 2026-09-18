@@ -1,0 +1,55 @@
+name: release-please
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      pr: ${{ steps.release.outputs.pr }}
+    steps:
+      - id: release
+        uses: googleapis/release-please-action@v5
+
+  # release-please's `simple` release type only tracks the version in
+  # .release-please-manifest.json and CHANGELOG.md — it does not know how to
+  # update pyproject.toml or uv.lock. We let `uv` do that itself, on the
+  # release PR branch, so both files stay derived from the real tool rather
+  # than a generic string replace.
+  sync-uv-version:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.pr }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ fromJSON(needs.release-please.outputs.pr).headBranchName }}
+      - name: Read version from release-please manifest
+        id: version
+        run: |
+          VERSION="$(python3 -c 'import json; print(json.load(open(".release-please-manifest.json"))["."])')"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          version: "latest"
+      - name: Bump pyproject.toml and uv.lock via uv
+        run: uv version "${{ steps.version.outputs.version }}"
+      - name: Commit changes back to the release PR
+        run: |
+          if git diff --quiet -- pyproject.toml uv.lock; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git config user.name "release-please[bot]"
+          git config user.email "release-please[bot]@users.noreply.github.com"
+          git add pyproject.toml uv.lock
+          git commit -m "chore: sync pyproject.toml and uv.lock to ${{ steps.version.outputs.version }}"
+          git push origin HEAD:"${{ fromJSON(needs.release-please.outputs.pr).headBranchName }}"
