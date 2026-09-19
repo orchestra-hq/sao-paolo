@@ -7,6 +7,7 @@ from ..models import SourceFreshness
 from ..target_finder import find_target_in_args
 from ..utils import load_json
 from .fallbacks.registry import FALLBACK_BY_ADAPTER_TYPE, loaded_at_fields_unset
+from .relation_types import is_view
 
 
 def get_args_for_source_freshness(
@@ -98,6 +99,15 @@ def get_source_freshness(
                     res = handler(self, compiled_node, manifest)
                     if res is not None:
                         return res
+                    return default_freshness_result(compiled_node)
+
+                # No loaded_at_* and no fallback, so freshness would come from
+                # the relation's metadata timestamp. That timestamp only
+                # tracks data changes for materialised relations -- for a
+                # view it reflects when its definition last changed, so
+                # treat it as unknown (always "new") rather than trusting a
+                # frozen value.
+                if is_view(self.adapter, self.config, compiled_node):
                     return default_freshness_result(compiled_node)
 
             try:
