@@ -4,6 +4,7 @@ named `--selector` whose own definition is just a bare model name, with no
 ancestor/descendant operators at all -- the simplest selector dbt allows.
 """
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -62,8 +63,10 @@ def test_no_select_or_selector_resolves_to_every_model_in_the_project(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A bare `dbt build`, with no `--select`/`--selector` at all, resolves to
-    every node in the project. Scoping source freshness to that is then a
-    no-op, covering every source, same as unscoped.
+    every node in the project -- but only because this fixture project has no
+    default selector configured (see the sibling test below for when it does).
+    Scoping source freshness to "every node" is then a no-op, covering every
+    source, same as unscoped.
 
     Uses the same dummy postgres profile as the sibling test above -- dbt ls
     only needs a profile it can render, not a live connection -- since that's
@@ -118,3 +121,50 @@ concurrent_selector_repro:
         "--select",
         *(f"+{selector}" for selector in selectors),
     ]
+
+
+def test_no_select_or_selector_resolves_to_the_projects_default_selector(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """"No selection" doesn't always mean "every node" -- dbt resolves a bare
+    command through the project's own default selector (`selectors.yml`,
+    `default: true`) when one is configured, narrowing it the same as an
+    explicit `--selector` would. Copies the fixture project and marks
+    selector_x (model_a only) as the default, so a bare `dbt ls` must resolve
+    to just that -- not the whole project, as the sibling test above shows for
+    a project with no default configured."""
+    pytest.importorskip("dbt.adapters.postgres")
+
+    project = tmp_path / "project"
+    shutil.copytree(_REPRO_PROJECT, project)
+    selectors_path = project / "selectors.yml"
+    selectors_path.write_text(
+        selectors_path.read_text().replace(
+            "  - name: selector_x\n", "  - name: selector_x\n    default: true\n", 1
+        )
+    )
+
+    (tmp_path / "profiles.yml").write_text(
+        """
+concurrent_selector_repro:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: localhost
+      port: 5432
+      user: postgres
+      password: postgres
+      dbname: postgres
+      schema: csr_default_selector_test
+      threads: 1
+"""
+    )
+    monkeypatch.chdir(project)
+    monkeypatch.setenv("DBT_PROFILES_DIR", str(tmp_path))
+
+    nodes = get_nodes_to_run(())
+
+    assert nodes is not None
+    assert nodes.paths == ["models/model_a.sql"]
+    assert nodes.selectors == ["concurrent_selector_repro.model_a"]
