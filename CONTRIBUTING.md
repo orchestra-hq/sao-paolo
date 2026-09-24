@@ -15,7 +15,7 @@ Pull requests run GitHub Actions: unit tests, static checks, `dbt build` for `tu
 
 ## Releasing
 
-Versioning is automated with [release-please](https://github.com/googleapis/release-please): run the `release-please` workflow manually (Actions tab) to open/update a release PR with the next version and changelog entry, computed from merged PR titles. Merging that PR bumps `pyproject.toml` and `uv.lock` (via `uv version`) and cuts the GitHub Release/tag. Don't hand-edit `CHANGELOG.md`, `pyproject.toml`'s version, or `uv.lock`'s version — they're derived automatically.
+Versioning is automated with [release-please](https://github.com/googleapis/release-please): run the `release-please` workflow manually (Actions tab) to open/update a release PR with the next version and changelog entry, computed from merged PR titles. Merging that PR bumps `pyproject.toml` and `uv.lock` (via `uv version`). The workflow only runs on manual dispatch (not on every merge to `main`), so **after merging the release PR, run the workflow again** to actually cut the GitHub Release/tag. Don't hand-edit `CHANGELOG.md`, `pyproject.toml`'s version, or `uv.lock`'s version — they're derived automatically.
 
 ## Debugging
 
