@@ -16,4 +16,4 @@ uv run ruff check . && uv run ruff format --check . && uv run basedpyright
 - [ ] Tests added or updated where behaviour changed
 - [ ] Unit tests and linting pass locally
 - [ ] Documentation updated where necessary
-- [ ] Changelog updated for user-visible changes
+- [ ] PR title follows [Conventional Commits](https://www.conventionalcommits.org/) (`fix:`, `feat:`, `chore:`, ...) — this drives the changelog and version bump, enforced by CI
