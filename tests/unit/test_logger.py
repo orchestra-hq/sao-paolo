@@ -1,3 +1,5 @@
+from typing import cast
+
 from datetime import datetime
 
 from src.orchestra_dbt.logger import log_reused_nodes
@@ -102,8 +104,13 @@ class TestLogWhyNotReused:
 
         from src.orchestra_dbt.logger import log_why_not_reused
 
+        from src.orchestra_dbt.models import MaterialisationNode
+
         dag = self._dag()
-        reused = {"model.a": dag.nodes["model.a"], "model.b": dag.nodes["model.b"]}
+        reused = {
+            node_id: cast(MaterialisationNode, dag.nodes[node_id])
+            for node_id in ("model.a", "model.b")
+        }
         with patch("src.orchestra_dbt.logger.log_debug") as debug:
             log_why_not_reused(dag, nodes_to_reuse=reused)
 
