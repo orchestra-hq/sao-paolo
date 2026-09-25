@@ -296,17 +296,25 @@ class TestGetSourceFreshnessOnDbtCoreV2:
             with pytest.raises(ImportError):
                 get_source_freshness(())
 
-    def _run(self, freshness_result, **kwargs):
+    def _run(self, freshness_result, manifest=None, **kwargs):
         mock_runner = Mock()
         mock_runner.invoke.return_value = None
         modules = {
             **self._V1_ONLY_MODULES,
             "dbt.cli.main": Mock(dbtRunner=Mock(return_value=mock_runner)),
         }
+
+        def fake_load_json(path):
+            if path == "target/sources.json":
+                return freshness_result
+            if manifest is None:
+                raise FileNotFoundError(path)
+            return manifest
+
         with patch.dict("sys.modules", modules):
             with patch(
                 "src.orchestra_dbt.source_freshness.load_json",
-                return_value=freshness_result,
+                side_effect=fake_load_json,
             ):
                 return get_source_freshness((), **kwargs)
 
@@ -330,27 +338,87 @@ class TestGetSourceFreshnessOnDbtCoreV2:
             sources={"source.proj.raw.metadata_only": datetime(2026, 3, 31)}
         )
 
-    def test_require_explicit_source_freshness_excludes_them(self):
-        result = self._run(
+    _TWO_SOURCES = {
+        "results": [
+            # dbt 2.x omits loaded_at_field/loaded_at_query from criteria entirely,
+            # even for a source that sets one -- hence the manifest lookup.
             {
-                "results": [
-                    {
-                        "unique_id": "source.proj.raw.metadata_only",
-                        "max_loaded_at": datetime(2026, 3, 31),
-                        "criteria": {"loaded_at_field": None, "loaded_at_query": None},
-                    },
-                    {
-                        "unique_id": "source.proj.raw.explicit",
-                        "max_loaded_at": datetime(2026, 3, 30),
-                        "criteria": {"loaded_at_field": "updated_at"},
-                    },
-                ]
+                "unique_id": "source.proj.raw.metadata_only",
+                "max_loaded_at": datetime(2026, 3, 31),
+                "criteria": {"error_after": {"count": 24, "period": "hour"}},
+            },
+            {
+                "unique_id": "source.proj.raw.explicit",
+                "max_loaded_at": datetime(2026, 3, 30),
+                "criteria": {"error_after": {"count": 24, "period": "hour"}},
+            },
+        ]
+    }
+
+    def test_require_explicit_source_freshness_excludes_via_manifest(self):
+        result = self._run(
+            self._TWO_SOURCES,
+            manifest={
+                "sources": {
+                    "source.proj.raw.metadata_only": {"loaded_at_field": None},
+                    "source.proj.raw.explicit": {"loaded_at_field": "updated_at"},
+                }
             },
             require_explicit_source_freshness=True,
         )
 
         assert result == SourceFreshness(
             sources={"source.proj.raw.explicit": datetime(2026, 3, 30)}
+        )
+
+    def test_require_explicit_reads_loaded_at_query_nested_under_freshness(self):
+        result = self._run(
+            self._TWO_SOURCES,
+            manifest={
+                "sources": {
+                    "source.proj.raw.metadata_only": {},
+                    "source.proj.raw.explicit": {
+                        "freshness": {"loaded_at_query": "select max(ts) from t"}
+                    },
+                }
+            },
+            require_explicit_source_freshness=True,
+        )
+
+        assert result == SourceFreshness(
+            sources={"source.proj.raw.explicit": datetime(2026, 3, 30)}
+        )
+
+    def test_require_explicit_keeps_everything_when_manifest_unreadable(self):
+        """Excluding every source because the manifest is missing would silently turn
+        state-aware orchestration off. Warn and keep instead."""
+        result = self._run(self._TWO_SOURCES, require_explicit_source_freshness=True)
+
+        assert result == SourceFreshness(
+            sources={
+                "source.proj.raw.metadata_only": datetime(2026, 3, 31),
+                "source.proj.raw.explicit": datetime(2026, 3, 30),
+            }
+        )
+
+    def test_keeps_stale_error_status_sources(self):
+        """status Error means the data is stale, not that the reading is bad -- its
+        max_loaded_at is exactly the signal reuse needs."""
+        result = self._run(
+            {
+                "results": [
+                    {
+                        "unique_id": "source.proj.raw.stale",
+                        "max_loaded_at": datetime(2026, 5, 26),
+                        "status": "Error",
+                        "criteria": {"error_after": {"count": 24, "period": "hour"}},
+                    }
+                ]
+            }
+        )
+
+        assert result == SourceFreshness(
+            sources={"source.proj.raw.stale": datetime(2026, 5, 26)}
         )
 
     def test_drops_sources_with_no_max_loaded_at(self):

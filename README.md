@@ -262,7 +262,9 @@ Implicit freshness can be misleading for sources defined on top of **views**: wa
 dbt-core 2.x rebuilt task execution on a Rust engine and no longer exposes `dbt.task.freshness` or `dbt.adapters` for Orchestra to patch in-process. On 2.x, `orc` automatically falls back to running dbt's own, unpatched `dbt source freshness`:
 
 - Sources with an explicit `loaded_at_field` or `loaded_at_query` behave exactly as on 1.x.
-- Sources with neither still get dbt's own metadata-based freshness, also as on 1.x. Only the adapter-specific fallbacks in the table above (e.g. Databricks `DESCRIBE HISTORY`) have no equivalent on 2.x, so a source that relied on one falls back to whatever dbt itself reports. `require_explicit_source_freshness` works as documented.
+- Sources with neither still get dbt's own metadata-based freshness, also as on 1.x. Only the adapter-specific fallbacks in the table above (e.g. Databricks `DESCRIBE HISTORY`) have no equivalent on 2.x, so a source that relied on one falls back to whatever dbt itself reports.
+- A stale source (`status: "Error"`) is still used: its `max_loaded_at` is a real reading, and "this data has not moved" is exactly what reuse needs to know.
+- `require_explicit_source_freshness` is resolved from `target/manifest.json`, because 2.x's `sources.json` omits `loaded_at_field`/`loaded_at_query` from every result's `criteria` — even for sources that set one. If the manifest cannot be read, the run warns and excludes nothing rather than silently excluding everything.
 - A source dbt could not resolve at all (no `max_loaded_at` in `sources.json`) is dropped, so its downstream models always run.
 - The relation-existence check (`verify_relations_exist`, below) also needs `dbt.adapters` and is unavailable on 2.x: it fails soft and leaves reuse decisions unchanged, the same as an unreadable schema on 1.x.
 

@@ -2,7 +2,7 @@ import threading
 from datetime import datetime
 
 from ..compatibility import dbt_core_import_error_message
-from ..logger import log_error, log_info, log_warn
+from ..logger import log_debug, log_error, log_info, log_warn
 from ..models import SourceFreshness
 from ..target_finder import find_target_in_args
 from ..utils import load_json
@@ -32,13 +32,33 @@ def should_exclude_source(
     return require_explicit_source_freshness and loaded_at_fields_unset(compiled_node)
 
 
-def _criteria_loaded_at_fields_unset(criteria: dict | None) -> bool:
-    if not criteria:
-        return True
-    return (
-        criteria.get("loaded_at_query") is None
-        and criteria.get("loaded_at_field") is None
-    )
+def _explicit_freshness_source_ids(results: list[dict]) -> set[str] | None:
+    """The `unique_id`s whose source sets `loaded_at_field`/`loaded_at_query`, read from
+    the manifest.
+
+    dbt 2.x's `sources.json` omits both from each result's `criteria` -- even for a
+    source that does set one -- so the freshness artifact alone cannot tell us. Returns
+    None when the manifest cannot answer, so the caller can say so rather than treat
+    every source as implicit.
+    """
+    try:
+        manifest_sources = load_json("target/manifest.json").get("sources") or {}
+    except Exception as e:
+        log_debug(f"Could not read target/manifest.json: {e}")
+        return None
+    if not manifest_sources:
+        return None
+
+    explicit: set[str] = set()
+    for unique_id in (result["unique_id"] for result in results):
+        node = manifest_sources.get(unique_id) or {}
+        freshness = node.get("freshness") or {}
+        if any(
+            (node.get(key) or freshness.get(key))
+            for key in ("loaded_at_field", "loaded_at_query")
+        ):
+            explicit.add(unique_id)
+    return explicit
 
 
 def _get_source_freshness_v2(
@@ -56,6 +76,9 @@ def _get_source_freshness_v2(
     adapter-specific fallbacks (e.g. Databricks `DESCRIBE HISTORY`) have no 2.x
     equivalent. A source dbt could not resolve at all has no `max_loaded_at` and is
     dropped, so its downstream models run rather than risk a wrong reuse decision.
+
+    A stale source (`status: "Error"`) is kept: its `max_loaded_at` is real -- the data
+    genuinely has not moved -- which is exactly the signal reuse needs.
     """
     from dbt.cli.main import dbtRunner
 
@@ -78,12 +101,21 @@ def _get_source_freshness_v2(
             )
 
         results = load_json("target/sources.json")["results"]
-        excluded = {
-            source["unique_id"]
-            for source in results
-            if require_explicit_source_freshness
-            and _criteria_loaded_at_fields_unset(source.get("criteria"))
-        }
+        excluded: set[str] = set()
+        if require_explicit_source_freshness:
+            explicit = _explicit_freshness_source_ids(results)
+            if explicit is None:
+                log_warn(
+                    "require_explicit_source_freshness is set, but dbt 2.x's sources.json "
+                    "does not record loaded_at_field/loaded_at_query and target/manifest.json "
+                    "could not be read to recover them. No source is excluded this run."
+                )
+            else:
+                excluded = {
+                    source["unique_id"]
+                    for source in results
+                    if source["unique_id"] not in explicit
+                }
         sources = {
             source["unique_id"]: source["max_loaded_at"]
             for source in results
