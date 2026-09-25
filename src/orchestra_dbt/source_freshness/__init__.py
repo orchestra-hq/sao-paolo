@@ -1,4 +1,5 @@
 import threading
+from collections import Counter
 from datetime import datetime
 
 from ..compatibility import dbt_core_import_error_message
@@ -64,6 +65,30 @@ def _explicit_freshness_source_ids(results: list[dict]) -> set[str] | None:
     return explicit
 
 
+def _log_freshness_outcome(result, results: list[dict]) -> None:
+    """dbt 2.x reports a stale or failing source as `success=False` with *no* exception
+    -- its documented way of saying "handled, and already accounted for in the
+    artifact". Only a real engine error carries one, so only that deserves a warning;
+    a project with a permanently stale source would otherwise cry wolf every run.
+    """
+    if result is None or getattr(result, "success", True):
+        return
+
+    exception = getattr(result, "exception", None)
+    if exception is not None:
+        log_warn(
+            f"dbt source freshness errored: {exception}. Using whatever results it wrote."
+        )
+        return
+
+    statuses = Counter(str(source.get("status")) for source in results)
+    log_debug(
+        f"dbt source freshness exited non-zero (code {getattr(result, 'exit_code', None)}) "
+        "because some sources are not fresh: "
+        + ", ".join(f"{count} {status}" for status, count in sorted(statuses.items()))
+    )
+
+
 def _get_source_freshness_v2(
     user_args: tuple | list[str],
     require_explicit_source_freshness: bool,
@@ -97,13 +122,8 @@ def _get_source_freshness_v2(
                 user_args, scope_to_selection, paths_to_run
             )
         )
-        if result is not None and not getattr(result, "success", True):
-            log_warn(
-                f"dbt source freshness did not complete cleanly: {result.exception}. "
-                "Using whatever results it wrote."
-            )
-
         results = load_json("target/sources.json")["results"]
+        _log_freshness_outcome(result, results)
         excluded: set[str] = set()
         if require_explicit_source_freshness:
             explicit = _explicit_freshness_source_ids(results)

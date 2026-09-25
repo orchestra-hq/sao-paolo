@@ -432,6 +432,26 @@ class TestGetSourceFreshnessOnDbtCoreV2:
             }
         )
 
+    def test_stale_sources_do_not_warn(self):
+        """dbt 2.x reports a stale source as success=False with no exception. Warning on
+        that would cry wolf every run on a project with a permanently stale source."""
+        from src.orchestra_dbt.source_freshness import _log_freshness_outcome
+
+        handled = SimpleNamespace(success=False, exception=None, exit_code=1)
+        with patch("src.orchestra_dbt.source_freshness.log_warn") as warn:
+            _log_freshness_outcome(handled, [{"status": "Error"}, {"status": "Pass"}])
+        warn.assert_not_called()
+
+    def test_real_engine_error_still_warns(self):
+        from src.orchestra_dbt.source_freshness import _log_freshness_outcome
+
+        errored = SimpleNamespace(
+            success=False, exception=Exception("boom"), exit_code=2
+        )
+        with patch("src.orchestra_dbt.source_freshness.log_warn") as warn:
+            _log_freshness_outcome(errored, [])
+        assert "boom" in warn.call_args[0][0]
+
     def test_keeps_stale_error_status_sources(self):
         """status Error means the data is stale, not that the reading is bad -- its
         max_loaded_at is exactly the signal reuse needs."""
