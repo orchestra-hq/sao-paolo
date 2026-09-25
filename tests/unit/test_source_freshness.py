@@ -295,3 +295,75 @@ class TestGetSourceFreshnessOnDbtCoreV2:
         with patch.dict("sys.modules", modules):
             with pytest.raises(ImportError):
                 get_source_freshness(())
+
+    def _run(self, freshness_result, **kwargs):
+        mock_runner = Mock()
+        mock_runner.invoke.return_value = None
+        modules = {
+            **self._V1_ONLY_MODULES,
+            "dbt.cli.main": Mock(dbtRunner=Mock(return_value=mock_runner)),
+        }
+        with patch.dict("sys.modules", modules):
+            with patch(
+                "src.orchestra_dbt.source_freshness.load_json",
+                return_value=freshness_result,
+            ):
+                return get_source_freshness((), **kwargs)
+
+    def test_keeps_sources_dbt_resolved_from_metadata(self):
+        """dbt 2.x still computes freshness from warehouse metadata when a source sets
+        neither loaded_at_field nor loaded_at_query. Dropping those would leave state-aware
+        orchestration inert on any project that does not configure loaded_at_* everywhere."""
+        result = self._run(
+            {
+                "results": [
+                    {
+                        "unique_id": "source.proj.raw.metadata_only",
+                        "max_loaded_at": datetime(2026, 3, 31),
+                        "criteria": {"loaded_at_field": None, "loaded_at_query": None},
+                    }
+                ]
+            }
+        )
+
+        assert result == SourceFreshness(
+            sources={"source.proj.raw.metadata_only": datetime(2026, 3, 31)}
+        )
+
+    def test_require_explicit_source_freshness_excludes_them(self):
+        result = self._run(
+            {
+                "results": [
+                    {
+                        "unique_id": "source.proj.raw.metadata_only",
+                        "max_loaded_at": datetime(2026, 3, 31),
+                        "criteria": {"loaded_at_field": None, "loaded_at_query": None},
+                    },
+                    {
+                        "unique_id": "source.proj.raw.explicit",
+                        "max_loaded_at": datetime(2026, 3, 30),
+                        "criteria": {"loaded_at_field": "updated_at"},
+                    },
+                ]
+            },
+            require_explicit_source_freshness=True,
+        )
+
+        assert result == SourceFreshness(
+            sources={"source.proj.raw.explicit": datetime(2026, 3, 30)}
+        )
+
+    def test_drops_sources_with_no_max_loaded_at(self):
+        result = self._run(
+            {
+                "results": [
+                    {
+                        "unique_id": "source.proj.raw.unresolved",
+                        "max_loaded_at": None,
+                        "criteria": {"loaded_at_field": "updated_at"},
+                    }
+                ]
+            }
+        )
+
+        assert result == SourceFreshness(sources={})

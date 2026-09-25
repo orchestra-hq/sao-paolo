@@ -43,18 +43,19 @@ def _criteria_loaded_at_fields_unset(criteria: dict | None) -> bool:
 
 def _get_source_freshness_v2(
     user_args: tuple | list[str],
+    require_explicit_source_freshness: bool,
     scope_to_selection: bool,
     paths_to_run: list[str] | None,
 ) -> SourceFreshness | None:
     """dbt-core >=2.0 (Fusion) moved task execution into its Rust engine and no longer
     exposes `dbt.task.freshness` / `dbt.adapters` for Orchestra to patch in-process.
 
-    This runs dbt's own, unpatched `dbt source freshness` instead: sources with an
-    explicit `loaded_at_field`/`loaded_at_query` behave exactly as on dbt-core 1.x, but
-    Orchestra's adapter-specific fallbacks (e.g. Databricks `DESCRIBE HISTORY`) are
-    unavailable, so any source missing both is excluded from state-aware orchestration
-    -- same as `require_explicit_source_freshness` -- and its downstream models always
-    run rather than risk a wrong reuse decision.
+    This runs dbt's own, unpatched `dbt source freshness` instead. dbt still computes
+    freshness from warehouse metadata when a source sets neither `loaded_at_field` nor
+    `loaded_at_query`, exactly as on 1.x, so those sources are kept; only Orchestra's
+    adapter-specific fallbacks (e.g. Databricks `DESCRIBE HISTORY`) have no 2.x
+    equivalent. A source dbt could not resolve at all has no `max_loaded_at` and is
+    dropped, so its downstream models run rather than risk a wrong reuse decision.
     """
     from dbt.cli.main import dbtRunner
 
@@ -65,31 +66,43 @@ def _get_source_freshness_v2(
     )
 
     try:
-        dbtRunner().invoke(
+        result = dbtRunner().invoke(
             args=get_args_for_source_freshness(
                 user_args, scope_to_selection, paths_to_run
             )
         )
+        if result is not None and not getattr(result, "success", True):
+            log_warn(
+                f"dbt source freshness did not complete cleanly: {result.exception}. "
+                "Using whatever results it wrote."
+            )
+
         results = load_json("target/sources.json")["results"]
         excluded = {
             source["unique_id"]
             for source in results
-            if _criteria_loaded_at_fields_unset(source.get("criteria"))
+            if require_explicit_source_freshness
+            and _criteria_loaded_at_fields_unset(source.get("criteria"))
         }
+        sources = {
+            source["unique_id"]: source["max_loaded_at"]
+            for source in results
+            if source["unique_id"] not in excluded and source.get("max_loaded_at")
+        }
+
         if excluded:
             log_warn(
                 f"{len(excluded)} source(s) have no explicit freshness config (loaded_at_field "
-                "or loaded_at_query) and no Orchestra fallback is available on dbt-core 2.x; "
-                "they are excluded from state-aware orchestration and models depending on "
-                "them will always run."
+                "or loaded_at_query) and are excluded from state-aware orchestration; "
+                "models depending on them will always run."
             )
-        return SourceFreshness(
-            sources={
-                source["unique_id"]: source["max_loaded_at"]
-                for source in results
-                if source["unique_id"] not in excluded and source.get("max_loaded_at")
-            }
-        )
+        unresolved = len(results) - len(excluded) - len(sources)
+        if unresolved:
+            log_warn(
+                f"{unresolved} source(s) returned no max_loaded_at from dbt source freshness; "
+                "models depending on them will always run."
+            )
+        return SourceFreshness(sources=sources)
     except Exception as e:
         log_warn(f"Error running dbt source freshness: {e}")
         return None
@@ -118,7 +131,12 @@ def get_source_freshness(
         except ImportError:
             log_error(dbt_core_import_error_message(missing_dbt_core_error))
             raise missing_dbt_core_error
-        return _get_source_freshness_v2(user_args, scope_to_selection, paths_to_run)
+        return _get_source_freshness_v2(
+            user_args,
+            require_explicit_source_freshness,
+            scope_to_selection,
+            paths_to_run,
+        )
 
     def default_freshness_result(compiled_node) -> SourceFreshnessResult:
         return SourceFreshnessResult(
