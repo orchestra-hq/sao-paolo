@@ -2,7 +2,7 @@ from datetime import datetime
 from functools import lru_cache
 from typing import cast
 
-from .logger import log_warn
+from .logger import log_debug, log_warn
 from .state_backends import resolved_state_backend
 from .state_backends.base import StateBackend
 from .state_errors import StateLoadError, StateSaveError
@@ -30,9 +30,7 @@ def load_state() -> StateApiModel:
     return resolved_state_backend().load()
 
 
-def save_state(
-    state: StateApiModel, updated_asset_external_ids: set[str]
-) -> None:
+def save_state(state: StateApiModel, updated_asset_external_ids: set[str]) -> None:
     """Merge only this run's updated nodes onto the latest stored state.
 
     Re-reads state at save time so a run with a narrow selector does not revert
@@ -61,10 +59,28 @@ def _load_run_results() -> dict:
 
 
 def get_last_updated_from_run_results(node_id: str) -> datetime | None:
+    run_results = _load_run_results()
     try:
-        for r in _load_run_results().get("results", []):
-            if r["unique_id"] == node_id and r["status"] == "success":
-                return r["timing"][-1]["completed_at"]
+        for r in run_results.get("results", []):
+            if r["unique_id"] != node_id:
+                continue
+            if str(r.get("status", "")).lower() != "success":
+                continue
+
+            for entry in reversed(r.get("timing") or []):
+                if entry.get("completed_at"):
+                    return entry["completed_at"]
+            # dbt 2.x can write an empty `timing` array. Without a fallback the node
+            # gets no state at all, so it is dirty on every subsequent run -- and the
+            # whole run's sources go unrecorded with it. The artifact's own write time
+            # is within a run's length of the real value.
+            generated_at = (run_results.get("metadata") or {}).get("generated_at")
+            if generated_at:
+                log_debug(
+                    f"No timing in run results for '{node_id}'; "
+                    "using the artifact's generated_at as last updated."
+                )
+            return generated_at
     except Exception as e:
         log_warn(f"Failed to get last updated from run results for '{node_id}': {e}")
     return None

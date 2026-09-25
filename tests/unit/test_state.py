@@ -274,6 +274,94 @@ class TestUpdateState:
         assert state.state["model.test_project.model_a"].sources == {}
 
     @patch("src.orchestra_dbt.state.load_json")
+    def test_update_state_with_empty_timing_falls_back_to_generated_at(
+        self, mock_load_json
+    ):
+        """dbt 2.x can write results with an empty `timing` array. Indexing it threw,
+        which skipped the node's state entirely -- so it stayed dirty forever, and the
+        run's source freshness was never recorded against it either."""
+        mock_load_json.return_value = {
+            "metadata": {"generated_at": "2024-01-01T12:00:00"},
+            "results": [
+                {
+                    "unique_id": "model.test_project.model_a",
+                    "status": "success",
+                    "timing": [],
+                }
+            ],
+        }
+
+        state = StateApiModel(state={})
+        parsed_dag = ParsedDag(
+            nodes={
+                "source.test_db.test_schema.test_table": SourceNode(),
+                "model.test_project.model_a": MaterialisationNode(
+                    asset_external_id="model.test_project.model_a",
+                    checksum="abc123",
+                    freshness=Freshness.CLEAN,
+                    dbt_path="models/model_a.sql",
+                    file_path="models/model_a.sql",
+                    reason="Node not seen before",
+                    sources={},
+                    freshness_config=FreshnessConfig(),
+                ),
+            },
+            edges=[
+                Edge(
+                    from_="source.test_db.test_schema.test_table",
+                    to_="model.test_project.model_a",
+                )
+            ],
+        )
+        source_freshness = SourceFreshness(
+            sources={"source.test_db.test_schema.test_table": datetime(2024, 1, 1, 9)}
+        )
+
+        update_state(state, parsed_dag, source_freshness)
+
+        item = state.state["model.test_project.model_a"]
+        assert item.last_updated == datetime(2024, 1, 1, 12, 0, 0)
+        # the point of the fallback: the source snapshot gets recorded
+        assert item.sources == {
+            "source.test_db.test_schema.test_table": datetime(2024, 1, 1, 9)
+        }
+
+    @patch("src.orchestra_dbt.state.load_json")
+    def test_update_state_accepts_capitalised_status(self, mock_load_json):
+        mock_load_json.return_value = {
+            "results": [
+                {
+                    "unique_id": "model.test_project.model_a",
+                    "status": "Success",
+                    "timing": [
+                        {"name": "execute", "completed_at": "2024-01-01T12:00:00"}
+                    ],
+                }
+            ]
+        }
+
+        state = StateApiModel(state={})
+        parsed_dag = ParsedDag(
+            nodes={
+                "model.test_project.model_a": MaterialisationNode(
+                    asset_external_id="model.test_project.model_a",
+                    checksum="abc123",
+                    freshness=Freshness.CLEAN,
+                    dbt_path="models/model_a.sql",
+                    file_path="models/model_a.sql",
+                    reason="Node not seen before",
+                    sources={},
+                    freshness_config=FreshnessConfig(),
+                )
+            },
+            edges=[],
+        )
+
+        update_state(state, parsed_dag, SourceFreshness(sources={}))
+
+        assert "model.test_project.model_a" in state.state
+
+    @patch("src.orchestra_dbt.state.load_json")
     def test_update_state_with_source_parents(self, mock_load_json):
         """Test updating state with a model that has source parents."""
         mock_load_json.return_value = {
@@ -1093,9 +1181,7 @@ class TestSaveStateGCS:
             side_effect=DefaultCredentialsError("no credentials"),
         ):
             with pytest.raises(StateSaveError):
-                save_state(
-                    StateApiModel(state={}), updated_asset_external_ids=set()
-                )
+                save_state(StateApiModel(state={}), updated_asset_external_ids=set())
 
 
 class TestAzureStateBackend:
