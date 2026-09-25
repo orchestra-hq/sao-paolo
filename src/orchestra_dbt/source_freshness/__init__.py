@@ -40,6 +40,9 @@ def _explicit_freshness_source_ids(results: list[dict]) -> set[str] | None:
     source that does set one -- so the freshness artifact alone cannot tell us. Returns
     None when the manifest cannot answer, so the caller can say so rather than treat
     every source as implicit.
+
+    Both live on the source node, and are duplicated under its `config`. Source-level
+    inheritance is already resolved into each node, so there is nothing to walk up to.
     """
     try:
         manifest_sources = load_json("target/manifest.json").get("sources") or {}
@@ -52,9 +55,9 @@ def _explicit_freshness_source_ids(results: list[dict]) -> set[str] | None:
     explicit: set[str] = set()
     for unique_id in (result["unique_id"] for result in results):
         node = manifest_sources.get(unique_id) or {}
-        freshness = node.get("freshness") or {}
+        config = node.get("config") or {}
         if any(
-            (node.get(key) or freshness.get(key))
+            (node.get(key) or config.get(key))
             for key in ("loaded_at_field", "loaded_at_query")
         ):
             explicit.add(unique_id)
@@ -128,11 +131,14 @@ def _get_source_freshness_v2(
                 "or loaded_at_query) and are excluded from state-aware orchestration; "
                 "models depending on them will always run."
             )
+        # Only sources with a `freshness:` block are checked at all; the rest never
+        # reach `sources.json`, so they are absent here rather than counted as failures.
+        log_debug(f"dbt freshness-checked {len(results)} source(s).")
         unresolved = len(results) - len(excluded) - len(sources)
         if unresolved:
             log_warn(
-                f"{unresolved} source(s) returned no max_loaded_at from dbt source freshness; "
-                "models depending on them will always run."
+                f"{unresolved} of the {len(results)} source(s) dbt freshness-checked returned "
+                "no max_loaded_at; models depending on them will always run."
             )
         return SourceFreshness(sources=sources)
     except Exception as e:

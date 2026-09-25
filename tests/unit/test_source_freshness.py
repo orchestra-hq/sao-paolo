@@ -371,14 +371,18 @@ class TestGetSourceFreshnessOnDbtCoreV2:
             sources={"source.proj.raw.explicit": datetime(2026, 3, 30)}
         )
 
-    def test_require_explicit_reads_loaded_at_query_nested_under_freshness(self):
+    def test_require_explicit_reads_loaded_at_field_from_config(self):
+        """dbt 2.x duplicates both onto the node's `config`; a source that only carries
+        it there is still explicit."""
         result = self._run(
             self._TWO_SOURCES,
             manifest={
                 "sources": {
-                    "source.proj.raw.metadata_only": {},
+                    "source.proj.raw.metadata_only": {
+                        "freshness": {"error_after": {"count": 24, "period": "hour"}}
+                    },
                     "source.proj.raw.explicit": {
-                        "freshness": {"loaded_at_query": "select max(ts) from t"}
+                        "config": {"loaded_at_field": "_fivetran_synced"}
                     },
                 }
             },
@@ -387,6 +391,33 @@ class TestGetSourceFreshnessOnDbtCoreV2:
 
         assert result == SourceFreshness(
             sources={"source.proj.raw.explicit": datetime(2026, 3, 30)}
+        )
+
+    def test_sources_dbt_never_checked_are_not_treated_as_failures(self):
+        """Only sources with a `freshness:` block reach sources.json. The ones without
+        one are absent, not failed, and must not be counted or excluded."""
+        result = self._run(
+            {
+                "results": [
+                    {
+                        "unique_id": "source.proj.raw.checked",
+                        "max_loaded_at": datetime(2026, 3, 31),
+                        "criteria": {"error_after": {"count": 24, "period": "hour"}},
+                    }
+                ]
+            },
+            manifest={
+                "sources": {
+                    "source.proj.raw.checked": {"loaded_at_field": "updated_at"},
+                    "source.proj.raw.never_checked": {"loaded_at_field": "updated_at"},
+                    "source.proj.raw.no_freshness_block": {},
+                }
+            },
+            require_explicit_source_freshness=True,
+        )
+
+        assert result == SourceFreshness(
+            sources={"source.proj.raw.checked": datetime(2026, 3, 31)}
         )
 
     def test_require_explicit_keeps_everything_when_manifest_unreadable(self):
