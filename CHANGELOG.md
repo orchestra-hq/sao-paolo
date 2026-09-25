@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The supported dbt-core version message quoted `<1.12`, wrongly telling users on dbt-core 1.12 that their version wasn't supported. `pyproject.toml` and the lockfile already allow `<1.13`; the constant now matches.
+
 ## [1.3.1] - 2026-09-17
 
 ### Added
