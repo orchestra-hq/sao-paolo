@@ -1,12 +1,11 @@
 from collections import Counter
 from datetime import UTC, datetime
-from typing import cast
 
 import click
 
 from .config import load_orchestra_dbt_settings
 from .constants import SERVICE_NAME
-from .models import MaterialisationNode, NodeType, ParsedDag
+from .models import MaterialisationNode
 
 
 def _log(msg: str, fg: str | None, error: bool = False) -> None:
@@ -46,18 +45,20 @@ def log_reused_nodes(nodes_to_reuse: dict[str, MaterialisationNode]) -> None:
 
 
 def log_why_not_reused(
-    parsed_dag: ParsedDag, nodes_to_reuse: dict[str, MaterialisationNode]
+    candidates: dict[str, MaterialisationNode],
+    nodes_to_reuse: dict[str, MaterialisationNode],
 ) -> None:
-    """Break down why nodes were rebuilt, grouped by reason.
+    """Break down why candidate nodes were rebuilt, grouped by reason.
 
     Each node carries its own `reason`, but only reused nodes ever print one -- so a run
     that reuses nothing says nothing at all about why, which is the case you most need
-    to debug.
+    to debug. Counts only nodes this run would have built, so they reconcile against
+    `x/y nodes reused` rather than quietly including nodes that were never candidates.
     """
     reasons = Counter(
-        cast(MaterialisationNode, node).reason
-        for node_id, node in parsed_dag.nodes.items()
-        if node.node_type == NodeType.MATERIALISATION and node_id not in nodes_to_reuse
+        node.reason
+        for node_id, node in candidates.items()
+        if node_id not in nodes_to_reuse
     )
     if not reasons:
         return

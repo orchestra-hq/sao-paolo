@@ -225,21 +225,23 @@ def main(args: tuple[str, ...]) -> None:
     # Edit the DAG inline.
     calculate_nodes_to_run(parsed_dag)
 
+    # Candidates are the materialisation nodes this run would actually build; a node
+    # outside `paths_to_run` was never in the running and does not belong in the counts.
+    candidates: dict[str, MaterialisationNode] = {}
     nodes_to_reuse: dict[str, MaterialisationNode] = {}
-    node_count = 0
     for node_id, node in parsed_dag.nodes.items():
         if node.node_type != NodeType.MATERIALISATION:
             continue
         materialisation_node: MaterialisationNode = cast(MaterialisationNode, node)
         if paths_to_run and materialisation_node.dbt_path not in paths_to_run:
             continue
-        node_count += 1
+        candidates[node_id] = materialisation_node
         if materialisation_node.freshness == Freshness.CLEAN:
             nodes_to_reuse[node_id] = materialisation_node
 
     log_reused_nodes(nodes_to_reuse)
-    log_info(f"{len(nodes_to_reuse)}/{node_count} nodes reused.")
-    log_why_not_reused(parsed_dag, nodes_to_reuse)
+    log_info(f"{len(nodes_to_reuse)}/{len(candidates)} nodes reused.")
+    log_why_not_reused(candidates, nodes_to_reuse)
 
     if len(nodes_to_reuse) != 0:
         patch_sql_files(nodes_to_reuse)

@@ -1,5 +1,3 @@
-from typing import cast
-
 from datetime import datetime
 
 from src.orchestra_dbt.logger import log_reused_nodes
@@ -50,13 +48,11 @@ class TestLogWhyNotReused:
     """A run that reuses nothing printed no reason at all, because only reused nodes
     log theirs -- exactly the case you need to debug."""
 
-    def _dag(self):
+    def _candidates(self):
         from src.orchestra_dbt.models import (
             Freshness,
             FreshnessConfig,
             MaterialisationNode,
-            ParsedDag,
-            SourceNode,
         )
 
         def node(name, reason):
@@ -71,15 +67,11 @@ class TestLogWhyNotReused:
                 freshness_config=FreshnessConfig(),
             )
 
-        return ParsedDag(
-            nodes={
-                "model.a": node("a", "Checksum changed since last run."),
-                "model.b": node("b", "Checksum changed since last run."),
-                "model.c": node("c", "Model not previously seen in state."),
-                "source.s": SourceNode(),
-            },
-            edges=[],
-        )
+        return {
+            "model.a": node("a", "Checksum changed since last run."),
+            "model.b": node("b", "Checksum changed since last run."),
+            "model.c": node("c", "Model not previously seen in state."),
+        }
 
     def test_groups_unreused_nodes_by_reason(self):
         from unittest.mock import call, patch
@@ -87,7 +79,7 @@ class TestLogWhyNotReused:
         from src.orchestra_dbt.logger import log_why_not_reused
 
         with patch("src.orchestra_dbt.logger.log_debug") as debug:
-            log_why_not_reused(self._dag(), nodes_to_reuse={})
+            log_why_not_reused(self._candidates(), nodes_to_reuse={})
 
         assert call("3 node(s) not reused, by reason:") in debug.call_args_list
         assert (
@@ -104,14 +96,9 @@ class TestLogWhyNotReused:
 
         from src.orchestra_dbt.logger import log_why_not_reused
 
-        from src.orchestra_dbt.models import MaterialisationNode
-
-        dag = self._dag()
-        reused = {
-            node_id: cast(MaterialisationNode, dag.nodes[node_id])
-            for node_id in ("model.a", "model.b")
-        }
+        candidates = self._candidates()
+        reused = {k: candidates[k] for k in ("model.a", "model.b")}
         with patch("src.orchestra_dbt.logger.log_debug") as debug:
-            log_why_not_reused(dag, nodes_to_reuse=reused)
+            log_why_not_reused(candidates, nodes_to_reuse=reused)
 
         assert debug.call_args_list[0][0][0] == "1 node(s) not reused, by reason:"
