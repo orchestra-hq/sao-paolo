@@ -1,4 +1,6 @@
-from src.orchestra_dbt.ls import get_args_for_ls
+from unittest.mock import patch
+
+from src.orchestra_dbt.ls import _resolve_paths, get_args_for_ls
 
 
 class TestGetArgsForLs:
@@ -109,3 +111,45 @@ class TestGetArgsForLsStripsUnacceptedFlags:
             "ci",
             *self._TAIL,
         ]
+
+
+class TestResolvePaths:
+    """dbt 2.x honours --output path only on stdout; the programmatic result is always
+    fully-qualified names. Left untranslated, nothing matches node.dbt_path and no node
+    is ever reusable."""
+
+    _MANIFEST = {
+        "nodes": {
+            "model.proj.stg_events": {
+                "fqn": ["proj", "staging", "stg_events"],
+                "original_file_path": "models/staging/stg_events.sql",
+            },
+            "seed.proj.raw_events": {
+                "fqn": ["proj", "raw_events"],
+                "original_file_path": "seeds/raw_events.csv",
+            },
+        }
+    }
+
+    def test_translates_fully_qualified_names_to_paths(self):
+        with patch("src.orchestra_dbt.ls.load_json", return_value=self._MANIFEST):
+            assert _resolve_paths(["proj.staging.stg_events", "proj.raw_events"]) == [
+                "models/staging/stg_events.sql",
+                "seeds/raw_events.csv",
+            ]
+
+    def test_leaves_dbt_1_x_paths_untouched(self):
+        paths = ["models/staging/stg_events.sql", "seeds/raw_events.csv"]
+        with patch("src.orchestra_dbt.ls.load_json") as load_json:
+            assert _resolve_paths(paths) == paths
+        load_json.assert_not_called()
+
+    def test_skips_names_with_no_manifest_entry(self):
+        with patch("src.orchestra_dbt.ls.load_json", return_value=self._MANIFEST):
+            assert _resolve_paths(["proj.staging.stg_events", "proj.gone"]) == [
+                "models/staging/stg_events.sql"
+            ]
+
+    def test_unreadable_manifest_yields_no_paths(self):
+        with patch("src.orchestra_dbt.ls.load_json", side_effect=FileNotFoundError):
+            assert _resolve_paths(["proj.staging.stg_events"]) == []

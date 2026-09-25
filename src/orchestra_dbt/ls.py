@@ -1,6 +1,7 @@
 from .compatibility import dbt_core_import_error_message
 from .constants import RESOURCE_TYPES_TO_LS
 from .logger import log_debug, log_error, log_info, log_warn
+from .utils import load_json
 
 # Flags `dbt build`/`run`/`test` accept but `dbt ls` does not. Forwarding one makes dbt
 # ls exit with "No such option", which costs us node-path discovery for the whole run.
@@ -53,6 +54,41 @@ def get_args_for_ls(user_args: tuple) -> list[str]:
     return command_args + resource_type_args + list_user_args + output_args
 
 
+def _resolve_paths(items: list[str]) -> list[str]:
+    """Return `items` as project-relative file paths.
+
+    dbt 2.x honours `--output path` only on stdout: the programmatic result is always
+    a list of fully-qualified names (`proj.staging.stg_events`) whatever `--output`
+    says. Everything downstream compares these against the manifest's
+    `original_file_path`, so left untranslated nothing ever matches and no node is
+    reusable. Translated via the manifest `dbt ls` has just written.
+    """
+    if all("/" in item for item in items):
+        return items  # dbt 1.x: already paths
+
+    try:
+        manifest_nodes = load_json("target/manifest.json").get("nodes") or {}
+    except Exception as e:
+        log_warn(
+            f"dbt ls returned names rather than paths and target/manifest.json could not "
+            f"be read to resolve them, so no node can be matched to the run: {e}"
+        )
+        return []
+
+    by_fqn = {
+        ".".join(node["fqn"]): node["original_file_path"]
+        for node in manifest_nodes.values()
+        if node.get("fqn") and node.get("original_file_path")
+    }
+    paths = [by_fqn[item] for item in items if item in by_fqn]
+    if unresolved := len(items) - len(paths):
+        log_warn(
+            f"{unresolved} of {len(items)} node(s) from dbt ls had no manifest entry."
+        )
+    log_debug(f"Resolved {len(paths)} dbt ls name(s) to file paths via the manifest.")
+    return paths
+
+
 def get_paths_to_run(args: tuple) -> list[str] | None:
     try:
         from dbt.cli.main import (
@@ -73,7 +109,7 @@ def get_paths_to_run(args: tuple) -> list[str] | None:
         if isinstance(res.result, list) and all(
             isinstance(item, str) for item in res.result
         ):
-            return res.result
+            return _resolve_paths(res.result)
 
         raise ValueError(f"Unexpected result from dbt ls: {res.result}")
     except Exception as e:
