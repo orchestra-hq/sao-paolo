@@ -82,10 +82,15 @@ def _log_freshness_outcome(result, results: list[dict]) -> None:
         return
 
     statuses = Counter(str(source.get("status")) for source in results)
-    log_debug(
-        f"dbt source freshness exited non-zero (code {getattr(result, 'exit_code', None)}) "
+    detail = (
         "because some sources are not fresh: "
         + ", ".join(f"{count} {status}" for status, count in sorted(statuses.items()))
+        if statuses
+        else "and wrote no source results."
+    )
+    log_debug(
+        f"dbt source freshness exited non-zero "
+        f"(code {getattr(result, 'exit_code', None)}) {detail}"
     )
 
 

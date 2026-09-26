@@ -442,6 +442,16 @@ class TestGetSourceFreshnessOnDbtCoreV2:
             _log_freshness_outcome(handled, [{"status": "Error"}, {"status": "Pass"}])
         warn.assert_not_called()
 
+    def test_no_results_does_not_claim_sources_are_stale(self):
+        """A cold run whose source tables do not exist yet writes no results at all;
+        saying "some sources are not fresh" and then listing none is just confusing."""
+        from src.orchestra_dbt.source_freshness import _log_freshness_outcome
+
+        handled = SimpleNamespace(success=False, exception=None, exit_code=1)
+        with patch("src.orchestra_dbt.source_freshness.log_debug") as debug:
+            _log_freshness_outcome(handled, [])
+        assert "wrote no source results" in debug.call_args[0][0]
+
     def test_real_engine_error_still_warns(self):
         from src.orchestra_dbt.source_freshness import _log_freshness_outcome
 
