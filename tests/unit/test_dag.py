@@ -418,3 +418,7 @@ class TestConstructDag:
         edge_froms = [e.from_ for e in dag.edges]
         assert "source.test_db.raw.events" in edge_froms
         assert "function.test_project.is_positive_int" not in edge_froms
+        # relation_name is what the existence check keys on; ephemeral nodes have none
+        node = dag.nodes["model.test_project.my_model"]
+        assert isinstance(node, MaterialisationNode)
+        assert node.relation_name == "my_model"

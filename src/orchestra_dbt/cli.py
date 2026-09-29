@@ -17,7 +17,7 @@ from .constants import SERVICE_NAME
 from .dag import construct_dag
 from .full_refresh_finder import is_full_refresh_requested
 from .logger import log_debug, log_error, log_info, log_reused_nodes, log_warn
-from .ls import get_paths_to_run
+from .ls import get_nodes_to_run
 from .models import (
     MaterialisationNode,
     NodeType,
@@ -32,6 +32,7 @@ from .modify import (
 )
 from .orchestra import is_warn
 from .patcher import patch_seed_properties, patch_sql_files, revert_patching
+from .relation_existence import apply_relation_existence_gate
 from .sao import Freshness, calculate_nodes_to_run
 from .source_freshness import get_source_freshness
 from .state import (
@@ -42,7 +43,6 @@ from .state import (
     update_state,
 )
 from .state_types import StateBackendKind
-from .target_finder import find_target_in_args
 
 
 def _usage_program() -> str:
@@ -164,15 +164,27 @@ def main(args: tuple[str, ...]) -> None:
     _validate_environment()
 
     try:
-        paths_to_run: list[str] | None = get_paths_to_run(dbt_args[2:])
+        nodes_to_run = get_nodes_to_run(dbt_args[2:])
     except ImportError as import_error:
         log_error(dbt_core_import_error_message(import_error))
         sys.exit(1)
 
+    paths_to_run: list[str] | None = nodes_to_run.paths if nodes_to_run else None
+    if settings.scope_source_freshness_to_selection and nodes_to_run is None:
+        # With no selection to scope to, freshness checks every source instead.
+        log_warn(
+            "Could not resolve the selection for source freshness scoping. "
+            "Checking every source instead."
+        )
+
     try:
         source_freshness: SourceFreshness | None = get_source_freshness(
-            target=find_target_in_args(list(dbt_args)),
+            # find_target_in_args just scans for --target/-t; the leading "dbt
+            # <subcommand>" tokens are harmless noise to it, so no need to slice.
+            user_args=dbt_args,
             require_explicit_source_freshness=settings.require_explicit_source_freshness,
+            scope_to_selection=settings.scope_source_freshness_to_selection,
+            selectors_to_run=nodes_to_run.selectors if nodes_to_run else None,
         )
     except ImportError as import_error:
         log_error(dbt_core_import_error_message(import_error))
@@ -206,6 +218,10 @@ def main(args: tuple[str, ...]) -> None:
             dbt_exit_code=subprocess.run(dbt_args).returncode,
             state_load_ok=state_load_ok,
         )
+
+    # A node can be clean on paper but missing from the warehouse; force it back into the run.
+    if settings.verify_relations_exist:
+        apply_relation_existence_gate(parsed_dag, paths_to_run)
 
     # Edit the DAG inline.
     calculate_nodes_to_run(parsed_dag)

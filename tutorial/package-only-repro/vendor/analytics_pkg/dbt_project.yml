@@ -1,0 +1,6 @@
+name: analytics_pkg
+version: "1.0.0"
+config-version: 2
+
+profile: package_only_root
+model-paths: ["models"]

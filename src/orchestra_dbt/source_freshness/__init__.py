@@ -4,8 +4,36 @@ from datetime import datetime
 from ..compatibility import dbt_core_import_error_message
 from ..logger import log_error, log_info, log_warn
 from ..models import SourceFreshness
+from ..target_finder import find_target_in_args
 from ..utils import load_json
 from .fallbacks.registry import FALLBACK_BY_ADAPTER_TYPE, loaded_at_fields_unset
+
+
+def get_args_for_source_freshness(
+    user_args: tuple | list[str],
+    scope_to_selection: bool = False,
+    selectors_to_run: list[str] | None = None,
+) -> list[str]:
+    """Build the `dbt source freshness` CLI args: forwards `--target`, and when
+    scoped, an ancestor-expanded `--select` built from `selectors_to_run`.
+
+    Selects by dotted fqn, not `path:`: dbt resolves `path:` by globbing the real
+    filesystem from the project root, so package-owned nodes -- whose paths are
+    relative to their package -- never match. fqns come from the manifest and are
+    package-qualified, so they work for both.
+
+    fqns match as a prefix over the subtree, so a model sharing a name with a
+    sibling directory can pull in that directory's sources too. That widens the
+    check rather than narrowing it, so it costs time, never correctness.
+    """
+    args: list[str] = ["source", "freshness", "-q"]
+    target = find_target_in_args(list(user_args))
+    if target:
+        args.extend(["--target", target])
+    if scope_to_selection and selectors_to_run:
+        args.append("--select")
+        args.extend(f"+{selector}" for selector in selectors_to_run)
+    return args
 
 
 def should_exclude_source(
@@ -15,7 +43,10 @@ def should_exclude_source(
 
 
 def get_source_freshness(
-    target: str | None, require_explicit_source_freshness: bool = False
+    user_args: tuple | list[str],
+    require_explicit_source_freshness: bool = False,
+    scope_to_selection: bool = False,
+    selectors_to_run: list[str] | None = None,
 ) -> SourceFreshness | None:
     try:
         from dbt.artifacts.resources.v1.components import FreshnessThreshold
@@ -83,10 +114,11 @@ def get_source_freshness(
     FreshnessTask.get_runner_type = lambda self, _: OrchestraFreshnessRunner
 
     try:
-        args: list[str] = ["source", "freshness", "-q"]
-        if target:
-            args.extend(["--target", target])
-        dbtRunner().invoke(args=args)
+        dbtRunner().invoke(
+            args=get_args_for_source_freshness(
+                user_args, scope_to_selection, selectors_to_run
+            )
+        )
         if sources_without_explicit_freshness:
             log_warn(
                 f"{len(sources_without_explicit_freshness)} source(s) have no explicit freshness "
