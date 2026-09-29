@@ -1,0 +1,19 @@
+pyproject.toml
+  s_10952f3b90168d::t_7f5200b75616e2 68-70
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "ce9fbb0603ee698c363918ee6b71e1a3bb6d3977",
+  "prompts": {},
+  "sessions": {
+    "s_10952f3b90168d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7479a7ff-ba61-48b2-b6f5-0b4787b8aee9",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Jeroen Rijks <jeroen@getorchestra.io>"
+    }
+  }
+}
