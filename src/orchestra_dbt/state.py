@@ -85,14 +85,13 @@ def update_state(
 
         sources_dict: dict[str, datetime] = {}
         for edge in parsed_dag.edges:
-            if edge.to_ == node_id:
-                if edge.from_ in parsed_dag.nodes:
-                    parent_node = parsed_dag.nodes[edge.from_]
-                    if (
-                        parent_node.node_type == NodeType.SOURCE
-                        and edge.from_ in source_freshness.sources
-                    ):
-                        sources_dict[edge.from_] = source_freshness.sources[edge.from_]
+            if edge.to_ == node_id and edge.from_ in parsed_dag.nodes:
+                parent_node = parsed_dag.nodes[edge.from_]
+                if (
+                    parent_node.node_type == NodeType.SOURCE
+                    and edge.from_ in source_freshness.sources
+                ):
+                    sources_dict[edge.from_] = source_freshness.sources[edge.from_]
 
         state.state[materialisation_node.asset_external_id] = StateItem(
             checksum=materialisation_node.checksum,

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import boto3
@@ -53,23 +53,23 @@ class TestLoadState:
                 "state": {
                     "a.model.test": {
                         "checksum": "123",
-                        "last_updated": "2024-01-01T12:00:00",
+                        "last_updated": "2024-01-01T12:00:00Z",
                         "sources": {
-                            "source.test": "2024-01-01T11:00:00",
+                            "source.test": "2024-01-01T11:00:00Z",
                         },
                     },
                     "b.model.test": {
                         "checksum": "123",
-                        "last_updated": "2024-01-01T12:00:00",
+                        "last_updated": "2024-01-01T12:00:00Z",
                         "sources": {
-                            "source.test": "2024-01-01T11:00:00",
+                            "source.test": "2024-01-01T11:00:00Z",
                         },
                     },
                     "model.test": {
                         "checksum": "123",
-                        "last_updated": "2024-01-01T12:00:00",
+                        "last_updated": "2024-01-01T12:00:00Z",
                         "sources": {
-                            "source.test": "2024-01-01T11:00:00",
+                            "source.test": "2024-01-01T11:00:00Z",
                         },
                     },
                 }
@@ -79,11 +79,11 @@ class TestLoadState:
         mock_get_integration_account_id.return_value = integration_account_id
         loaded_state = load_state()
         assert len(loaded_state.state) == expected_state_len
-        assert list(loaded_state.state.values())[0] == StateItem(
-            last_updated=datetime(2024, 1, 1, 12, 0, 0),
+        assert next(iter(loaded_state.state.values())) == StateItem(
+            last_updated=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
             checksum="123",
             sources={
-                "source.test": datetime(2024, 1, 1, 11, 0, 0),
+                "source.test": datetime(2024, 1, 1, 11, 0, 0, tzinfo=UTC),
             },
         )
 
@@ -142,17 +142,17 @@ class TestSaveState:
             match_json={
                 "state": {
                     "model.test": {
-                        "last_updated": "2024-01-01T14:00:00",
+                        "last_updated": "2024-01-01T14:00:00Z",
                         "checksum": "123",
                         "sources": {
-                            "source.test": "2024-01-01T11:00:00",
+                            "source.test": "2024-01-01T11:00:00Z",
                         },
                     },
                     "model.new": {
-                        "last_updated": "2024-01-01T14:00:00",
+                        "last_updated": "2024-01-01T14:00:00Z",
                         "checksum": "456",
                         "sources": {
-                            "source.test": "2024-01-01T11:00:00",
+                            "source.test": "2024-01-01T11:00:00Z",
                         },
                     },
                 }
@@ -163,17 +163,17 @@ class TestSaveState:
                 state=StateApiModel(
                     state={
                         "model.test": StateItem(
-                            last_updated=datetime(2024, 1, 1, 14, 0, 0),
+                            last_updated=datetime(2024, 1, 1, 14, 0, 0, tzinfo=UTC),
                             checksum="123",
                             sources={
-                                "source.test": datetime(2024, 1, 1, 11, 0, 0),
+                                "source.test": datetime(2024, 1, 1, 11, 0, 0, tzinfo=UTC),
                             },
                         ),
                         "model.new": StateItem(
-                            last_updated=datetime(2024, 1, 1, 14, 0, 0),
+                            last_updated=datetime(2024, 1, 1, 14, 0, 0, tzinfo=UTC),
                             checksum="456",
                             sources={
-                                "source.test": datetime(2024, 1, 1, 11, 0, 0),
+                                "source.test": datetime(2024, 1, 1, 11, 0, 0, tzinfo=UTC),
                             },
                         ),
                     }
@@ -239,8 +239,8 @@ class TestUpdateState:
                     "unique_id": "model.test_project.model_a",
                     "status": "success",
                     "timing": [
-                        {"name": "compile", "started_at": "2024-01-01T10:00:00"},
-                        {"name": "execute", "completed_at": "2024-01-01T12:00:00"},
+                        {"name": "compile", "started_at": "2024-01-01T10:00:00Z"},
+                        {"name": "execute", "completed_at": "2024-01-01T12:00:00Z"},
                     ],
                 }
             ]
@@ -269,7 +269,7 @@ class TestUpdateState:
         assert "model.test_project.model_a" in state.state
         assert state.state["model.test_project.model_a"].checksum == "abc123"
         assert state.state["model.test_project.model_a"].last_updated == datetime(
-            2024, 1, 1, 12, 0, 0
+            2024, 1, 1, 12, 0, 0, tzinfo=UTC
         )
         assert state.state["model.test_project.model_a"].sources == {}
 
@@ -282,8 +282,8 @@ class TestUpdateState:
                     "unique_id": "model.test_project.model_a",
                     "status": "success",
                     "timing": [
-                        {"name": "compile", "started_at": "2024-01-01T10:00:00"},
-                        {"name": "execute", "completed_at": "2024-01-01T12:00:00"},
+                        {"name": "compile", "started_at": "2024-01-01T10:00:00Z"},
+                        {"name": "execute", "completed_at": "2024-01-01T12:00:00Z"},
                     ],
                 }
             ]
@@ -313,7 +313,7 @@ class TestUpdateState:
         )
         source_freshness = SourceFreshness(
             sources={
-                "source.test_db.test_schema.test_table": datetime(2024, 1, 1, 11, 0, 0)
+                "source.test_db.test_schema.test_table": datetime(2024, 1, 1, 11, 0, 0, tzinfo=UTC)
             }
         )
 
@@ -321,7 +321,7 @@ class TestUpdateState:
 
         assert "model.test_project.model_a" in state.state
         assert state.state["model.test_project.model_a"].sources == {
-            "source.test_db.test_schema.test_table": datetime(2024, 1, 1, 11, 0, 0)
+            "source.test_db.test_schema.test_table": datetime(2024, 1, 1, 11, 0, 0, tzinfo=UTC)
         }
 
     @patch("src.orchestra_dbt.state.load_json")
@@ -360,8 +360,8 @@ class TestUpdateState:
                     "unique_id": "model.test_project.model_a",
                     "status": "error",
                     "timing": [
-                        {"name": "compile", "started_at": "2024-01-01T10:00:00"},
-                        {"name": "execute", "completed_at": "2024-01-01T12:00:00"},
+                        {"name": "compile", "started_at": "2024-01-01T10:00:00Z"},
+                        {"name": "execute", "completed_at": "2024-01-01T12:00:00Z"},
                     ],
                 }
             ]
@@ -398,8 +398,8 @@ class TestUpdateState:
                     "unique_id": "source.test_db.test_schema.test_table",
                     "status": "success",
                     "timing": [
-                        {"name": "compile", "started_at": "2024-01-01T10:00:00"},
-                        {"name": "execute", "completed_at": "2024-01-01T12:00:00"},
+                        {"name": "compile", "started_at": "2024-01-01T10:00:00Z"},
+                        {"name": "execute", "completed_at": "2024-01-01T12:00:00Z"},
                     ],
                 }
             ]
@@ -427,16 +427,16 @@ class TestUpdateState:
                     "unique_id": "model.test_project.model_a",
                     "status": "success",
                     "timing": [
-                        {"name": "compile", "started_at": "2024-01-01T10:00:00"},
-                        {"name": "execute", "completed_at": "2024-01-01T12:00:00"},
+                        {"name": "compile", "started_at": "2024-01-01T10:00:00Z"},
+                        {"name": "execute", "completed_at": "2024-01-01T12:00:00Z"},
                     ],
                 },
                 {
                     "unique_id": "model.test_project.model_b",
                     "status": "success",
                     "timing": [
-                        {"name": "compile", "started_at": "2024-01-01T11:00:00"},
-                        {"name": "execute", "completed_at": "2024-01-01T13:00:00"},
+                        {"name": "compile", "started_at": "2024-01-01T11:00:00Z"},
+                        {"name": "execute", "completed_at": "2024-01-01T13:00:00Z"},
                     ],
                 },
             ]
@@ -487,8 +487,8 @@ class TestUpdateState:
                     "unique_id": "model.test_project.model_a",
                     "status": "success",
                     "timing": [
-                        {"name": "compile", "started_at": "2024-01-01T10:00:00"},
-                        {"name": "execute", "completed_at": "2024-01-01T12:00:00"},
+                        {"name": "compile", "started_at": "2024-01-01T10:00:00Z"},
+                        {"name": "execute", "completed_at": "2024-01-01T12:00:00Z"},
                     ],
                 }
             ]
@@ -523,8 +523,8 @@ class TestUpdateState:
         )
         source_freshness = SourceFreshness(
             sources={
-                "source.test_db.test_schema.table1": datetime(2024, 1, 1, 11, 0, 0),
-                "source.test_db.test_schema.table2": datetime(2024, 1, 1, 11, 30, 0),
+                "source.test_db.test_schema.table1": datetime(2024, 1, 1, 11, 0, 0, tzinfo=UTC),
+                "source.test_db.test_schema.table2": datetime(2024, 1, 1, 11, 30, 0, tzinfo=UTC),
             }
         )
 
@@ -550,8 +550,8 @@ class TestUpdateState:
                     "unique_id": "model.test_project.model_a",
                     "status": "success",
                     "timing": [
-                        {"name": "compile", "started_at": "2024-01-01T10:00:00"},
-                        {"name": "execute", "completed_at": "2024-01-01T12:00:00"},
+                        {"name": "compile", "started_at": "2024-01-01T10:00:00Z"},
+                        {"name": "execute", "completed_at": "2024-01-01T12:00:00Z"},
                     ],
                 }
             ]
@@ -587,7 +587,7 @@ class TestUpdateState:
         # Only table1 is in source_freshness
         source_freshness = SourceFreshness(
             sources={
-                "source.test_db.test_schema.table1": datetime(2024, 1, 1, 11, 0, 0)
+                "source.test_db.test_schema.table1": datetime(2024, 1, 1, 11, 0, 0, tzinfo=UTC)
             }
         )
 
@@ -614,8 +614,8 @@ class TestUpdateState:
                     "unique_id": "model.test_project.model_a",
                     "status": "success",
                     "timing": [
-                        {"name": "compile", "started_at": "2024-01-01T10:00:00"},
-                        {"name": "execute", "completed_at": "2024-01-01T14:00:00"},
+                        {"name": "compile", "started_at": "2024-01-01T10:00:00Z"},
+                        {"name": "execute", "completed_at": "2024-01-01T14:00:00Z"},
                     ],
                 }
             ]
@@ -625,7 +625,7 @@ class TestUpdateState:
         state = StateApiModel(
             state={
                 "model.test_project.model_a": StateItem(
-                    last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                    last_updated=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
                     checksum="old_checksum",
                     sources={},
                 )
@@ -652,7 +652,7 @@ class TestUpdateState:
 
         assert state.state["model.test_project.model_a"].checksum == "new_checksum"
         assert state.state["model.test_project.model_a"].last_updated == datetime(
-            2024, 1, 1, 14, 0, 0
+            2024, 1, 1, 14, 0, 0, tzinfo=UTC
         )
 
     @patch("src.orchestra_dbt.state.load_json")
@@ -664,8 +664,8 @@ class TestUpdateState:
                     "unique_id": "model.test_project.model_b",
                     "status": "success",
                     "timing": [
-                        {"name": "compile", "started_at": "2024-01-01T10:00:00"},
-                        {"name": "execute", "completed_at": "2024-01-01T12:00:00"},
+                        {"name": "compile", "started_at": "2024-01-01T10:00:00Z"},
+                        {"name": "execute", "completed_at": "2024-01-01T12:00:00Z"},
                     ],
                 }
             ]
@@ -826,9 +826,9 @@ class TestSaveStateFile:
         state = StateApiModel(
             state={
                 "model.test": StateItem(
-                    last_updated=datetime(2024, 1, 1, 14, 0, 0),
+                    last_updated=datetime(2024, 1, 1, 14, 0, 0, tzinfo=UTC),
                     checksum="123",
-                    sources={"source.test": datetime(2024, 1, 1, 11, 0, 0)},
+                    sources={"source.test": datetime(2024, 1, 1, 11, 0, 0, tzinfo=UTC)},
                 )
             }
         )
@@ -857,7 +857,7 @@ class TestSaveStateMerge:
         in_memory = StateApiModel(
             state={
                 "model.a": StateItem(
-                    last_updated=datetime(2024, 1, 1, 10, 0, 0),
+                    last_updated=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
                     checksum="a-old",
                     sources={},
                 )
@@ -870,12 +870,12 @@ class TestSaveStateMerge:
             StateApiModel(
                 state={
                     "model.a": StateItem(
-                        last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                        last_updated=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
                         checksum="a-concurrent",
                         sources={},
                     ),
                     "model.b": StateItem(
-                        last_updated=datetime(2024, 1, 1, 12, 5, 0),
+                        last_updated=datetime(2024, 1, 1, 12, 5, 0, tzinfo=UTC),
                         checksum="b-concurrent",
                         sources={},
                     ),
@@ -886,7 +886,7 @@ class TestSaveStateMerge:
 
         # This run only executed model_a, so it only updates model.a.
         in_memory.state["model.a"] = StateItem(
-            last_updated=datetime(2024, 1, 1, 11, 0, 0),
+            last_updated=datetime(2024, 1, 1, 11, 0, 0, tzinfo=UTC),
             checksum="a-this-run",
             sources={},
         )
@@ -918,7 +918,7 @@ class TestSaveStateMerge:
         state = StateApiModel(
             state={
                 "model.a": StateItem(
-                    last_updated=datetime(2024, 1, 1, 11, 0, 0),
+                    last_updated=datetime(2024, 1, 1, 11, 0, 0, tzinfo=UTC),
                     checksum="a-this-run",
                     sources={},
                 )
@@ -950,7 +950,7 @@ class TestLoadStateS3:
         conn.create_bucket(Bucket="test-bucket-s3")
         payload = (
             b'{"state": {"model.x": {"checksum": "c", '
-            b'"last_updated": "2024-01-01T12:00:00", "sources": {}}}}'
+            b'"last_updated": "2024-01-01T12:00:00Z", "sources": {}}}}'
         )
         conn.put_object(Bucket="test-bucket-s3", Key="k.json", Body=payload)
         monkeypatch.chdir(tmp_path)
@@ -975,7 +975,7 @@ class TestSaveStateS3:
             StateApiModel(
                 state={
                     "m": StateItem(
-                        last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                        last_updated=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
                         checksum="1",
                         sources={},
                     )
@@ -1005,9 +1005,8 @@ class TestLoadStateGCS:
             mounts=[
                 Mount("test-bucket", tmp_path / "gcs", readable=True, writable=True)
             ]
-        ):
-            with patch.object(MockClient, "get_bucket", return_value=None, create=True):
-                assert load_state() == StateApiModel(state={})
+        ), patch.object(MockClient, "get_bucket", return_value=None, create=True):
+            assert load_state() == StateApiModel(state={})
 
     def test_load_state_gcs_success(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
         bucket_dir = tmp_path / "gcs"
@@ -1015,7 +1014,7 @@ class TestLoadStateGCS:
         bucket_dir.mkdir()
         blob_path.write_text(
             '{"state": {"model.x": {"checksum": "c", '
-            '"last_updated": "2024-01-01T12:00:00", "sources": {}}}}'
+            '"last_updated": "2024-01-01T12:00:00Z", "sources": {}}}}'
         )
         monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
@@ -1041,9 +1040,8 @@ class TestLoadStateGCS:
         with patch(
             "orchestra_dbt.state_backends.gcs.storage.Client",
             side_effect=DefaultCredentialsError("no credentials"),
-        ):
-            with pytest.raises(StateLoadError):
-                load_state()
+        ), pytest.raises(StateLoadError):
+            load_state()
 
 
 class TestSaveStateGCS:
@@ -1067,7 +1065,7 @@ class TestSaveStateGCS:
                 StateApiModel(
                     state={
                         "m": StateItem(
-                            last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                            last_updated=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
                             checksum="1",
                             sources={},
                         )
@@ -1091,11 +1089,10 @@ class TestSaveStateGCS:
         with patch(
             "orchestra_dbt.state_backends.gcs.storage.Client",
             side_effect=DefaultCredentialsError("no credentials"),
-        ):
-            with pytest.raises(StateSaveError):
-                save_state(
-                    StateApiModel(state={}), updated_asset_external_ids=set()
-                )
+        ), pytest.raises(StateSaveError):
+            save_state(
+                StateApiModel(state={}), updated_asset_external_ids=set()
+            )
 
 
 class TestAzureStateBackend:
@@ -1126,6 +1123,7 @@ class TestAzureStateBackend:
     @patch("src.orchestra_dbt.state_backends.azure.DefaultAzureCredential")
     def test_load_raises_when_container_missing(self, mock_credential, mock_client_cls):
         from azure.core.exceptions import ResourceNotFoundError
+
         from src.orchestra_dbt.state_errors import StateLoadError
 
         mock_blob_client = MagicMock()
@@ -1146,7 +1144,7 @@ class TestAzureStateBackend:
     @patch("src.orchestra_dbt.state_backends.azure.BlobServiceClient")
     @patch("src.orchestra_dbt.state_backends.azure.DefaultAzureCredential")
     def test_load_returns_valid_state(self, mock_credential, mock_client_cls):
-        payload = '{"state": {"model.test": {"checksum": "abc", "last_updated": "2024-01-01T12:00:00", "sources": {}}}}'
+        payload = '{"state": {"model.test": {"checksum": "abc", "last_updated": "2024-01-01T12:00:00Z", "sources": {}}}}'
         mock_download = MagicMock()
         mock_download.readall.return_value = payload.encode("utf-8")
         mock_blob_client = MagicMock()
@@ -1185,6 +1183,7 @@ class TestAzureStateBackend:
     @patch("src.orchestra_dbt.state_backends.azure.DefaultAzureCredential")
     def test_save_raises_on_auth_error(self, mock_credential, mock_client_cls):
         from azure.core.exceptions import HttpResponseError
+
         from src.orchestra_dbt.state_errors import StateSaveError
 
         mock_blob_client = MagicMock()
@@ -1259,9 +1258,8 @@ class TestAzureStateBackend:
     def test_load_raises_when_connection_string_account_mismatches_uri(
         self, mock_client_cls
     ):
-        from src.orchestra_dbt.state_errors import StateLoadError
-
         from src.orchestra_dbt.state_backends.azure import AzureStateBackend
+        from src.orchestra_dbt.state_errors import StateLoadError
 
         backend = AzureStateBackend("myaccount", "mycontainer", "state.json")
         with pytest.raises(StateLoadError, match="must match"):
@@ -1279,9 +1277,8 @@ class TestAzureStateBackend:
     def test_save_raises_when_connection_string_account_mismatches_uri(
         self, mock_client_cls
     ):
-        from src.orchestra_dbt.state_errors import StateSaveError
-
         from src.orchestra_dbt.state_backends.azure import AzureStateBackend
+        from src.orchestra_dbt.state_errors import StateSaveError
 
         backend = AzureStateBackend("myaccount", "mycontainer", "state.json")
         with pytest.raises(StateSaveError, match="must match"):

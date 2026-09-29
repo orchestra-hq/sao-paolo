@@ -79,7 +79,7 @@ def _validate_environment() -> None:
 
 def _run_dbt_passthrough(dbt_args: tuple[str, ...]) -> None:
     try:
-        sys.exit(subprocess.run(dbt_args).returncode)
+        sys.exit(subprocess.run(dbt_args, check=False).returncode)
     except FileNotFoundError as file_not_found_error:
         log_error(
             f"dbt executable not found on PATH (install the dbt CLI). {file_not_found_error}"
@@ -190,7 +190,7 @@ def main(args: tuple[str, ...]) -> None:
         log_error(dbt_core_import_error_message(import_error))
         sys.exit(1)
     if not source_freshness:
-        sys.exit(subprocess.run(dbt_args).returncode)
+        sys.exit(subprocess.run(dbt_args, check=False).returncode)
     log_info(f"Collected {len(source_freshness.sources)} source(s) information.")
 
     try:
@@ -215,7 +215,7 @@ def main(args: tuple[str, ...]) -> None:
             state,
             parsed_dag,
             source_freshness,
-            dbt_exit_code=subprocess.run(dbt_args).returncode,
+            dbt_exit_code=subprocess.run(dbt_args, check=False).returncode,
             state_load_ok=state_load_ok,
         )
 
@@ -245,7 +245,7 @@ def main(args: tuple[str, ...]) -> None:
         patch_seed_properties(nodes_to_reuse)
 
         selectors_snapshot = snapshot_selectors_file()
-        result = subprocess.run(modify_dbt_command(cmd=list(dbt_args)))
+        result = subprocess.run(modify_dbt_command(cmd=list(dbt_args)), check=False)
 
         log_info(f"{len(nodes_to_reuse)}/{node_count} nodes reused.")
         if settings.local_run:
@@ -256,7 +256,7 @@ def main(args: tuple[str, ...]) -> None:
             )
             restore_selectors_file(selectors_snapshot)
     else:
-        result = subprocess.run(list(dbt_args))
+        result = subprocess.run(list(dbt_args), check=False)
 
     _complete_run(
         state,

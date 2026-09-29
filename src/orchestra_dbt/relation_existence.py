@@ -1,5 +1,6 @@
+from collections.abc import Collection
 from time import perf_counter
-from typing import Any, Collection, cast
+from typing import Any, cast
 
 from .logger import log_debug, log_info, log_warn
 from .models import Freshness, MaterialisationNode, NodeType, ParsedDag

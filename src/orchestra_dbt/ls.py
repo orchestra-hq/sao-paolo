@@ -51,7 +51,7 @@ def get_nodes_to_run(args: tuple) -> NodesToRun | None:
         )
     except ImportError as missing_dbt_core_error:
         log_error(dbt_core_import_error_message(missing_dbt_core_error))
-        raise missing_dbt_core_error
+        raise
 
     log_info("Finding nodes to be executed:")
 

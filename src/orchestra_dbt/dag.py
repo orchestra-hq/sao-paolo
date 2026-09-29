@@ -75,7 +75,7 @@ def construct_dag(
             "No integration account ID found. Will use node ID as the asset external ID."
         )
 
-    for node_id in manifest.get("child_map", {}).keys():
+    for node_id in manifest.get("child_map", {}):
         node_id = str(node_id)
         if not node_id.startswith("source."):
             continue

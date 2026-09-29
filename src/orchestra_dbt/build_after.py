@@ -18,7 +18,7 @@ def parse_build_after_duration_minutes(build_after: dict[str, str | int]) -> int
 
     count = build_after["count"]
     if not isinstance(count, int):
-        raise ValueError(f"Invalid count: {count}")
+        raise TypeError(f"Invalid count: {count}")
 
     return count * mins_multiplier
 
@@ -62,7 +62,7 @@ def _build_reverse_dependency_graphs(
         out_degree[parent] += 1
 
     # Initialize out_degree for all nodes (nodes with no children will have 0)
-    for node_id in dag.nodes.keys():
+    for node_id in dag.nodes:
         if node_id not in out_degree:
             out_degree[node_id] = 0
 
@@ -141,7 +141,7 @@ def propagate_freshness_config(parsed_dag: ParsedDag) -> None:
     children, parents, out_degree = _build_reverse_dependency_graphs(parsed_dag)
 
     # Queue for nodes with no children (out_degree 0) - these are at the end of the DAG
-    queue = deque[str]([n for n in parsed_dag.nodes.keys() if out_degree[n] == 0])
+    queue = deque[str]([n for n in parsed_dag.nodes if out_degree[n] == 0])
 
     while queue:
         current = queue.popleft()

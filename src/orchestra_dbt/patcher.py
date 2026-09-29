@@ -136,7 +136,7 @@ def patch_seed_properties(
         if "seeds" not in seeds_properties:
             raise ValueError("Missing 'seeds' key. Skipping patching of seeds.")
         if not isinstance(seeds_properties["seeds"], list):
-            raise ValueError("'seeds' key must be a list. Skipping patching of seeds.")
+            raise TypeError("'seeds' key must be a list. Skipping patching of seeds.")
     except FileNotFoundError:
         log_info(
             f"No {seed_properties_file_path} file found in project directory. Creating one."
@@ -157,18 +157,18 @@ def patch_seed_properties(
         try:
             config = seed_properties.setdefault("config", {})
             if not isinstance(config, dict):
-                raise ValueError("'config' key must be a dictionary.")
+                raise TypeError("'config' key must be a dictionary.")
 
             existing_tags_on_seed = config.get("tags", [])
             if not isinstance(existing_tags_on_seed, list):
-                raise ValueError("'config.tags' must be a list when provided.")
+                raise TypeError("'config.tags' must be a list when provided.")
             if ORCHESTRA_REUSED_NODE not in existing_tags_on_seed:
                 existing_tags_on_seed.append(ORCHESTRA_REUSED_NODE)
             config["tags"] = existing_tags_on_seed
 
             existing_meta_on_seed = config.get("meta", {})
             if not isinstance(existing_meta_on_seed, dict):
-                raise ValueError("'config.meta' must be a dictionary when provided.")
+                raise TypeError("'config.meta' must be a dictionary when provided.")
             seed_last_updated = seed_node.last_updated
             config["meta"] = existing_meta_on_seed | {
                 "orchestra_reused_reason": seed_node.reason,

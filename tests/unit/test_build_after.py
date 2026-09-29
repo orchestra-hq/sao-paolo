@@ -32,7 +32,7 @@ class TestBuildAfterDurationMinutes:
             parse_build_after_duration_minutes({"period": "invalid", "count": 1})
 
     def test_build_after_duration_minutes_invalid_count(self):
-        with pytest.raises(ValueError, match="Invalid count"):
+        with pytest.raises(TypeError, match="Invalid count"):
             parse_build_after_duration_minutes({"period": "minute", "count": "invalid"})
 
 

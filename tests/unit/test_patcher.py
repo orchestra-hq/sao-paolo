@@ -1,4 +1,5 @@
-from datetime import datetime
+from datetime import UTC, datetime
+from typing import Any, ClassVar
 
 import pytest
 import yaml
@@ -46,11 +47,11 @@ WHERE active = true
             file_path=sql_file,
             reason="Test reason",
             freshness=34,
-            last_updated=datetime(2025, 3, 4, 12, 30),
+            last_updated=datetime(2025, 3, 4, 12, 30, tzinfo=UTC),
         )
 
         result = sql_file.read_text(encoding="utf-8")
-        expected_config = f"{{{{ config(tags=[\"{ORCHESTRA_REUSED_NODE}\"], meta={{'orchestra_reused_reason': 'Test reason', 'orchestra_freshness': 34, 'orchestra_last_updated': '2025-03-04T12:30:00'}}) }}}}\n\n"
+        expected_config = f"{{{{ config(tags=[\"{ORCHESTRA_REUSED_NODE}\"], meta={{'orchestra_reused_reason': 'Test reason', 'orchestra_freshness': 34, 'orchestra_last_updated': '2025-03-04T12:30:00+00:00'}}) }}}}\n\n"
 
         assert result.startswith(expected_config)
         assert "-- This is a comment" in result
@@ -77,8 +78,8 @@ WHERE active = true
         [
             (None, None),
             (1, None),
-            (None, datetime(2025, 3, 4, 12, 30)),
-            (240, datetime(2025, 3, 4, 12, 30)),
+            (None, datetime(2025, 3, 4, 12, 30, tzinfo=UTC)),
+            (240, datetime(2025, 3, 4, 12, 30, tzinfo=UTC)),
         ],
     )
     def test_revert_patch_file(
@@ -98,7 +99,7 @@ WHERE active = true
 
 
 class TestPatchSeedProperties:
-    SEEDS_TO_REUSE = {
+    SEEDS_TO_REUSE: ClassVar[dict[str, MaterialisationNode]] = {
         "seed_1": MaterialisationNode(
             asset_external_id="integration_account_id.seed_1",
             checksum="checksum_1",
@@ -107,7 +108,7 @@ class TestPatchSeedProperties:
             freshness_config=FreshnessConfig(),
             freshness=Freshness.CLEAN,
             sources={},
-            last_updated=datetime(2025, 3, 4, 12, 30),
+            last_updated=datetime(2025, 3, 4, 12, 30, tzinfo=UTC),
             reason="Seed seed_1 in same state as before.",
         ),
         "seed_2": MaterialisationNode(
@@ -118,12 +119,12 @@ class TestPatchSeedProperties:
             freshness_config=FreshnessConfig(),
             freshness=Freshness.CLEAN,
             sources={},
-            last_updated=datetime(2025, 4, 5, 13, 45),
+            last_updated=datetime(2025, 4, 5, 13, 45, tzinfo=UTC),
             reason="Seed seed_2 in same state as before.",
         ),
     }
 
-    EXISTING_SEED_PROPERTIES = {
+    EXISTING_SEED_PROPERTIES: ClassVar[dict[str, Any]] = {
         "seeds": [
             {
                 "name": "seed_1",
@@ -158,7 +159,7 @@ class TestPatchSeedProperties:
                         "meta": {
                             "customer_value": "one",
                             "orchestra_reused_reason": "Seed seed_1 in same state as before.",
-                            "orchestra_last_updated": "2025-03-04T12:30:00",
+                            "orchestra_last_updated": "2025-03-04T12:30:00+00:00",
                         },
                     },
                 },
@@ -171,7 +172,7 @@ class TestPatchSeedProperties:
                         "tags": [ORCHESTRA_REUSED_NODE],
                         "meta": {
                             "orchestra_reused_reason": "Seed seed_1 in same state as before.",
-                            "orchestra_last_updated": "2025-03-04T12:30:00",
+                            "orchestra_last_updated": "2025-03-04T12:30:00+00:00",
                         },
                     },
                 },
@@ -203,7 +204,7 @@ class TestPatchSeedProperties:
                         "tags": [ORCHESTRA_REUSED_NODE],
                         "meta": {
                             "orchestra_reused_reason": "Seed seed_2 in same state as before.",
-                            "orchestra_last_updated": "2025-04-05T13:45:00",
+                            "orchestra_last_updated": "2025-04-05T13:45:00+00:00",
                         },
                     },
                 },

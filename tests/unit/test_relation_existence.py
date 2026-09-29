@@ -1,12 +1,12 @@
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
 import src.orchestra_dbt.dag as dag_module
-import src.orchestra_dbt.relation_existence as relation_existence
+from src.orchestra_dbt import relation_existence
 from src.orchestra_dbt.config import OrchestraDbtSettings
 from src.orchestra_dbt.dag import construct_dag
 from src.orchestra_dbt.models import (
@@ -622,7 +622,7 @@ class TestEndToEndFromStateThroughTheGate:
         state = StateApiModel(
             state={
                 asset_id: StateItem(
-                    last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                    last_updated=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
                     checksum="abc123",
                     sources={},
                 ),
@@ -697,17 +697,17 @@ class TestEndToEndFromStateThroughTheGate:
         state = StateApiModel(
             state={
                 asset_id: StateItem(
-                    last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                    last_updated=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
                     checksum="abc123",
                     # The source had new data at 2024-01-03; state only saw 2024-01-01.
                     sources={
-                        "source.test_db.raw.events": datetime(2024, 1, 1, 0, 0, 0)
+                        "source.test_db.raw.events": datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
                     },
                 ),
             }
         )
         source_freshness = SourceFreshness(
-            sources={"source.test_db.raw.events": datetime(2024, 1, 3, 0, 0, 0)}
+            sources={"source.test_db.raw.events": datetime(2024, 1, 3, 0, 0, 0, tzinfo=UTC)}
         )
 
         dag = construct_dag(source_freshness, state)

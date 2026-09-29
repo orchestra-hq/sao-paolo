@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -142,31 +142,33 @@ class TestGetSourceFreshness:
             "results": [
                 {
                     "unique_id": "source.proj.raw.x",
-                    "max_loaded_at": datetime(2026, 3, 31),
+                    "max_loaded_at": datetime(2026, 3, 31, tzinfo=UTC),
                 },
                 {
                     "unique_id": "source.proj.raw.y",
-                    "max_loaded_at": datetime(2026, 3, 30),
+                    "max_loaded_at": datetime(2026, 3, 30, tzinfo=UTC),
                 },
             ]
         }
 
-        with patch.dict("sys.modules", self._patched_dbt_modules(mock_runner_factory)):
-            with patch(
+        with (
+            patch.dict("sys.modules", self._patched_dbt_modules(mock_runner_factory)),
+            patch(
                 "src.orchestra_dbt.source_freshness.load_json",
                 return_value=freshness_result,
-            ):
-                result = get_source_freshness(
-                    ("--target", "prod"), selectors_to_run=["proj.a"]
-                )
+            ),
+        ):
+            result = get_source_freshness(
+                ("--target", "prod"), selectors_to_run=["proj.a"]
+            )
 
         mock_runner.invoke.assert_called_once_with(
             args=["source", "freshness", "-q", "--target", "prod"]
         )
         assert result == SourceFreshness(
             sources={
-                "source.proj.raw.x": datetime(2026, 3, 31),
-                "source.proj.raw.y": datetime(2026, 3, 30),
+                "source.proj.raw.x": datetime(2026, 3, 31, tzinfo=UTC),
+                "source.proj.raw.y": datetime(2026, 3, 30, tzinfo=UTC),
             }
         )
 
@@ -179,21 +181,23 @@ class TestGetSourceFreshness:
             "results": [
                 {
                     "unique_id": "source.proj.raw.x",
-                    "max_loaded_at": datetime(2026, 3, 31),
+                    "max_loaded_at": datetime(2026, 3, 31, tzinfo=UTC),
                 }
             ]
         }
 
-        with patch.dict("sys.modules", self._patched_dbt_modules(mock_runner_factory)):
-            with patch(
+        with (
+            patch.dict("sys.modules", self._patched_dbt_modules(mock_runner_factory)),
+            patch(
                 "src.orchestra_dbt.source_freshness.load_json",
                 return_value=freshness_result,
-            ):
-                result = get_source_freshness(
-                    ("--target", "prod"),
-                    scope_to_selection=True,
-                    selectors_to_run=["proj.a"],
-                )
+            ),
+        ):
+            result = get_source_freshness(
+                ("--target", "prod"),
+                scope_to_selection=True,
+                selectors_to_run=["proj.a"],
+            )
 
         mock_runner.invoke.assert_called_once_with(
             args=[
@@ -207,7 +211,7 @@ class TestGetSourceFreshness:
             ]
         )
         assert result == SourceFreshness(
-            sources={"source.proj.raw.x": datetime(2026, 3, 31)}
+            sources={"source.proj.raw.x": datetime(2026, 3, 31, tzinfo=UTC)}
         )
 
     def test_scoped_still_runs_databricks_fallback_for_a_used_source(self):
@@ -220,16 +224,18 @@ class TestGetSourceFreshness:
         mock_runner_factory = Mock(return_value=mock_runner)
         modules = self._patched_dbt_modules(mock_runner_factory)
 
-        with patch.dict("sys.modules", modules):
-            with patch(
+        with (
+            patch.dict("sys.modules", modules),
+            patch(
                 "src.orchestra_dbt.source_freshness.load_json",
                 return_value={"results": []},
-            ):
-                get_source_freshness(
-                    (),
-                    scope_to_selection=True,
-                    selectors_to_run=["proj.a"],
-                )
+            ),
+        ):
+            get_source_freshness(
+                (),
+                scope_to_selection=True,
+                selectors_to_run=["proj.a"],
+            )
 
         freshness_task = modules["dbt.task.freshness"].FreshnessTask
         orchestra_freshness_runner = freshness_task.get_runner_type(None, None)
