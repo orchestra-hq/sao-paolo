@@ -65,6 +65,9 @@ orc = "orchestra_dbt.cli:main"
 typeCheckingMode = "basic"
 include = ["src", "tests"]
 
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
