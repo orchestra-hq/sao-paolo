@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 
@@ -77,7 +77,7 @@ class TestCalculateFreshnessOnNode:
             state=StateApiModel(
                 state={
                     "test.seed.a.b": StateItem(
-                        last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                        last_updated=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
                         checksum="123",
                         sources={},
                     ),
@@ -109,7 +109,7 @@ class TestCalculateFreshnessOnNode:
             state=StateApiModel(
                 state={
                     "test.model.a.b": StateItem(
-                        last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                        last_updated=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
                         checksum="456",
                         sources={},
                     )
@@ -129,7 +129,7 @@ class TestCalculateFreshnessOnNode:
             state=StateApiModel(
                 state={
                     "test.model.a.b": StateItem(
-                        last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                        last_updated=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
                         checksum="123",
                         sources={},
                     ),
@@ -151,7 +151,7 @@ class TestCalculateFreshnessOnNode:
             state=StateApiModel(
                 state={
                     "test.model.a.b": StateItem(
-                        last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                        last_updated=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
                         checksum="123",
                         sources={},
                     ),
@@ -184,27 +184,29 @@ class TestConstructDag:
 
         source_freshness = SourceFreshness(
             sources={
-                "source.test_db.test_schema.test_table": datetime(2024, 1, 3, 12, 0, 0),
+                "source.test_db.test_schema.test_table": datetime(
+                    2024, 1, 3, 12, 0, 0, tzinfo=UTC
+                ),
             }
         )
         state = StateApiModel(
             state={
                 "integration_account_id.model.test_project.model_a": StateItem(
-                    last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                    last_updated=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
                     checksum="def456",
                     sources={
                         "source.test_db.test_schema.test_table": datetime(
-                            2024, 1, 3, 12, 0, 0
+                            2024, 1, 3, 12, 0, 0, tzinfo=UTC
                         ),
                     },
                 ),
                 "integration_account_id.model.test_project.model_c": StateItem(
-                    last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                    last_updated=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
                     checksum="123",
                     sources={},
                 ),
                 "other_integration_account_id.model.test_project.model_a": StateItem(
-                    last_updated=datetime(2023, 1, 1, 12, 0, 0),
+                    last_updated=datetime(2023, 1, 1, 12, 0, 0, tzinfo=UTC),
                     checksum="other_checksum",
                     sources={},
                 ),
@@ -214,18 +216,18 @@ class TestConstructDag:
         assert construct_dag(source_freshness, state) == ParsedDag(
             nodes={
                 "source.test_db.test_schema.test_table": SourceNode(
-                    last_updated=datetime(2024, 1, 3, 12, 0, 0),
+                    last_updated=datetime(2024, 1, 3, 12, 0, 0, tzinfo=UTC),
                 ),
                 "model.test_project.model_a": MaterialisationNode(
                     asset_external_id="integration_account_id.model.test_project.model_a",
                     freshness=Freshness.CLEAN,
-                    last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                    last_updated=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
                     checksum="def456",
                     dbt_path="models/model_a.sql",
                     file_path="models/model_a.sql",
                     sources={
                         "source.test_db.test_schema.test_table": datetime(
-                            2024, 1, 3, 12, 0, 0
+                            2024, 1, 3, 12, 0, 0, tzinfo=UTC
                         ),
                     },
                     reason="Model in same state as last run.",
@@ -244,7 +246,7 @@ class TestConstructDag:
                 "model.test_project.model_c": MaterialisationNode(
                     asset_external_id="integration_account_id.model.test_project.model_c",
                     freshness=Freshness.DIRTY,
-                    last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                    last_updated=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
                     checksum="456",
                     dbt_path="models/model_c.sql",
                     file_path="models/model_c.sql",
@@ -272,17 +274,19 @@ class TestConstructDag:
 
         source_freshness = SourceFreshness(
             sources={
-                "source.test_db.test_schema.test_table": datetime(2024, 1, 3, 12, 0, 0),
+                "source.test_db.test_schema.test_table": datetime(
+                    2024, 1, 3, 12, 0, 0, tzinfo=UTC
+                ),
             }
         )
         state = StateApiModel(
             state={
                 "model.test_project.model_a": StateItem(
-                    last_updated=datetime(2024, 1, 2, 12, 0, 0),
+                    last_updated=datetime(2024, 1, 2, 12, 0, 0, tzinfo=UTC),
                     checksum="old_checksum",  # Different from manifest
                     sources={
                         "source.test_db.test_schema.test_table": datetime(
-                            2024, 1, 3, 12, 0, 0
+                            2024, 1, 3, 12, 0, 0, tzinfo=UTC
                         ),
                     },
                 )
@@ -364,7 +368,7 @@ class TestConstructDag:
         state = StateApiModel(
             state={
                 asset_id: StateItem(
-                    last_updated=datetime(2024, 1, 1, 12, 0, 0),
+                    last_updated=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
                     checksum="stable",
                     sources={},
                 ),

@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 import pytest
 from click.testing import CliRunner
 
-import src.orchestra_dbt.cli as cli
+from src.orchestra_dbt import cli
 from src.orchestra_dbt.config import OrchestraDbtSettings
 from src.orchestra_dbt.models import ParsedDag, SourceFreshness, StateApiModel
 

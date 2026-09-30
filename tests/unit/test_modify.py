@@ -29,11 +29,13 @@ class TestUpdateSelectorsYaml:
             ]
         }
 
-        with patch(
-            "src.orchestra_dbt.modify.load_yaml", return_value=original_selectors
+        with (
+            patch(
+                "src.orchestra_dbt.modify.load_yaml", return_value=original_selectors
+            ),
+            patch("src.orchestra_dbt.modify.save_yaml") as mock_save,
         ):
-            with patch("src.orchestra_dbt.modify.save_yaml") as mock_save:
-                result = update_selectors_yaml(selector_tag)
+            result = update_selectors_yaml(selector_tag)
 
         assert result is True
         mock_save.assert_called_once()
@@ -68,41 +70,47 @@ class TestUpdateSelectorsYaml:
         }
 
     def test_update_selectors_yaml_file_not_found(self):
-        with patch("src.orchestra_dbt.modify.load_yaml", side_effect=FileNotFoundError):
-            with patch("src.orchestra_dbt.modify.log_error") as mock_log_error:
-                result = update_selectors_yaml("test_selector")
+        with (
+            patch("src.orchestra_dbt.modify.load_yaml", side_effect=FileNotFoundError),
+            patch("src.orchestra_dbt.modify.log_error") as mock_log_error,
+        ):
+            result = update_selectors_yaml("test_selector")
         assert result is False
         mock_log_error.assert_called_once_with(
             "A `--selector` was used on the command, but no `selectors.yml` file found."
         )
 
     def test_update_selectors_yaml_no_selectors_key(self):
-        with patch("src.orchestra_dbt.modify.load_yaml", return_value={}):
-            with patch("src.orchestra_dbt.modify.log_error") as mock_log_error:
-                result = update_selectors_yaml("test_selector")
+        with (
+            patch("src.orchestra_dbt.modify.load_yaml", return_value={}),
+            patch("src.orchestra_dbt.modify.log_error") as mock_log_error,
+        ):
+            result = update_selectors_yaml("test_selector")
         assert result is False
         mock_log_error.assert_called_once_with(
             "A `--selector` was used on the command, but no valid selectors found in `selectors.yml`."
         )
 
     def test_update_selectors_yaml_selectors_not_list(self):
-        with patch(
-            "src.orchestra_dbt.modify.load_yaml",
-            return_value={"selectors": "not a list"},
+        with (
+            patch(
+                "src.orchestra_dbt.modify.load_yaml",
+                return_value={"selectors": "not a list"},
+            ),
+            patch("src.orchestra_dbt.modify.log_error") as mock_log_error,
         ):
-            with patch("src.orchestra_dbt.modify.log_error") as mock_log_error:
-                result = update_selectors_yaml("test_selector")
+            result = update_selectors_yaml("test_selector")
         assert result is False
         mock_log_error.assert_called_once_with(
             "A `--selector` was used on the command, but no valid selectors found in `selectors.yml`."
         )
 
     def test_update_selectors_yaml_empty_selectors_list(self):
-        with patch(
-            "src.orchestra_dbt.modify.load_yaml", return_value={"selectors": []}
+        with (
+            patch("src.orchestra_dbt.modify.load_yaml", return_value={"selectors": []}),
+            patch("src.orchestra_dbt.modify.log_error") as mock_log_error,
         ):
-            with patch("src.orchestra_dbt.modify.log_error") as mock_log_error:
-                result = update_selectors_yaml("test_selector")
+            result = update_selectors_yaml("test_selector")
         assert result is False
         mock_log_error.assert_called_once_with(
             "A `--selector` was used on the command, but no valid selectors found in `selectors.yml`."
@@ -114,11 +122,13 @@ class TestUpdateSelectorsYaml:
                 {"name": "other_selector", "definition": {"tag": "other"}},
             ]
         }
-        with patch(
-            "src.orchestra_dbt.modify.load_yaml", return_value=original_selectors
+        with (
+            patch(
+                "src.orchestra_dbt.modify.load_yaml", return_value=original_selectors
+            ),
+            patch("src.orchestra_dbt.modify.log_error") as mock_log_error,
         ):
-            with patch("src.orchestra_dbt.modify.log_error") as mock_log_error:
-                result = update_selectors_yaml("nonexistent_selector")
+            result = update_selectors_yaml("nonexistent_selector")
         assert result is False
         mock_log_error.assert_called_once_with(
             "Selector `nonexistent_selector` not found in `selectors.yml`."
@@ -132,15 +142,17 @@ class TestUpdateSelectorsYaml:
             ]
         }
 
-        with patch(
-            "src.orchestra_dbt.modify.load_yaml", return_value=original_selectors
-        ):
-            with patch(
+        with (
+            patch(
+                "src.orchestra_dbt.modify.load_yaml", return_value=original_selectors
+            ),
+            patch(
                 "src.orchestra_dbt.modify.save_yaml",
                 side_effect=Exception("Save failed"),
-            ):
-                with patch("src.orchestra_dbt.modify.log_error") as mock_log_error:
-                    result = update_selectors_yaml(selector_tag)
+            ),
+            patch("src.orchestra_dbt.modify.log_error") as mock_log_error,
+        ):
+            result = update_selectors_yaml(selector_tag)
         assert result is False
         mock_log_error.assert_called_once_with(
             "Error saving selectors.yml: Save failed"
@@ -156,11 +168,13 @@ class TestUpdateSelectorsYaml:
             ]
         }
 
-        with patch(
-            "src.orchestra_dbt.modify.load_yaml", return_value=original_selectors
+        with (
+            patch(
+                "src.orchestra_dbt.modify.load_yaml", return_value=original_selectors
+            ),
+            patch("src.orchestra_dbt.modify.save_yaml") as mock_save,
         ):
-            with patch("src.orchestra_dbt.modify.save_yaml") as mock_save:
-                result = update_selectors_yaml(selector_tag)
+            result = update_selectors_yaml(selector_tag)
 
         assert result is True
         saved_data = mock_save.call_args[0][1]
@@ -214,9 +228,11 @@ class TestModifyDbtCommand:
         "select_flag", ["--select", "-s", "--models", "--model", "-m"]
     )
     def test_user_select_is_folded_into_a_generated_selector(self, select_flag):
-        with patch("src.orchestra_dbt.modify.load_yaml", side_effect=FileNotFoundError):
-            with patch("src.orchestra_dbt.modify.save_yaml") as mock_save:
-                result = modify_dbt_command(["dbt", "build", select_flag, "my_model+"])
+        with (
+            patch("src.orchestra_dbt.modify.load_yaml", side_effect=FileNotFoundError),
+            patch("src.orchestra_dbt.modify.save_yaml") as mock_save,
+        ):
+            result = modify_dbt_command(["dbt", "build", select_flag, "my_model+"])
 
         assert result[:2] == ["dbt", "build"]
         assert result[-2] == "--selector"
@@ -235,11 +251,11 @@ class TestModifyDbtCommand:
         }
 
     def test_user_exclude_is_folded_into_a_generated_selector(self):
-        with patch("src.orchestra_dbt.modify.load_yaml", side_effect=FileNotFoundError):
-            with patch("src.orchestra_dbt.modify.save_yaml") as mock_save:
-                result = modify_dbt_command(
-                    ["dbt", "build", "--exclude", "other_model"]
-                )
+        with (
+            patch("src.orchestra_dbt.modify.load_yaml", side_effect=FileNotFoundError),
+            patch("src.orchestra_dbt.modify.save_yaml") as mock_save,
+        ):
+            result = modify_dbt_command(["dbt", "build", "--exclude", "other_model"])
 
         assert result[-2] == "--selector"
         saved_selector = mock_save.call_args[0][1]["selectors"][-1]
@@ -251,11 +267,13 @@ class TestModifyDbtCommand:
         }
 
     def test_generated_selector_preserves_other_flags(self):
-        with patch("src.orchestra_dbt.modify.load_yaml", side_effect=FileNotFoundError):
-            with patch("src.orchestra_dbt.modify.save_yaml"):
-                result = modify_dbt_command(
-                    ["dbt", "build", "--select", "a", "b", "--threads", "4"]
-                )
+        with (
+            patch("src.orchestra_dbt.modify.load_yaml", side_effect=FileNotFoundError),
+            patch("src.orchestra_dbt.modify.save_yaml"),
+        ):
+            result = modify_dbt_command(
+                ["dbt", "build", "--select", "a", "b", "--threads", "4"]
+            )
         assert result[:2] == ["dbt", "build"]
         assert "--threads" in result
         assert result[result.index("--threads") + 1] == "4"
@@ -273,12 +291,14 @@ class TestModifyDbtCommand:
         ]
 
     def test_falls_back_to_tag_exclusion_when_selector_cannot_be_written(self):
-        with patch("src.orchestra_dbt.modify.load_yaml", side_effect=FileNotFoundError):
-            with patch(
+        with (
+            patch("src.orchestra_dbt.modify.load_yaml", side_effect=FileNotFoundError),
+            patch(
                 "src.orchestra_dbt.modify.save_yaml", side_effect=OSError("disk full")
-            ):
-                with patch("src.orchestra_dbt.modify.log_warn"):
-                    result = modify_dbt_command(["dbt", "build", "--select", "a"])
+            ),
+            patch("src.orchestra_dbt.modify.log_warn"),
+        ):
+            result = modify_dbt_command(["dbt", "build", "--select", "a"])
         assert result == [
             "dbt",
             "build",
@@ -290,9 +310,11 @@ class TestModifyDbtCommand:
 
     def test_generated_selector_handles_empty_selectors_file(self):
         # An empty selectors.yml loads as None; must not crash.
-        with patch("src.orchestra_dbt.modify.load_yaml", return_value=None):
-            with patch("src.orchestra_dbt.modify.save_yaml") as mock_save:
-                result = modify_dbt_command(["dbt", "build", "--select", "a"])
+        with (
+            patch("src.orchestra_dbt.modify.load_yaml", return_value=None),
+            patch("src.orchestra_dbt.modify.save_yaml") as mock_save,
+        ):
+            result = modify_dbt_command(["dbt", "build", "--select", "a"])
         assert result[-2] == "--selector"
         saved_selector = mock_save.call_args[0][1]["selectors"][-1]
         assert saved_selector["definition"] == {
@@ -303,20 +325,24 @@ class TestModifyDbtCommand:
         existing = {
             "selectors": [{"name": "nightly", "definition": {"tag": "nightly"}}]
         }
-        with patch("src.orchestra_dbt.modify.load_yaml", return_value=existing):
-            with patch("src.orchestra_dbt.modify.save_yaml") as mock_save:
-                result = modify_dbt_command(["dbt", "build", "--select", "a"])
+        with (
+            patch("src.orchestra_dbt.modify.load_yaml", return_value=existing),
+            patch("src.orchestra_dbt.modify.save_yaml") as mock_save,
+        ):
+            result = modify_dbt_command(["dbt", "build", "--select", "a"])
         saved = mock_save.call_args[0][1]["selectors"]
         assert [s["name"] for s in saved] == ["nightly", result[-1]]
 
     def test_malformed_selectors_file_falls_back_to_tag_exclusion(self):
-        with patch(
-            "src.orchestra_dbt.modify.load_yaml", return_value={"selectors": "oops"}
+        with (
+            patch(
+                "src.orchestra_dbt.modify.load_yaml", return_value={"selectors": "oops"}
+            ),
+            patch("src.orchestra_dbt.modify.save_yaml") as mock_save,
+            patch("src.orchestra_dbt.modify.log_error"),
+            patch("src.orchestra_dbt.modify.log_warn"),
         ):
-            with patch("src.orchestra_dbt.modify.save_yaml") as mock_save:
-                with patch("src.orchestra_dbt.modify.log_error"):
-                    with patch("src.orchestra_dbt.modify.log_warn"):
-                        result = modify_dbt_command(["dbt", "build", "--select", "a"])
+            result = modify_dbt_command(["dbt", "build", "--select", "a"])
         mock_save.assert_not_called()
         assert result == [
             "dbt",
@@ -342,11 +368,13 @@ class TestModifyDbtCommand:
         self, subcommand
     ):
         cmd = ["dbt", subcommand, "--selector", "test_selector"]
-        with patch(
-            "src.orchestra_dbt.modify.update_selectors_yaml", return_value=True
-        ) as mock_update:
-            with patch("src.orchestra_dbt.modify.save_yaml") as mock_save_yaml:
-                result = modify_dbt_command(cmd)
+        with (
+            patch(
+                "src.orchestra_dbt.modify.update_selectors_yaml", return_value=True
+            ) as mock_update,
+            patch("src.orchestra_dbt.modify.save_yaml") as mock_save_yaml,
+        ):
+            result = modify_dbt_command(cmd)
 
         assert result == cmd
         assert "--exclude" not in result
@@ -396,7 +424,7 @@ class TestSplitSelectionArgs:
         assert includes_eq == ["model_a", "model_b"]
 
     def test_exclude_resource_types_is_not_treated_as_exclude(self):
-        passthrough, includes, excludes = _split_selection_args(
+        passthrough, _includes, excludes = _split_selection_args(
             ["--exclude-resource-types", "test"]
         )
         assert excludes == []

@@ -58,7 +58,12 @@ def _run(
     args: list[str], env: dict[str, str], label: str
 ) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(
-        args, cwd=_REPRO_PROJECT, env=env, capture_output=True, text=True
+        args,
+        cwd=_REPRO_PROJECT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
     )
     print(f"\n\n=== {label} STDOUT:\n{result.stdout}")
     print(f"\n\n=== {label} STDERR:\n{result.stderr}")

@@ -18,7 +18,7 @@ def parse_query_timestamp_cell(timestamp_value: object) -> datetime:
             except ValueError as e:
                 raise ValueError(f"Unable to parse timestamp: {timestamp_value}") from e
     else:
-        raise ValueError(f"Unexpected timestamp type: {type(timestamp_value)}")
+        raise TypeError(f"Unexpected timestamp type: {type(timestamp_value)}")
 
     if max_loaded_at.tzinfo is None:
         max_loaded_at = pytz.UTC.localize(max_loaded_at)

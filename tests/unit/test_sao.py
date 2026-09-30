@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 import pytest
@@ -106,7 +106,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     dbt_path="models/model_a.sql",
                     file_path="models/model_a.sql",
                     sources={
-                        "source.test": datetime.now(),
+                        "source.test": datetime.now(UTC),
                     },
                     reason="Node not seen before",
                     freshness_config=FreshnessConfig(),
@@ -117,7 +117,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
             (
                 "source.test",
                 SourceNode(
-                    last_updated=datetime.now() - timedelta(minutes=10),
+                    last_updated=datetime.now(UTC) - timedelta(minutes=10),
                 ),
                 MaterialisationNode(
                     asset_external_id="integration_account_id.model.a",
@@ -125,9 +125,9 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     checksum="1",
                     dbt_path="models/model_a.sql",
                     file_path="models/model_a.sql",
-                    last_updated=datetime.now() - timedelta(minutes=10),
+                    last_updated=datetime.now(UTC) - timedelta(minutes=10),
                     sources={
-                        "source.test": datetime.now() - timedelta(minutes=10),
+                        "source.test": datetime.now(UTC) - timedelta(minutes=10),
                     },
                     reason="Node not seen before",
                     freshness_config=FreshnessConfig(),
@@ -137,16 +137,16 @@ class TestShouldMarkDirtyFromSingleUpstream:
             # Dirty Source -> Model no config
             (
                 "source.test",
-                SourceNode(last_updated=datetime.now()),
+                SourceNode(last_updated=datetime.now(UTC)),
                 MaterialisationNode(
                     asset_external_id="integration_account_id.model.a",
                     freshness=Freshness.CLEAN,
                     checksum="1",
                     dbt_path="models/model_a.sql",
                     file_path="models/model_a.sql",
-                    last_updated=datetime.now() - timedelta(minutes=10),
+                    last_updated=datetime.now(UTC) - timedelta(minutes=10),
                     sources={
-                        "source.test": datetime.now() - timedelta(minutes=10),
+                        "source.test": datetime.now(UTC) - timedelta(minutes=10),
                     },
                     reason="Node not seen before",
                     freshness_config=FreshnessConfig(),
@@ -156,16 +156,16 @@ class TestShouldMarkDirtyFromSingleUpstream:
             # Clean Source -> Model with invalid config
             (
                 "source.test",
-                SourceNode(last_updated=datetime.now() - timedelta(minutes=10)),
+                SourceNode(last_updated=datetime.now(UTC) - timedelta(minutes=10)),
                 MaterialisationNode(
                     asset_external_id="integration_account_id.model.a",
                     freshness=Freshness.CLEAN,
                     checksum="1",
                     dbt_path="models/model_a.sql",
                     file_path="models/model_a.sql",
-                    last_updated=datetime.now() - timedelta(minutes=10),
+                    last_updated=datetime.now(UTC) - timedelta(minutes=10),
                     sources={
-                        "source.test": datetime.now() - timedelta(minutes=10),
+                        "source.test": datetime.now(UTC) - timedelta(minutes=10),
                     },
                     freshness_config=FreshnessConfig(),
                     reason="Node not seen before",
@@ -175,16 +175,16 @@ class TestShouldMarkDirtyFromSingleUpstream:
             # Dirty Source -> Model should not be built yet
             (
                 "source.test",
-                SourceNode(last_updated=datetime.now()),
+                SourceNode(last_updated=datetime.now(UTC)),
                 MaterialisationNode(
                     asset_external_id="integration_account_id.model.a",
                     freshness=Freshness.CLEAN,
                     checksum="1",
                     dbt_path="models/model_a.sql",
                     file_path="models/model_a.sql",
-                    last_updated=datetime.now() - timedelta(minutes=10),
+                    last_updated=datetime.now(UTC) - timedelta(minutes=10),
                     sources={
-                        "source.test": datetime.now() - timedelta(minutes=10),
+                        "source.test": datetime.now(UTC) - timedelta(minutes=10),
                     },
                     freshness_config=FreshnessConfig(
                         minutes_sla=15, inherited_from="model.c"
@@ -199,16 +199,16 @@ class TestShouldMarkDirtyFromSingleUpstream:
             # Dirty Source -> Model should be built again
             (
                 "source.test",
-                SourceNode(last_updated=datetime.now()),
+                SourceNode(last_updated=datetime.now(UTC)),
                 MaterialisationNode(
                     asset_external_id="integration_account_id.model.a",
                     freshness=Freshness.CLEAN,
                     checksum="1",
                     dbt_path="models/model_a.sql",
                     file_path="models/model_a.sql",
-                    last_updated=datetime.now() - timedelta(minutes=20),
+                    last_updated=datetime.now(UTC) - timedelta(minutes=20),
                     sources={
-                        "source.test": datetime.now() - timedelta(minutes=20),
+                        "source.test": datetime.now(UTC) - timedelta(minutes=20),
                     },
                     freshness_config=FreshnessConfig(minutes_sla=15),
                     reason="Node not seen before",
@@ -224,7 +224,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     checksum="1",
                     dbt_path="models/model_a.sql",
                     file_path="models/model_a.sql",
-                    last_updated=datetime.now() - timedelta(minutes=60),
+                    last_updated=datetime.now(UTC) - timedelta(minutes=60),
                     reason="Node not seen before",
                     sources={},
                     freshness_config=FreshnessConfig(),
@@ -235,7 +235,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     checksum="1",
                     dbt_path="models/model_b.sql",
                     file_path="models/model_b.sql",
-                    last_updated=datetime.now() - timedelta(minutes=20),
+                    last_updated=datetime.now(UTC) - timedelta(minutes=20),
                     sources={},
                     freshness_config=FreshnessConfig(minutes_sla=15),
                     reason="Node not seen before",
@@ -251,7 +251,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     checksum="1",
                     dbt_path="models/model_a.sql",
                     file_path="models/model_a.sql",
-                    last_updated=datetime.now() - timedelta(minutes=20),
+                    last_updated=datetime.now(UTC) - timedelta(minutes=20),
                     reason="Same state as before",
                     sources={},
                     freshness_config=FreshnessConfig(),
@@ -262,7 +262,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     checksum="1",
                     dbt_path="models/model_b.sql",
                     file_path="models/model_b.sql",
-                    last_updated=datetime.now() - timedelta(minutes=20),
+                    last_updated=datetime.now(UTC) - timedelta(minutes=20),
                     reason="Same state as before",
                     sources={},
                     freshness_config=FreshnessConfig(),
@@ -278,7 +278,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     checksum="1",
                     dbt_path="models/model_a.sql",
                     file_path="models/model_a.sql",
-                    last_updated=datetime.now() - timedelta(minutes=12),
+                    last_updated=datetime.now(UTC) - timedelta(minutes=12),
                     reason="Node not seen before",
                     sources={},
                     freshness_config=FreshnessConfig(),
@@ -289,7 +289,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     checksum="1",
                     dbt_path="models/model_b.sql",
                     file_path="models/model_b.sql",
-                    last_updated=datetime.now() - timedelta(minutes=20),
+                    last_updated=datetime.now(UTC) - timedelta(minutes=20),
                     sources={},
                     freshness_config=FreshnessConfig(minutes_sla=15),
                     reason="Node not seen before",
@@ -321,7 +321,7 @@ class TestCalculateModelsToRun:
         dag = ParsedDag(
             nodes={
                 "source.test": SourceNode(
-                    last_updated=datetime.now(),
+                    last_updated=datetime.now(UTC),
                 ),
                 "model.a": MaterialisationNode(
                     asset_external_id="model.a",
@@ -365,7 +365,7 @@ class TestCalculateModelsToRun:
         dag = ParsedDag(
             nodes={
                 "source.test": SourceNode(
-                    last_updated=datetime.now() - timedelta(minutes=10),
+                    last_updated=datetime.now(UTC) - timedelta(minutes=10),
                 ),
                 "model.a": MaterialisationNode(
                     asset_external_id="model.a",
@@ -373,9 +373,9 @@ class TestCalculateModelsToRun:
                     checksum="1",
                     dbt_path="models/model_a.sql",
                     file_path="models/model_a.sql",
-                    last_updated=datetime.now() - timedelta(minutes=5),
+                    last_updated=datetime.now(UTC) - timedelta(minutes=5),
                     sources={
-                        "source.test": datetime.now() - timedelta(minutes=10),
+                        "source.test": datetime.now(UTC) - timedelta(minutes=10),
                     },
                     reason="Node not seen before",
                     freshness_config=FreshnessConfig(),
@@ -395,7 +395,7 @@ class TestCalculateModelsToRun:
         dag = ParsedDag(
             nodes={
                 "source.test": SourceNode(
-                    last_updated=datetime.now(),
+                    last_updated=datetime.now(UTC),
                 ),
                 "model.a": MaterialisationNode(
                     asset_external_id="model.a",
@@ -404,7 +404,7 @@ class TestCalculateModelsToRun:
                     dbt_path="models/model_a.sql",
                     file_path="models/model_a.sql",
                     freshness_config=FreshnessConfig(minutes_sla=60),
-                    last_updated=datetime.now() - timedelta(minutes=20),
+                    last_updated=datetime.now(UTC) - timedelta(minutes=20),
                     reason="Node not seen before",
                     sources={},
                 ),
@@ -426,7 +426,7 @@ class TestCalculateModelsToRun:
     def test_calculate_nodes_to_run_with_updates_on_any_or_all(
         self, updates_on: Literal["any", "all"], result_freshness: Freshness
     ):
-        now = datetime.now()
+        now = datetime.now(UTC)
 
         dag = ParsedDag(
             nodes={
@@ -486,7 +486,7 @@ class TestCalculateModelsToRun:
         source has no new data (A is CLEAN). B has no build_after config. B must
         still rebuild to incorporate A's newer output.
         """
-        now = datetime.now()
+        now = datetime.now(UTC)
         source_ts = now - timedelta(minutes=30)
 
         dag = ParsedDag(
@@ -537,7 +537,7 @@ class TestCalculateModelsToRun:
         )
 
     def test_calculate_nodes_to_run_sample_1(self):
-        now = datetime.now()
+        now = datetime.now(UTC)
 
         dag = ParsedDag(
             nodes={
@@ -644,7 +644,7 @@ class TestCalculateModelsToRun:
         )
 
     def test_calculate_nodes_to_run_sample_2(self):
-        now = datetime.now()
+        now = datetime.now(UTC)
 
         dag = ParsedDag(
             nodes={

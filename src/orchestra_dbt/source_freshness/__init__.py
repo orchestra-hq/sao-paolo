@@ -1,5 +1,5 @@
 import threading
-from datetime import datetime
+from datetime import UTC, datetime
 
 from ..compatibility import dbt_core_import_error_message
 from ..logger import log_error, log_info, log_warn
@@ -61,7 +61,7 @@ def get_source_freshness(
         from dbt_common.exceptions import DbtRuntimeError
     except ImportError as missing_dbt_core_error:
         log_error(dbt_core_import_error_message(missing_dbt_core_error))
-        raise missing_dbt_core_error
+        raise
 
     def default_freshness_result(compiled_node) -> SourceFreshnessResult:
         return SourceFreshnessResult(
@@ -73,8 +73,8 @@ def get_source_freshness(
             message=None,
             failures=None,
             node=compiled_node,
-            max_loaded_at=datetime.now(),
-            snapshotted_at=datetime.now(),
+            max_loaded_at=datetime.now(UTC),
+            snapshotted_at=datetime.now(UTC),
             age=0,
         )
 

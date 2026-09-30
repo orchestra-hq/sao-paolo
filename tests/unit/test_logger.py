@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from src.orchestra_dbt.logger import log_reused_nodes
 from src.orchestra_dbt.models import (
@@ -13,7 +13,7 @@ class TestLogReusedNodes:
         nodes_to_reuse = {
             "node_1": MaterialisationNode(
                 asset_external_id="integration_account_id.model.node_1",
-                last_updated=datetime(2026, 1, 1),
+                last_updated=datetime(2026, 1, 1, tzinfo=UTC),
                 checksum="checksum_1",
                 freshness_config=FreshnessConfig(),
                 freshness=Freshness.CLEAN,
@@ -39,6 +39,6 @@ class TestLogReusedNodes:
         log_lines = [line[26:-4] for line in log_lines]
         assert log_lines == [
             "2 node(s) to be reused:",
-            "1 of 2 REUSED node_1 - reason_1 (last updated: 2026-01-01 00:00:00)",
+            "1 of 2 REUSED node_1 - reason_1 (last updated: 2026-01-01 00:00:00+00:00)",
             "2 of 2 REUSED node_2 - Brand new node (last updated: none)",
         ]
