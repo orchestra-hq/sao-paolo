@@ -125,13 +125,19 @@ class TestLoadState:
             load_state()
 
 
+_ONE_NODE_STATE = StateApiModel(
+    state={
+        "model.test": StateItem(
+            last_updated=datetime(2024, 1, 1, 14, 0, 0, tzinfo=UTC),
+            checksum="123",
+            sources={},
+        )
+    }
+)
+
+
 class TestSaveState:
     def test_save_state_success(self, httpx_mock: HTTPXMock):
-        httpx_mock.add_response(
-            method="GET",
-            url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
-            json={"state": {}},
-        )
         httpx_mock.add_response(
             method="PATCH",
             url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
@@ -176,19 +182,20 @@ class TestSaveState:
                                 "source.test": datetime(2024, 1, 1, 11, 0, 0, tzinfo=UTC),
                             },
                         ),
+                        "model.not_run": StateItem(
+                            last_updated=datetime(2024, 1, 1, 9, 0, 0, tzinfo=UTC),
+                            checksum="789",
+                            sources={},
+                        ),
                     }
                 ),
                 updated_asset_external_ids={"model.test", "model.new"},
             )
             is None
         )
+        assert [request.method for request in httpx_mock.get_requests()] == ["PATCH"]
 
     def test_save_state_http_error(self, httpx_mock: HTTPXMock):
-        httpx_mock.add_response(
-            method="GET",
-            url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
-            json={"state": {}},
-        )
         httpx_mock.add_response(
             method="PATCH",
             url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
@@ -199,16 +206,11 @@ class TestSaveState:
             status_code=500,
         )
         assert (
-            save_state(state=StateApiModel(state={}), updated_asset_external_ids=set())
+            save_state(state=_ONE_NODE_STATE, updated_asset_external_ids={"model.test"})
             is None
         )
 
     def test_save_state_timeout(self, httpx_mock: HTTPXMock):
-        httpx_mock.add_response(
-            method="GET",
-            url="https://dev.getorchestra.io/api/engine/public/state/DBT_CORE",
-            json={"state": {}},
-        )
         httpx_mock.add_exception(
             httpx.TimeoutException("Request timed out"),
             method="PATCH",
@@ -219,10 +221,14 @@ class TestSaveState:
             },
         )
         assert (
-            save_state(state=StateApiModel(state={}), updated_asset_external_ids=set())
+            save_state(state=_ONE_NODE_STATE, updated_asset_external_ids={"model.test"})
             is None
         )
 
+
+    def test_save_state_without_updates_makes_no_request(self, httpx_mock: HTTPXMock):
+        save_state(state=_ONE_NODE_STATE, updated_asset_external_ids=set())
+        assert httpx_mock.get_requests() == []
 
 class TestUpdateState:
     @pytest.fixture(autouse=True)
@@ -930,6 +936,20 @@ class TestSaveStateMerge:
         # The unreadable state file is left exactly as it was, not overwritten.
         assert p.read_text(encoding="utf-8") == original
 
+    def test_without_updates_leaves_state_untouched(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        p = tmp_path / "st.json"
+        original = "{ this is not valid json"
+        p.write_text(original, encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(p))
+
+        save_state(state=_ONE_NODE_STATE, updated_asset_external_ids=set())
+
+        assert p.read_text(encoding="utf-8") == original
+
 
 class TestLoadStateS3:
     @mock_aws
@@ -1090,9 +1110,7 @@ class TestSaveStateGCS:
             "orchestra_dbt.state_backends.gcs.storage.Client",
             side_effect=DefaultCredentialsError("no credentials"),
         ), pytest.raises(StateSaveError):
-            save_state(
-                StateApiModel(state={}), updated_asset_external_ids=set()
-            )
+            save_state(_ONE_NODE_STATE, updated_asset_external_ids={"model.test"})
 
 
 class TestAzureStateBackend:
