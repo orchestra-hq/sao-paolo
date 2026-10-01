@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   release-please:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     outputs:
       pr: ${{ steps.release.outputs.pr }}
     steps:
@@ -25,7 +25,7 @@ jobs:
   sync-uv-version:
     needs: release-please
     if: ${{ needs.release-please.outputs.pr }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v6
         with:
