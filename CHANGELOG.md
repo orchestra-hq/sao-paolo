@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Saving state to Orchestra is retried up to 3 times, with backoff, on 429s, 5xx responses and network errors. Previously a single transient failure meant the run's state was not saved, so the next run could not reuse the models it had just built. A save that still fails is logged as a warning, as before.
+
 ### Fixed
 
 - The supported dbt-core version message quoted `<1.12`, wrongly telling users on dbt-core 1.12 that their version wasn't supported. `pyproject.toml` and the lockfile already allow `<1.13`; the constant now matches.

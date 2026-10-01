@@ -204,6 +204,7 @@ class TestSaveState:
                 "Authorization": "Bearer test-api-key",
             },
             status_code=500,
+            is_reusable=True,
         )
         assert (
             save_state(state=_ONE_NODE_STATE, updated_asset_external_ids={"model.test"})
@@ -219,6 +220,7 @@ class TestSaveState:
                 "Content-Type": "application/json",
                 "Authorization": "Bearer test-api-key",
             },
+            is_reusable=True,
         )
         assert (
             save_state(state=_ONE_NODE_STATE, updated_asset_external_ids={"model.test"})
