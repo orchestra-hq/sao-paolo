@@ -4,7 +4,7 @@ on:
     branches: [main]
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
@@ -29,7 +29,7 @@ jobs:
         run: uv run pytest
 
   tutorial-dbt:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     needs: [test]
     services:
       postgres:
@@ -85,7 +85,7 @@ jobs:
         run: uv run pytest tests/integration/test_concurrent_selector_repro.py -sv
 
   orchestra:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     needs: [test, tutorial-dbt]
     environment: production
     steps:
