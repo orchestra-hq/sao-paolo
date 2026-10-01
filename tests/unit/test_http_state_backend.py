@@ -71,6 +71,20 @@ class TestHttpStateBackendSave:
         assert len(sleeps) == 2
         assert "Failed to save state (500)" in capsys.readouterr().out
 
+    def test_warns_after_three_network_errors(
+        self, httpx_mock: HTTPXMock, sleeps, capsys: pytest.CaptureFixture[str]
+    ):
+        for _ in range(3):
+            httpx_mock.add_exception(
+                httpx.ConnectError("connection refused"), method="PATCH", url=STATE_URL
+            )
+
+        HttpStateBackend().save(STATE)
+
+        assert len(httpx_mock.get_requests()) == 3
+        assert len(sleeps) == 2
+        assert "Failed to save state due to network error" in capsys.readouterr().out
+
     def test_does_not_retry_client_errors(
         self, httpx_mock: HTTPXMock, sleeps, capsys: pytest.CaptureFixture[str]
     ):

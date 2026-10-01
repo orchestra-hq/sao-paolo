@@ -10,11 +10,6 @@ def mock_env_vars(monkeypatch):
     yield
 
 
-@pytest.fixture(autouse=True)
-def no_retry_waits(monkeypatch):
-    monkeypatch.setattr("time.sleep", lambda _seconds: None)
-
-
 @pytest.fixture
 def sample_manifest():
     return {

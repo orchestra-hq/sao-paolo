@@ -30,6 +30,11 @@ from src.orchestra_dbt.state import (
 )
 
 
+@pytest.fixture(autouse=True)
+def no_retry_waits(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+
+
 class TestLoadState:
     @patch("src.orchestra_dbt.state_filters.get_integration_account_id")
     @pytest.mark.parametrize(
