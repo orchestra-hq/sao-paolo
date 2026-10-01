@@ -11,7 +11,11 @@ We welcome community contributions that improve this project's capabilities in h
 1. Test in Orchestra with the branch
 1. Raise a pull request against the `main` branch, describing what changed and why
 
-Pull requests run GitHub Actions: unit tests, static checks, `dbt build` for `tutorial/dbt` against Postgres, and an Orchestra pipeline via the [Orchestra Run Pipeline Action](https://github.com/orchestra-hq/run-pipeline).
+Pull requests run GitHub Actions: unit tests, static checks, `dbt build` for `tutorial/dbt` against Postgres, and an Orchestra pipeline via the [Orchestra Run Pipeline Action](https://github.com/orchestra-hq/run-pipeline). PR titles must follow [Conventional Commits](https://www.conventionalcommits.org/) (`fix:`, `feat:`, `chore:`, ...); this is enforced by CI and drives the changelog/version bump on release.
+
+## Releasing
+
+Versioning is automated with [release-please](https://github.com/googleapis/release-please): run the `release-please` workflow manually (Actions tab) to open/update a release PR with the next version and changelog entry, computed from merged PR titles. Merging that PR bumps `pyproject.toml` and `uv.lock` (via `uv version`). The workflow only runs on manual dispatch (not on every merge to `main`), so **after merging the release PR, run the workflow again** to actually cut the GitHub Release/tag. Don't hand-edit `CHANGELOG.md`, `pyproject.toml`'s version, or `uv.lock`'s version — they're derived automatically.
 
 ## Debugging
 

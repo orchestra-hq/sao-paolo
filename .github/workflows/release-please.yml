@@ -1,0 +1,50 @@
+name: release-please
+
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: release-please
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  release-please:
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    outputs:
+      pr: ${{ steps.release.outputs.pr }}
+    steps:
+      - id: release
+        uses: googleapis/release-please-action@v5
+
+  # release-please doesn't know about uv.lock, so `uv` bumps it (and pyproject.toml) itself.
+  sync-uv-version:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.pr }}
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ fromJSON(needs.release-please.outputs.pr).headBranchName }}
+
+      - name: Read version from release-please manifest
+        id: version
+        run: echo "version=$(jq -r '.["."]' .release-please-manifest.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          version: "latest"
+
+      - name: Bump pyproject.toml and uv.lock via uv
+        run: uv version "${{ steps.version.outputs.version }}"
+
+      - name: Commit changes back to the release PR
+        uses: stefanzweifel/git-auto-commit-action@v7.2.0
+        with:
+          commit_message: "chore: sync pyproject.toml and uv.lock to ${{ steps.version.outputs.version }}"
+          file_pattern: "pyproject.toml uv.lock"
