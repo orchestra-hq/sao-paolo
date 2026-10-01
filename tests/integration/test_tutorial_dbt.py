@@ -21,6 +21,12 @@ requires_postgres = pytest.mark.skipif(
     reason="Set PGHOST and PGDATABASE and CI=true to run (CI provides these).",
 )
 
+# The duckdb target needs no service, so it also covers dbt 2.x, which rejects postgres.
+requires_warehouse = pytest.mark.skipif(
+    not (_postgres_ci_configured() or os.environ.get("DBT_TARGET") == "duckdb"),
+    reason="Set the postgres variables above, or DBT_TARGET=duckdb, to run.",
+)
+
 
 def _tutorial_env(state_file: Path | None = None) -> dict[str, str]:
     env = os.environ.copy()
@@ -96,7 +102,7 @@ def _assert_state_loaded(result: subprocess.CompletedProcess[str]) -> None:
     )
 
 
-@requires_postgres
+@requires_warehouse
 def test_tutorial_dbt_build_succeeds() -> None:
     result = _run_build(_tutorial_env(), "build")
 
@@ -104,6 +110,23 @@ def test_tutorial_dbt_build_succeeds() -> None:
         pytest.fail(
             f"dbt build failed ({result.returncode})\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
         )
+
+
+@requires_warehouse
+def test_warm_state_reuses_nodes(tmp_path: Path) -> None:
+    """A cold run reuses nothing; a warm one reuses the models it just built."""
+    state_file = tmp_path / "dbt_state.json"
+    state_file.write_text(json.dumps({"state": {}}), encoding="utf-8")
+    env = _tutorial_env(state_file)
+
+    cold = _run_build(env, "cold run")
+    assert cold.returncode == 0
+    assert "REUSED model.sao_tutorial.stg_events" not in cold.stdout
+
+    warm = _run_build(env, "warm run")
+    assert warm.returncode == 0
+    _assert_state_loaded(warm)
+    assert "REUSED model.sao_tutorial.stg_events" in warm.stdout
 
 
 @requires_postgres
