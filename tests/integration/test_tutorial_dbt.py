@@ -13,6 +13,7 @@ def _postgres_ci_configured() -> bool:
         os.environ.get("PGHOST")
         and os.environ.get("PGDATABASE")
         and os.environ.get("CI") == "true"
+        and os.environ.get("DBT_TARGET", "ci") == "ci"
     )
 
 
@@ -121,6 +122,7 @@ def test_warm_state_reuses_nodes(tmp_path: Path) -> None:
 
     cold = _run_build(env, "cold run")
     assert cold.returncode == 0
+    _assert_state_loaded(cold)
     assert "REUSED model.sao_tutorial.stg_events" not in cold.stdout
 
     warm = _run_build(env, "warm run")
