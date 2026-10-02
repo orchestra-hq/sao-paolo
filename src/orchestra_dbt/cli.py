@@ -239,6 +239,7 @@ def main(args: tuple[str, ...]) -> None:
             nodes_to_reuse[node_id] = materialisation_node
 
     log_reused_nodes(nodes_to_reuse)
+    log_info(f"{len(nodes_to_reuse)}/{node_count} nodes reused.")
 
     if len(nodes_to_reuse) != 0:
         patch_sql_files(nodes_to_reuse)
@@ -247,7 +248,6 @@ def main(args: tuple[str, ...]) -> None:
         selectors_snapshot = snapshot_selectors_file()
         result = subprocess.run(modify_dbt_command(cmd=list(dbt_args)), check=False)
 
-        log_info(f"{len(nodes_to_reuse)}/{node_count} nodes reused.")
         if settings.local_run:
             revert_patching(
                 file_paths_to_revert=[
