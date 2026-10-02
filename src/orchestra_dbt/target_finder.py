@@ -23,3 +23,15 @@ def find_target_in_args(args: list[str]) -> str | None:
         return target
 
     return os.environ.get("DBT_TARGET") or None
+
+
+def find_flag_value(args: list[str], flag: str) -> str | None:
+    """`--flag value` or `--flag=value`; the last occurrence wins, as in click."""
+    value: str | None = None
+    remaining = iter(args)
+    for arg in remaining:
+        if arg == flag:
+            value = next(remaining, value)
+        elif arg.startswith(f"{flag}="):
+            value = arg.removeprefix(f"{flag}=")
+    return value

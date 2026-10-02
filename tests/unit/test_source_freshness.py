@@ -28,6 +28,31 @@ class TestGetArgsForSourceFreshness:
             "-q",
         ]
 
+    def test_forwards_profile_resolution_flags(self):
+        """Otherwise freshness looks for the profile in ~/.dbt (or under the wrong
+        name/vars) and fails, so orc falls back to running without reuse."""
+        assert get_args_for_source_freshness(
+            (
+                "dbt",
+                "build",
+                "--profiles-dir=proj",
+                "--profile",
+                "alt",
+                "--vars",
+                "{schema: x}",
+            )
+        ) == [
+            "source",
+            "freshness",
+            "-q",
+            "--profiles-dir",
+            "proj",
+            "--profile",
+            "alt",
+            "--vars",
+            "{schema: x}",
+        ]
+
     def test_default_ignores_selectors_to_run(self):
         """scope_to_selection defaults to off: selectors_to_run is ignored entirely."""
         assert get_args_for_source_freshness((), selectors_to_run=["proj.a"]) == [
