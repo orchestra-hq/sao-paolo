@@ -74,6 +74,10 @@ jobs:
           DBT_SCHEMA: sao_tutorial
           ORCHESTRA_STATE_FILE: ".orchestra/dbt_state.json"
         run: uv run pytest tests/integration/test_tutorial_dbt.py -sv
+      - name: Run tutorial dbt build on duckdb
+        env:
+          DBT_TARGET: duckdb
+        run: uv run pytest tests/integration/test_tutorial_dbt.py -sv
       - name: Run concurrent-selector-repro scoping test
         env:
           CI: "true"
@@ -83,6 +87,28 @@ jobs:
           PGPASSWORD: postgres
           PGDATABASE: tutorial
         run: uv run pytest tests/integration/test_concurrent_selector_repro.py -sv
+
+  tutorial-dbt-v2:
+    runs-on: ubuntu-latest
+    needs: [test]
+    env:
+      DBT_TARGET: duckdb
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          version: "latest"
+      - name: Set up Python 3.13
+        run: uv python install 3.13
+      - name: Install dependencies
+        run: |
+          uv venv
+          uv pip install . "dbt>=2,<3" pytest
+          uv run --no-sync dbt --version
+      - name: Run tutorial dbt build (cold and warm state)
+        continue-on-error: true
+        run: uv run --no-sync pytest tests/integration/test_tutorial_dbt.py -sv
 
   orchestra:
     runs-on: ubuntu-latest

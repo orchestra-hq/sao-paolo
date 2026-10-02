@@ -1,5 +1,5 @@
 tutorial:
-  target: ci
+  target: "{{ env_var('DBT_TARGET', 'ci') }}"
   outputs:
     ci:
       type: postgres
@@ -8,5 +8,10 @@ tutorial:
       user: "{{ env_var('PGUSER') }}"
       password: "{{ env_var('PGPASSWORD') }}"
       dbname: "{{ env_var('PGDATABASE') }}"
+      schema: "{{ env_var('DBT_SCHEMA', 'sao_tutorial') }}"
+      threads: 4
+    duckdb:
+      type: duckdb
+      path: "{{ env_var('DUCKDB_PATH', 'tutorial.duckdb') }}"
       schema: "{{ env_var('DBT_SCHEMA', 'sao_tutorial') }}"
       threads: 4

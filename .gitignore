@@ -181,6 +181,7 @@ cython_debug/
 # dbt Core stuff
 .user.yml
 data.duckdb
+tutorial.duckdb
 profiles.yml
 !/tutorial/dbt/profiles.yml
 logs/

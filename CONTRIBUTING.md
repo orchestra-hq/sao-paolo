@@ -72,7 +72,7 @@ ruff check --fix . && ruff format . && basedpyright
 
 Orchestra patches dbt’s freshness runner so that when a source has **no** `loaded_at_query` or `loaded_at_field`, adapter-specific logic can still infer `max_loaded_at` (for example Databricks uses `DESCRIBE HISTORY`). That path is keyed by the dbt adapter type string from `FreshnessRunner.adapter.type()` (for example `"databricks"`).
 
-End-user expectations by warehouse are summarized in the root **`README.md`** (section *Warehouse adapters and implicit source freshness*): Databricks has the `DESCRIBE HISTORY` fallback; Snowflake, Fabric, and Postgres rely on standard dbt freshness with `loaded_at_*` configured; DuckDB does not support this current form of state aware orchestration.
+End-user expectations by warehouse are summarized in the root **`README.md`** (section *Warehouse adapters and implicit source freshness*): Databricks has the `DESCRIBE HISTORY` fallback; Snowflake, Fabric, Postgres, and DuckDB rely on standard dbt freshness with `loaded_at_*` configured.
 
 To add a warehouse:
 

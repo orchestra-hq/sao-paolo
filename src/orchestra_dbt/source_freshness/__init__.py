@@ -1,7 +1,7 @@
 import threading
 from datetime import UTC, datetime
 
-from ..compatibility import dbt_core_import_error_message
+from ..compatibility import dbt_core_import_error_message, release_connections
 from ..logger import log_error, log_info, log_warn
 from ..models import SourceFreshness
 from ..target_finder import find_target_in_args
@@ -49,6 +49,7 @@ def get_source_freshness(
     selectors_to_run: list[str] | None = None,
 ) -> SourceFreshness | None:
     try:
+        from dbt.adapters.factory import FACTORY
         from dbt.artifacts.resources.v1.components import FreshnessThreshold
         from dbt.artifacts.schemas.freshness import SourceDefinition
         from dbt.artifacts.schemas.freshness.v3.freshness import (
@@ -134,3 +135,6 @@ def get_source_freshness(
         )
     except Exception as e:
         log_warn(f"Error running dbt source freshness: {e}")
+    finally:
+        for adapter in FACTORY.adapters.values():
+            release_connections(adapter)

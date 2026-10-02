@@ -44,7 +44,7 @@ dev = [
 ]
 
 # Warehouse adapters (optional). Not required for tests.
-adapters = ["dbt-postgres"]
+adapters = ["dbt-duckdb", "dbt-postgres"]
 
 # Debug dependencies (optional).
 debug = ["awscrt", "boto3", "graphviz"]
