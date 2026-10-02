@@ -5,7 +5,26 @@ from .compatibility import dbt_core_import_error_message
 from .constants import RESOURCE_TYPES_TO_LS
 from .logger import log_debug, log_error, log_info, log_warn
 
-DBT_LS_ARGS_NOT_ACCEPTED = ["--empty"]
+# Flags `dbt build`/`run`/`test` accept but `dbt ls` does not. Forwarding one makes dbt
+# ls exit with "No such option", which costs us node-path discovery for the whole run.
+# tests/unit/test_ls.py checks this against the installed dbt's own options.
+DBT_LS_ARGS_NOT_ACCEPTED = {
+    "--empty",
+    "--no-empty",
+    "--event-time-end",
+    "--event-time-start",
+    "--export-saved-queries",
+    "--no-export-saved-queries",
+    "--full-refresh",
+    "-f",
+    "--include-saved-query",
+    "--no-include-saved-query",
+    "--sample",
+    "--show",
+    "--sqlparse",
+    "--store-failures",
+    "--threads",
+}
 
 
 class NodesToRun(NamedTuple):
@@ -33,12 +52,14 @@ def get_args_for_ls(user_args: tuple) -> list[str]:
         "-q",
     ]
 
-    # Remove args not accepted by dbt ls
+    # Drop unaccepted flags plus their values (no positionals, so bare tokens are values).
     list_user_args = []
+    dropping = False
     for user_arg in user_args:
-        if user_arg in DBT_LS_ARGS_NOT_ACCEPTED:
-            continue
-        list_user_args.append(user_arg)
+        if user_arg.startswith("-"):
+            dropping = user_arg.split("=", 1)[0] in DBT_LS_ARGS_NOT_ACCEPTED
+        if not dropping:
+            list_user_args.append(user_arg)
 
     return command_args + resource_type_args + list_user_args + output_args
 
