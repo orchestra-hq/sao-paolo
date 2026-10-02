@@ -43,6 +43,7 @@ from .state import (
     update_state,
 )
 from .state_types import StateBackendKind
+from .target_finder import resolve_project_dir
 
 
 def _usage_program() -> str:
@@ -127,6 +128,7 @@ def main(args: tuple[str, ...]) -> None:
         sys.exit(1)
 
     dbt_args: tuple[str, ...] = tuple(args)
+    resolve_project_dir(list(dbt_args))
 
     if len(dbt_args) < 2:
         log_error("dbt requires a subcommand (e.g. run, build, test).")

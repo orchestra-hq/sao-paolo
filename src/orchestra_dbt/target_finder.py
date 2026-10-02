@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 
 def find_target_in_args(args: list[str]) -> str | None:
@@ -35,3 +36,26 @@ def find_flag_value(args: list[str], flag: str) -> str | None:
         elif arg.startswith(f"{flag}="):
             value = arg.removeprefix(f"{flag}=")
     return value
+
+
+def _dbt_setting(args: list[str], flag: str, name: str) -> str | None:
+    return (
+        find_flag_value(args, flag)
+        or os.environ.get(f"DBT_ENGINE_{name}")
+        or os.environ.get(f"DBT_{name}")
+        or None
+    )
+
+
+_project_dir = Path(".")
+
+
+def resolve_project_dir(args: list[str]) -> None:
+    """Remember the dbt project dir: the flag beats DBT_ENGINE_* beats DBT_*."""
+    global _project_dir
+    _project_dir = Path(_dbt_setting(args, "--project-dir", "PROJECT_DIR") or ".")
+
+
+def project_path(path: str = ".") -> Path:
+    """A project-relative path (e.g. a manifest `original_file_path`) as seen from cwd."""
+    return _project_dir / path
