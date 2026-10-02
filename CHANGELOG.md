@@ -9,7 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Saving state to Orchestra sent the account's entire stored state back on every run, not just the nodes the run built. Concurrent runs then rewrote the same state items, which made the state API return 500s, and a stale copy could revert another run's updates. Runs now send only the nodes they built, with no re-read at save time; the API already upserts each node it is sent. File backends (local, S3, GCS, Azure) still merge onto state re-read at save time, since they rewrite the whole file. A run that built nothing no longer saves state at all.
 - The supported dbt-core version message quoted `<1.12`, wrongly telling users on dbt-core 1.12 that their version wasn't supported. `pyproject.toml` and the lockfile already allow `<1.13`; the constant now matches.
 
 ## [1.3.1] - 2026-09-17
