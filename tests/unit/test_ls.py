@@ -1,5 +1,7 @@
+import pytest
+
 from src.orchestra_dbt.constants import RESOURCE_TYPES_TO_LS
-from src.orchestra_dbt.ls import get_args_for_ls
+from src.orchestra_dbt.ls import DBT_LS_ARGS_NOT_ACCEPTED, get_args_for_ls
 
 _RESOURCE_TYPES = [a for rt in RESOURCE_TYPES_TO_LS for a in ("--resource-type", rt)]
 _OUTPUT = ["--output", "json", "--output-keys", "original_file_path", "fqn", "-q"]
@@ -74,3 +76,18 @@ class TestGetArgsForLsStripsUnacceptedFlags:
             "ci",
             *_OUTPUT,
         ]
+
+
+def test_stripped_flags_cover_every_build_only_option_in_installed_dbt():
+    """Fails when a dbt bump adds a build/run/test option that ls lacks. dbt 2.x
+    has no click command tree to compare against, so this only runs on 1.x."""
+    cli = pytest.importorskip("dbt.cli.main").cli
+    commands = getattr(cli, "commands", None)
+    if commands is None:
+        pytest.skip("installed dbt has no click command tree")
+
+    def opts(name: str) -> set[str]:
+        return {o for p in commands[name].params for o in (*p.opts, *p.secondary_opts)}
+
+    build_only = (opts("build") | opts("run") | opts("test")) - opts("list")
+    assert build_only <= DBT_LS_ARGS_NOT_ACCEPTED

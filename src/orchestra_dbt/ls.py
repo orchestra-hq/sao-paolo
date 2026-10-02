@@ -7,26 +7,24 @@ from .logger import log_debug, log_error, log_info, log_warn
 
 # Flags `dbt build`/`run`/`test` accept but `dbt ls` does not. Forwarding one makes dbt
 # ls exit with "No such option", which costs us node-path discovery for the whole run.
-DBT_LS_ARGS_NOT_ACCEPTED = [
+# tests/unit/test_ls.py checks this against the installed dbt's own options.
+DBT_LS_ARGS_NOT_ACCEPTED = {
     "--empty",
     "--no-empty",
+    "--event-time-end",
+    "--event-time-start",
     "--export-saved-queries",
     "--no-export-saved-queries",
     "--full-refresh",
     "-f",
     "--include-saved-query",
     "--no-include-saved-query",
-    "--show",
-    "--store-failures",
-]
-# Same, but these take a value, so the value has to be dropped with the flag.
-DBT_LS_ARGS_NOT_ACCEPTED_WITH_VALUE = [
-    "--event-time-start",
-    "--event-time-end",
     "--sample",
+    "--show",
     "--sqlparse",
+    "--store-failures",
     "--threads",
-]
+}
 
 
 class NodesToRun(NamedTuple):
@@ -54,21 +52,14 @@ def get_args_for_ls(user_args: tuple) -> list[str]:
         "-q",
     ]
 
-    # Remove args not accepted by dbt ls
+    # Drop unaccepted flags plus their values (no positionals, so bare tokens are values).
     list_user_args = []
-    skip_value = False
+    dropping = False
     for user_arg in user_args:
-        if skip_value:
-            skip_value = False
-            continue
-        # `--flag=value` is one token; `--flag value` is two.
-        flag = user_arg.split("=", 1)[0]
-        if flag in DBT_LS_ARGS_NOT_ACCEPTED:
-            continue
-        if flag in DBT_LS_ARGS_NOT_ACCEPTED_WITH_VALUE:
-            skip_value = "=" not in user_arg
-            continue
-        list_user_args.append(user_arg)
+        if user_arg.startswith("-"):
+            dropping = user_arg.split("=", 1)[0] in DBT_LS_ARGS_NOT_ACCEPTED
+        if not dropping:
+            list_user_args.append(user_arg)
 
     return command_args + resource_type_args + list_user_args + output_args
 
