@@ -2,7 +2,7 @@ import threading
 from datetime import UTC, datetime
 
 from ..compatibility import dbt_core_import_error_message, release_connections
-from ..logger import log_error, log_info, log_warn
+from ..logger import log_debug, log_error, log_info, log_warn
 from ..models import SourceFreshness
 from ..target_finder import find_flag_value, find_target_in_args
 from ..utils import load_json
@@ -46,6 +46,58 @@ def should_exclude_source(
     return require_explicit_source_freshness and loaded_at_fields_unset(compiled_node)
 
 
+def _get_source_freshness_v2(
+    user_args: tuple | list[str],
+    require_explicit_source_freshness: bool,
+    scope_to_selection: bool,
+    selectors_to_run: list[str] | None,
+) -> SourceFreshness | None:
+    """dbt 2.x has no `dbt.task.freshness` to patch, so run its own `dbt source freshness`."""
+    from dbt.cli.main import dbtRunner
+
+    log_info("Calculating source freshness")
+
+    try:
+        result = dbtRunner().invoke(
+            args=get_args_for_source_freshness(
+                user_args, scope_to_selection, selectors_to_run
+            )
+        )
+        results = load_json("target/sources.json")["results"]
+        if result.exception:
+            log_warn(
+                f"dbt source freshness errored: {result.exception}. Using whatever results it wrote."
+            )
+        excluded: set[str] = set()
+        if require_explicit_source_freshness:
+            # 2.x's sources.json omits loaded_at_*; the manifest has them.
+            manifest_sources = load_json("target/manifest.json")["sources"]
+            excluded = {
+                source["unique_id"]
+                for source in results
+                if not any(
+                    manifest_sources[source["unique_id"]]["config"][key]
+                    for key in ("loaded_at_field", "loaded_at_query")
+                )
+            }
+            if excluded:
+                log_warn(
+                    f"{len(excluded)} source(s) have no explicit freshness config (loaded_at_field "
+                    "or loaded_at_query) and are excluded from state-aware orchestration; "
+                    "models depending on them will always run."
+                )
+        sources = {
+            source["unique_id"]: source["max_loaded_at"]
+            for source in results
+            if source["unique_id"] not in excluded
+        }
+        log_debug(f"dbt freshness-checked {len(results)} source(s).")
+        return SourceFreshness(sources=sources)
+    except Exception as e:
+        log_warn(f"Error running dbt source freshness: {e}")
+        return None
+
+
 def get_source_freshness(
     user_args: tuple | list[str],
     require_explicit_source_freshness: bool = False,
@@ -65,8 +117,18 @@ def get_source_freshness(
         from dbt.task.freshness import FreshnessRunner, FreshnessTask
         from dbt_common.exceptions import DbtRuntimeError
     except ImportError as missing_dbt_core_error:
-        log_error(dbt_core_import_error_message(missing_dbt_core_error))
-        raise
+        # dbt 2.x drops the modules above but still ships dbtRunner.
+        try:
+            from dbt.cli.main import dbtRunner
+        except ImportError:
+            log_error(dbt_core_import_error_message(missing_dbt_core_error))
+            raise missing_dbt_core_error
+        return _get_source_freshness_v2(
+            user_args,
+            require_explicit_source_freshness,
+            scope_to_selection,
+            selectors_to_run,
+        )
 
     def default_freshness_result(compiled_node) -> SourceFreshnessResult:
         return SourceFreshnessResult(

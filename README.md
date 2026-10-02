@@ -14,8 +14,8 @@ There are a few core reasons to use this project:
 
 - **Python:** 3.11, 3.12, and 3.13 only (see `requires-python` in `pyproject.toml`).
 - **dbt-core:** 1.10.x to 1.12.x when using stateful orchestration.
-- **dbt v2:** not yet supported for stateful orchestration. CI tests dbt v2
-  using the `dbt-oss` package.
+- **dbt v2:** supported for stateful orchestration. CI tests dbt v2 using the
+  `dbt-oss` package.
 - **A dbt Core project:** an existing dbt Core project where you already run `dbt build` / `dbt run` / `dbt test`.
 
 ## Installing
@@ -258,6 +258,7 @@ When **both** are omitted, Orchestra can still run **adapter-specific** SQL to i
 For adapters without a registered fallback, if both `loaded_at` settings are missing, Orchestra follows dbt's `FreshnessRunner` behavior (which may surface as warnings or a non-actionable result depending on dbt and the warehouse).
 
 Implicit freshness can be misleading for sources defined on top of **views**: warehouse metadata reports when the view was last altered, not when new data arrived in the underlying tables. To opt out of implicit freshness entirely, set `require_explicit_source_freshness = true` (or `ORCHESTRA_REQUIRE_EXPLICIT_SOURCE_FRESHNESS=true`). Sources without `loaded_at_field`/`loaded_at_query` are then excluded from state-aware orchestration and models depending on them always run; sources with an explicit config keep working as normal.
+
 ### Verifying relations still exist
 
 State and source freshness cannot tell you whether a node's table or view is *actually there*. A relation dropped out of band, renamed, or never built in this target still looks clean in state, so it gets skipped and the run "succeeds" with a missing relation — as does pointing a warm state file at a fresh database or schema.
