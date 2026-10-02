@@ -1,6 +1,6 @@
 import pytest
 
-from src.orchestra_dbt.target_finder import find_target_in_args
+from src.orchestra_dbt.target_finder import find_flag_value, find_target_in_args
 
 
 @pytest.fixture(autouse=True)
@@ -97,3 +97,21 @@ class TestFindTargetInArgs:
         """
         monkeypatch.setenv("DBT_TARGET", "env-fallback")
         assert find_target_in_args(["dbt", "build", "--target", ""]) == ""
+
+
+class TestFindFlagValue:
+    @pytest.mark.parametrize(
+        ("args", "expected"),
+        [
+            (["dbt", "build", "--profile", "a"], "a"),
+            (["dbt", "build", "--profile=a"], "a"),
+            (["dbt", "build", "--profile", "a", "--profile=b"], "b"),
+            (["dbt", "build", "--profile=a", "--profile", "b"], "b"),
+            (["dbt", "build", "--profile="], ""),
+            (["dbt", "build", "--profile"], None),
+            (["dbt", "build", "--profiles-dir", "x"], None),
+            (["dbt", "build"], None),
+        ],
+    )
+    def test_matches_click(self, args: list[str], expected: str | None) -> None:
+        assert find_flag_value(args, "--profile") == expected
