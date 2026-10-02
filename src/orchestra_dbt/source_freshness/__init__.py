@@ -32,7 +32,7 @@ def get_args_for_source_freshness(
         args.extend(["--target", target])
     # Otherwise freshness resolves a different profile than the user's run.
     for flag in ("--profiles-dir", "--profile", "--vars"):
-        if value := find_flag_value(list(user_args), flag):
+        if (value := find_flag_value(list(user_args), flag)) is not None:
             args.extend([flag, value])
     if scope_to_selection and selectors_to_run:
         args.append("--select")
