@@ -107,7 +107,6 @@ jobs:
           uv pip install . "dbt-oss>=2,<3" pytest
           uv run --no-sync dbt --version
       - name: Run tutorial dbt build (cold and warm state)
-        continue-on-error: true
         run: uv run --no-sync pytest tests/integration/test_tutorial_dbt.py -sv
 
   orchestra:
