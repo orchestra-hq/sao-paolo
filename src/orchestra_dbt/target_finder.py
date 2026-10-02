@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 
 def find_target_in_args(args: list[str]) -> str | None:
@@ -35,3 +36,34 @@ def find_flag_value(args: list[str], flag: str) -> str | None:
         elif arg.startswith(f"{flag}="):
             value = arg.removeprefix(f"{flag}=")
     return value
+
+
+def _dbt_setting(args: list[str], flag: str, name: str) -> str | None:
+    return (
+        find_flag_value(args, flag)
+        or os.environ.get(f"DBT_ENGINE_{name}")
+        or os.environ.get(f"DBT_{name}")
+        or None
+    )
+
+
+_project_dir = Path(".")
+_artifact_dir = Path("target")
+
+
+def resolve_artifact_dir(args: list[str]) -> None:
+    """Resolve the project and artifact dirs as dbt 1.12 and 2.0 do: flag, then
+    DBT_ENGINE_*, then DBT_*; a relative target path sits under the project dir."""
+    global _project_dir, _artifact_dir
+    _project_dir = Path(_dbt_setting(args, "--project-dir", "PROJECT_DIR") or ".")
+    target_path = _dbt_setting(args, "--target-path", "TARGET_PATH") or "target"
+    _artifact_dir = _project_dir / target_path
+
+
+def artifact_path(name: str) -> str:
+    return str(_artifact_dir / name)
+
+
+def project_path(relative: str) -> Path:
+    """A project-relative path (e.g. a manifest `original_file_path`) as seen from the cwd."""
+    return _project_dir / relative

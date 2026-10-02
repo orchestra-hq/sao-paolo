@@ -27,7 +27,7 @@ def resolve_state_backend_config(cwd: Path | None = None) -> StateBackendConfig:
             env_path, resolve_relative_from=base.resolve()
         )
 
-    project_dir = find_pyproject_directory(base)
+    project_dir = find_pyproject_directory(cwd)
     if project_dir is None:
         return StateBackendConfig(kind=StateBackendKind.HTTP)
 

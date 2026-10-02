@@ -55,6 +55,20 @@ class TestGetArgsForSourceFreshness:
             "{schema: x}",
         ]
 
+    def test_forwards_project_and_target_path(self):
+        """Otherwise freshness runs against the cwd and writes sources.json elsewhere."""
+        assert get_args_for_source_freshness(
+            ("dbt", "build", "--project-dir", "proj", "--target-path=out")
+        ) == [
+            "source",
+            "freshness",
+            "-q",
+            "--project-dir",
+            "proj",
+            "--target-path",
+            "out",
+        ]
+
     def test_forwards_empty_flag_value_unchanged(self):
         """Freshness must see what the user's run sees, even an empty value."""
         assert get_args_for_source_freshness(("dbt", "build", "--profiles-dir=")) == [

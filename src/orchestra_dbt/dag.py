@@ -14,6 +14,7 @@ from .models import (
     StateApiModel,
 )
 from .state_types import StateBackendKind
+from .target_finder import artifact_path
 from .utils import load_json
 
 _IGNORED_PREFIXES = ("function.",)
@@ -61,7 +62,7 @@ def construct_dag(
     state: StateApiModel,
     manifest_override: str | None = None,
 ) -> ParsedDag:
-    manifest = load_json(manifest_override or "target/manifest.json")
+    manifest = load_json(manifest_override or artifact_path("manifest.json"))
 
     nodes: dict[str, Node] = {}
     edges: list[Edge] = []

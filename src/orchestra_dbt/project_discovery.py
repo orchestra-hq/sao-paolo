@@ -1,11 +1,19 @@
 import tomllib
 from pathlib import Path
 
+from .target_finder import project_path
+
 _TOOL_SECTION = "orchestra_dbt"
 
 
 def find_pyproject_directory(start: Path | None = None) -> Path | None:
-    current = (start or Path.cwd()).resolve()
+    """Nearest pyproject.toml at or above `start`; by default the dbt project's,
+    falling back to the cwd's when the project dir is outside the cwd's tree."""
+    if start is None:
+        return find_pyproject_directory(project_path(".")) or find_pyproject_directory(
+            Path.cwd()
+        )
+    current = start.resolve()
     for directory in [current, *current.parents]:
         candidate = directory / "pyproject.toml"
         if candidate.is_file():

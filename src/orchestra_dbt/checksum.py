@@ -3,6 +3,7 @@ from os.path import getsize
 
 from .constants import MAX_SEED_SIZE_BYTES
 from .logger import log_error, log_warn
+from .target_finder import project_path
 from .utils import load_seed_bytes
 
 
@@ -12,6 +13,7 @@ def calculate_checksum(
     if resource_type != "seed":
         return node_checksum
 
+    file_path = str(project_path(file_path))
     try:
         file_size = getsize(file_path)
         if file_size > MAX_SEED_SIZE_BYTES:

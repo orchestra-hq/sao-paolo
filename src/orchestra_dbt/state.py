@@ -24,6 +24,7 @@ from .models import (
     StateApiModel,
     StateItem,
 )
+from .target_finder import artifact_path
 from .utils import load_json
 
 
@@ -62,7 +63,7 @@ def save_state(state: StateApiModel, updated_asset_external_ids: set[str]) -> No
 @lru_cache
 def _load_run_results() -> dict:
     try:
-        return load_json(path="target/run_results.json")
+        return load_json(path=artifact_path("run_results.json"))
     except FileNotFoundError:
         return {}
 

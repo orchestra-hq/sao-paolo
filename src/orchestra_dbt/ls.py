@@ -4,6 +4,7 @@ from typing import NamedTuple
 from .compatibility import dbt_core_import_error_message
 from .constants import RESOURCE_TYPES_TO_LS
 from .logger import log_error, log_info, log_warn
+from .target_finder import artifact_path
 from .utils import load_json
 
 # Build/run/test flags dbt ls rejects ("No such option"); checked in test_ls.py.
@@ -68,7 +69,7 @@ def _nodes_from_fqns(fqns: list[str]) -> NodesToRun:
     returns fqns; map them to paths through the manifest."""
     path_by_fqn = {
         ".".join(node["fqn"]): node["original_file_path"]
-        for node in load_json("target/manifest.json")["nodes"].values()
+        for node in load_json(artifact_path("manifest.json"))["nodes"].values()
         # A singular test can share a root model's fqn; ls only returned these types.
         if node["resource_type"] in RESOURCE_TYPES_TO_LS
     }

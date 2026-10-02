@@ -102,8 +102,7 @@ def _merge_env_overrides(settings: OrchestraDbtSettings) -> OrchestraDbtSettings
 
 
 def load_orchestra_dbt_settings(cwd: Path | None = None) -> OrchestraDbtSettings:
-    base = cwd or Path.cwd()
-    project_dir = find_pyproject_directory(base)
+    project_dir = find_pyproject_directory(cwd)
     raw: dict = {}
     if project_dir is not None:
         raw = read_orchestra_dbt_tool_config(project_dir)

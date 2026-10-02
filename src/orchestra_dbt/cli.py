@@ -43,6 +43,7 @@ from .state import (
     update_state,
 )
 from .state_types import StateBackendKind
+from .target_finder import resolve_artifact_dir
 
 
 def _usage_program() -> str:
@@ -131,6 +132,8 @@ def main(args: tuple[str, ...]) -> None:
     if len(dbt_args) < 2:
         log_error("dbt requires a subcommand (e.g. run, build, test).")
         sys.exit(1)
+
+    resolve_artifact_dir(list(dbt_args))
 
     if dbt_args[1] == "orchestra":
         if len(dbt_args) < 3:

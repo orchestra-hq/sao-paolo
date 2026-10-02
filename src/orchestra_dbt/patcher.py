@@ -7,6 +7,7 @@ from pathlib import Path
 from .constants import ORCHESTRA_REUSED_NODE
 from .logger import log_debug, log_error, log_info, log_warn
 from .models import MaterialisationNode
+from .target_finder import project_path
 from .utils import load_yaml, save_yaml
 
 
@@ -79,7 +80,7 @@ def _get_sql_files(cwd: Path) -> list[Path]:
 
 
 def patch_sql_files(nodes_to_reuse: dict[str, MaterialisationNode]) -> None:
-    cwd = Path(os.getcwd())
+    cwd = project_path(".")
     sql_files = _get_sql_files(cwd)
 
     if not sql_files:
@@ -106,7 +107,7 @@ def patch_sql_files(nodes_to_reuse: dict[str, MaterialisationNode]) -> None:
 
 
 def revert_patching(file_paths_to_revert: list[str]) -> None:
-    cwd = Path(os.getcwd())
+    cwd = project_path(".")
     sql_files = _get_sql_files(cwd)
 
     for file in sql_files:
@@ -131,6 +132,7 @@ def patch_seed_properties(
     if not seeds_to_reuse:
         return
 
+    seed_properties_file_path = str(project_path(seed_properties_file_path))
     try:
         seeds_properties = load_yaml(seed_properties_file_path)
         if "seeds" not in seeds_properties:

@@ -1,8 +1,15 @@
+import sys
+
 import pytest
 
 
 @pytest.fixture(autouse=True)
 def mock_env_vars(monkeypatch):
+    # Tests import both `orchestra_dbt` and `src.orchestra_dbt`, each with its own globals.
+    for name in ("orchestra_dbt.target_finder", "src.orchestra_dbt.target_finder"):
+        if module := sys.modules.get(name):
+            monkeypatch.setattr(module, "_project_dir", module._project_dir)
+            monkeypatch.setattr(module, "_artifact_dir", module._artifact_dir)
     monkeypatch.delenv("ORCHESTRA_STATE_FILE", raising=False)
     monkeypatch.delenv("AZURE_STORAGE_CONNECTION_STRING", raising=False)
     monkeypatch.setenv("ORCHESTRA_API_KEY", "test-api-key")

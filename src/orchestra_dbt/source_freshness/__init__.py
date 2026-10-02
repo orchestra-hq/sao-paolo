@@ -8,7 +8,7 @@ from ..compatibility import (
 )
 from ..logger import log_debug, log_error, log_info, log_warn
 from ..models import SourceFreshness
-from ..target_finder import find_flag_value, find_target_in_args
+from ..target_finder import artifact_path, find_flag_value, find_target_in_args
 from ..utils import load_json
 from .fallbacks.registry import FALLBACK_BY_ADAPTER_TYPE, loaded_at_fields_unset
 
@@ -34,8 +34,14 @@ def get_args_for_source_freshness(
     target = find_target_in_args(list(user_args))
     if target:
         args.extend(["--target", target])
-    # Otherwise freshness resolves a different profile than the user's run.
-    for flag in ("--profiles-dir", "--profile", "--vars"):
+    # Otherwise freshness resolves a different project or profile than the user's run.
+    for flag in (
+        "--project-dir",
+        "--target-path",
+        "--profiles-dir",
+        "--profile",
+        "--vars",
+    ):
         if (value := find_flag_value(list(user_args), flag)) is not None:
             args.extend([flag, value])
     if scope_to_selection and selectors_to_run:
@@ -63,7 +69,7 @@ def _get_source_freshness_v2(
         # 2.x's sources.json omits loaded_at_*; the manifest has them.
         implicit = {
             unique_id: "source:" + ".".join(source["fqn"])
-            for unique_id, source in load_json("target/manifest.json")[
+            for unique_id, source in load_json(artifact_path("manifest.json"))[
                 "sources"
             ].items()
             if not any(
@@ -92,7 +98,7 @@ def _get_source_freshness_v2(
         # sources fail that.
         if result.exception:
             raise RuntimeError(f"dbt v2 source freshness failed: {result.exception}")
-        results = load_json("target/sources.json")["results"]
+        results = load_json(artifact_path("sources.json"))["results"]
         excluded: set[str] = set()
         if require_explicit_source_freshness:
             excluded = {
@@ -214,7 +220,7 @@ def get_source_freshness(
         return SourceFreshness(
             sources={
                 source["unique_id"]: source["max_loaded_at"]
-                for source in load_json("target/sources.json")["results"]
+                for source in load_json(artifact_path("sources.json"))["results"]
                 if source["unique_id"] not in sources_without_explicit_freshness
             }
         )
