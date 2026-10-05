@@ -24,7 +24,7 @@ from .logger import (
     log_warn,
     log_why_not_reused,
 )
-from .ls import get_paths_to_run
+from .ls import get_nodes_to_run
 from .models import (
     MaterialisationNode,
     NodeType,
@@ -86,7 +86,7 @@ def _validate_environment() -> None:
 
 def _run_dbt_passthrough(dbt_args: tuple[str, ...]) -> None:
     try:
-        sys.exit(subprocess.run(dbt_args).returncode)
+        sys.exit(subprocess.run(dbt_args, check=False).returncode)
     except FileNotFoundError as file_not_found_error:
         log_error(
             f"dbt executable not found on PATH (install the dbt CLI). {file_not_found_error}"
@@ -171,10 +171,18 @@ def main(args: tuple[str, ...]) -> None:
     _validate_environment()
 
     try:
-        paths_to_run: list[str] | None = get_paths_to_run(dbt_args[2:])
+        nodes_to_run = get_nodes_to_run(dbt_args[2:])
     except ImportError as import_error:
         log_error(dbt_core_import_error_message(import_error))
         sys.exit(1)
+
+    paths_to_run: list[str] | None = nodes_to_run.paths if nodes_to_run else None
+    if settings.scope_source_freshness_to_selection and nodes_to_run is None:
+        # With no selection to scope to, freshness checks every source instead.
+        log_warn(
+            "Could not resolve the selection for source freshness scoping. "
+            "Checking every source instead."
+        )
 
     try:
         source_freshness: SourceFreshness | None = get_source_freshness(
@@ -183,13 +191,13 @@ def main(args: tuple[str, ...]) -> None:
             user_args=dbt_args,
             require_explicit_source_freshness=settings.require_explicit_source_freshness,
             scope_to_selection=settings.scope_source_freshness_to_selection,
-            paths_to_run=paths_to_run,
+            selectors_to_run=nodes_to_run.selectors if nodes_to_run else None,
         )
     except ImportError as import_error:
         log_error(dbt_core_import_error_message(import_error))
         sys.exit(1)
     if not source_freshness:
-        sys.exit(subprocess.run(dbt_args).returncode)
+        sys.exit(subprocess.run(dbt_args, check=False).returncode)
     log_info(f"Collected {len(source_freshness.sources)} source(s) information.")
 
     try:
@@ -214,7 +222,7 @@ def main(args: tuple[str, ...]) -> None:
             state,
             parsed_dag,
             source_freshness,
-            dbt_exit_code=subprocess.run(dbt_args).returncode,
+            dbt_exit_code=subprocess.run(dbt_args, check=False).returncode,
             state_load_ok=state_load_ok,
         )
 
@@ -248,7 +256,7 @@ def main(args: tuple[str, ...]) -> None:
         patch_seed_properties(nodes_to_reuse)
 
         selectors_snapshot = snapshot_selectors_file()
-        result = subprocess.run(modify_dbt_command(cmd=list(dbt_args)))
+        result = subprocess.run(modify_dbt_command(cmd=list(dbt_args)), check=False)
 
         if settings.local_run:
             revert_patching(
@@ -258,7 +266,7 @@ def main(args: tuple[str, ...]) -> None:
             )
             restore_selectors_file(selectors_snapshot)
     else:
-        result = subprocess.run(list(dbt_args))
+        result = subprocess.run(list(dbt_args), check=False)
 
     _complete_run(
         state,

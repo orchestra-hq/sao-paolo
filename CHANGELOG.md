@@ -7,28 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.4.0] - 2026-09-15
+### Fixed
+
+- The supported dbt-core version message quoted `<1.12`, wrongly telling users on dbt-core 1.12 that their version wasn't supported. `pyproject.toml` and the lockfile already allow `<1.13`; the constant now matches.
+
+## [1.3.1] - 2026-09-17
 
 ### Added
 
-- Support dbt-core 1.12.x, and run (with a reduced feature set) on dbt-core 2.x (Fusion). dbt-core 2.x moved task execution into its Rust engine and no longer exposes `dbt.task.freshness` / `dbt.adapters` for Orchestra to patch in-process, so on 2.x `orc` falls back to running dbt's own, unpatched `dbt source freshness`. Sources keep working as on 1.x, including dbt's metadata-based freshness for sources that set neither `loaded_at_field` nor `loaded_at_query`; only the adapter-specific fallbacks (e.g. Databricks `DESCRIBE HISTORY`) have no 2.x equivalent. The relation-existence check likewise needs `dbt.adapters` and is unavailable on 2.x — it already fails soft and leaves reuse decisions unchanged, same as an unreadable schema on 1.x. See *dbt-core 2.x (Fusion) support* in the README.
 - The warehouse existence check (`verify_relations_exist` / `ORCHESTRA_VERIFY_RELATIONS_EXIST`) now logs how long it took, e.g. `Warehouse existence check for 3 node(s) took 0.42s.`
-
-### Changed
-
-- Widened the documented/supported dbt-core range from `>=1.10,<1.12` to `>=1.10,<1.13`, matching the range already used for development and testing.
 
 ### Fixed
 
-- Stop forwarding flags to `dbt ls` that it does not accept. `orc dbt build --full-refresh` (or `-f`, `--threads`, `--store-failures`, `--show`, `--event-time-start/end`, `--sample`, `--sqlparse`, `--export-saved-queries`, `--include-saved-query`) made the internal `dbt ls` exit with `No such option`, silently losing node-path discovery for the whole run — only `--empty` was being stripped. Flags that take a value have their value dropped too, in both `--flag value` and `--flag=value` form.
-- `require_explicit_source_freshness` on dbt-core 2.x now resolves `loaded_at_field`/`loaded_at_query` from `target/manifest.json`. 2.x's `sources.json` omits both from every result's `criteria`, even for sources that set one, so reading the artifact alone would have excluded every source and left state-aware orchestration inert. Both are read from the source node and its `config`, with source-level inheritance already resolved by dbt. When the manifest cannot be read the run warns and excludes nothing.
-- Stop reporting a stale source as a broken `dbt source freshness` run. dbt 2.x signals a handled failure (a stale or failing source) as `success=False` with no exception, so a project with a permanently stale source logged `did not complete cleanly: None` on every run. A warning is now raised only for a real engine error; the handled case logs the exit code and a status breakdown at debug level.
-- Harden `get_last_updated_from_run_results` against a run-results entry with an empty `timing` array. It indexed `timing[-1]` directly, and the resulting `IndexError` was swallowed into a per-node warning that returned `None`, which made `update_state` skip the node entirely — leaving it with no checksum and no source snapshot, so it would be dirty on every subsequent run and the run's source freshness would never be recorded against it. dbt 2.x writes empty `timing` arrays in `sources.json`; its `run_results.json` has been observed to populate them, so this is defence against a silent, severe failure rather than a fix for a seen one. Falls back to the artifact's `metadata.generated_at`, and accepts a capitalised `status` alongside a lowercase one.
-- Say why nodes were rebuilt when none were reused. `x/y nodes reused.` was only logged inside the branch taken when at least one node was reusable, and a node's `reason` is only printed for nodes that *are* reused — so the run you most need to debug reported nothing at all. The reuse count is now always logged, and with `debug` on the rebuilt nodes are grouped by reason (`12 node(s): Checksum changed since last run.`).
-- Translate `dbt ls` results back into file paths on dbt-core 2.x. 2.x honours `--output path` only on stdout — the programmatic result handed to `dbtRunner().invoke()` is always a list of fully-qualified names (`proj.staging.stg_events`) whatever `--output` says. Those never match a node's `original_file_path`, so every node was filtered out of the reuse decision and **nothing was ever reusable on 2.x**, however clean it was. Names are now resolved to paths through the manifest `dbt ls` has just written.
-- A failed internal `dbt ls` now reports why. The underlying exception was only logged at debug level, so the warning that followed (`Error getting [dbt ls] of nodes that will be executed.`) gave no clue what went wrong.
+- `scope_source_freshness_to_selection` collected **zero** sources in projects whose models live in installed packages, silently disabling reuse for every model downstream of a source. The selection was built as `--select +path:<file>`, and dbt resolves `path:` by globbing the real filesystem from the project root — but `dbt ls` reports each node's path relative to the package that owns it, so a package-owned model never matched. dbt treats an empty selection as "Nothing to do": a warning (suppressed by the `-q` we pass) plus a valid, empty `sources.json`, so it surfaced only as `Collected 0 source(s) information.` with no error. Selection is now by dotted fqn (`--select +<fqn>`), which comes from the manifest and is package-qualified.
 
-[1.4.0]: https://github.com/orchestra-hq/sao-paolo/releases/tag/v1.4.0
+[1.3.1]: https://github.com/orchestra-hq/sao-paolo/releases/tag/v1.3.1
 
 ## [1.3.0] - 2026-09-10
 

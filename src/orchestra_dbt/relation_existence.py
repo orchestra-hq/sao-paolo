@@ -1,6 +1,8 @@
+from collections.abc import Collection
 from time import perf_counter
-from typing import Any, Collection, cast
+from typing import Any, cast
 
+from .compatibility import release_connections
 from .logger import log_debug, log_info, log_warn
 from .models import Freshness, MaterialisationNode, NodeType, ParsedDag
 
@@ -156,7 +158,7 @@ def apply_relation_existence_gate(
                 missing = find_missing_relations(adapter, manifest, candidates)
         finally:
             # The real dbt run is a subprocess started straight after this.
-            adapter.cleanup_connections()
+            release_connections(adapter)
     except Exception as e:
         log_warn(
             f"Warehouse existence check failed; reuse decisions are unchanged. {e}"

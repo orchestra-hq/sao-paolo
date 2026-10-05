@@ -1,30 +1,37 @@
+import json
+from typing import NamedTuple
+
 from .compatibility import dbt_core_import_error_message
 from .constants import RESOURCE_TYPES_TO_LS
 from .logger import log_debug, log_error, log_info, log_warn
 from .utils import load_json
 
-# Flags `dbt build`/`run`/`test` accept but `dbt ls` does not. Forwarding one makes dbt
-# ls exit with "No such option", which costs us node-path discovery for the whole run.
-DBT_LS_ARGS_NOT_ACCEPTED = [
+# Build/run/test flags dbt ls rejects ("No such option"); checked in test_ls.py.
+DBT_LS_ARGS_NOT_ACCEPTED = {
     "--empty",
     "--no-empty",
+    "--event-time-end",
+    "--event-time-start",
     "--export-saved-queries",
     "--no-export-saved-queries",
     "--full-refresh",
     "-f",
     "--include-saved-query",
     "--no-include-saved-query",
-    "--show",
-    "--store-failures",
-]
-# Same, but these take a value, so the value has to be dropped with the flag.
-DBT_LS_ARGS_NOT_ACCEPTED_WITH_VALUE = [
-    "--event-time-start",
-    "--event-time-end",
     "--sample",
+    "--show",
     "--sqlparse",
+    "--store-failures",
     "--threads",
-]
+}
+
+
+class NodesToRun(NamedTuple):
+    """`paths` are matched against node paths elsewhere; `selectors` are dotted
+    fqns for feeding back into `--select` (see get_args_for_source_freshness)."""
+
+    paths: list[str]
+    selectors: list[str]
 
 
 def get_args_for_ls(user_args: tuple) -> list[str]:
@@ -33,63 +40,70 @@ def get_args_for_ls(user_args: tuple) -> list[str]:
     for resource_type in RESOURCE_TYPES_TO_LS:
         resource_type_args.append("--resource-type")
         resource_type_args.append(resource_type)
-    output_args = ["--output", "path", "-q"]
+    # Both forms from one invocation -- asking twice re-resolves the same
+    # selection. --output-keys is available from dbt 1.10.
+    output_args = [
+        "--output",
+        "json",
+        "--output-keys",
+        "original_file_path",
+        "fqn",
+        "-q",
+    ]
 
-    # Remove args not accepted by dbt ls
+    # Drop unaccepted flags plus their values (no positionals, so bare tokens are values).
     list_user_args = []
-    skip_value = False
+    dropping = False
     for user_arg in user_args:
-        if skip_value:
-            skip_value = False
-            continue
-        # `--flag=value` is one token; `--flag value` is two.
-        flag = user_arg.split("=", 1)[0]
-        if flag in DBT_LS_ARGS_NOT_ACCEPTED:
-            continue
-        if flag in DBT_LS_ARGS_NOT_ACCEPTED_WITH_VALUE:
-            skip_value = "=" not in user_arg
-            continue
-        list_user_args.append(user_arg)
+        if user_arg.startswith("-"):
+            dropping = user_arg.split("=", 1)[0] in DBT_LS_ARGS_NOT_ACCEPTED
+        if not dropping:
+            list_user_args.append(user_arg)
 
     return command_args + resource_type_args + list_user_args + output_args
 
 
-def _resolve_paths(items: list[str]) -> list[str]:
-    """Return `items` as project-relative file paths.
+def _nodes_from_ls_result(items: list[str]) -> NodesToRun:
+    """Turn `dbt ls` output into both forms, whichever shape dbt gave us.
 
-    dbt 2.x honours `--output path` only on stdout: the programmatic result is always
-    a list of fully-qualified names (`proj.staging.stg_events`) whatever `--output`
-    says. Everything downstream compares these against the manifest's
-    `original_file_path`, so left untranslated nothing ever matches and no node is
-    reusable. Translated via the manifest `dbt ls` has just written.
+    dbt 1.x honours `--output json`, so each item is a JSON object carrying the keys
+    asked for. dbt 2.x applies `--output` only to stdout -- the programmatic result is
+    always a list of dotted fqns whatever is asked for -- so there the fqn is already
+    the selector, and only the path has to be recovered, from the manifest `dbt ls`
+    has just written.
     """
-    if all("/" in item for item in items):
-        return items  # dbt 1.x: already paths
+    if not items:
+        return NodesToRun(paths=[], selectors=[])
 
-    try:
-        manifest_nodes = load_json("target/manifest.json").get("nodes") or {}
-    except Exception as e:
-        log_warn(
-            f"dbt ls returned names rather than paths and target/manifest.json could not "
-            f"be read to resolve them, so no node can be matched to the run: {e}"
+    if items[0].startswith("{"):
+        # One JSON object per node, carrying the keys asked for above. A missing
+        # key raises, which the handler below turns into "couldn't resolve" --
+        # better than silently returning two lists that disagree.
+        nodes = [json.loads(line) for line in items]
+        return NodesToRun(
+            paths=[node["original_file_path"] for node in nodes],
+            selectors=[".".join(node["fqn"]) for node in nodes],
         )
-        return []
 
+    manifest_nodes = load_json("target/manifest.json")["nodes"]
     by_fqn = {
         ".".join(node["fqn"]): node["original_file_path"]
         for node in manifest_nodes.values()
-        if node.get("fqn") and node.get("original_file_path")
     }
-    paths = [by_fqn[item] for item in items if item in by_fqn]
-    if unresolved := len(items) - len(paths):
+    # Dropped from both lists together, so they cannot disagree.
+    resolved = [(by_fqn[fqn], fqn) for fqn in items if fqn in by_fqn]
+    if unresolved := len(items) - len(resolved):
         log_warn(
-            f"{unresolved} of {len(items)} node(s) from dbt ls had no manifest entry."
+            f"{unresolved} of {len(items)} node(s) from dbt ls are not in the manifest."
         )
-    log_debug(f"Resolved {len(paths)} dbt ls name(s) to file paths via the manifest.")
-    return paths
+    log_debug(f"Resolved {len(resolved)} dbt ls fqn(s) to file paths via the manifest.")
+    return NodesToRun(
+        paths=[path for path, _ in resolved],
+        selectors=[fqn for _, fqn in resolved],
+    )
 
 
-def get_paths_to_run(args: tuple) -> list[str] | None:
+def get_nodes_to_run(args: tuple) -> NodesToRun | None:
     try:
         from dbt.cli.main import (
             dbtRunner,
@@ -97,9 +111,9 @@ def get_paths_to_run(args: tuple) -> list[str] | None:
         )
     except ImportError as missing_dbt_core_error:
         log_error(dbt_core_import_error_message(missing_dbt_core_error))
-        raise missing_dbt_core_error
+        raise
 
-    log_info("Finding node paths to be executed:")
+    log_info("Finding nodes to be executed:")
 
     try:
         res: dbtRunnerResult = dbtRunner().invoke(get_args_for_ls(args))
@@ -109,7 +123,7 @@ def get_paths_to_run(args: tuple) -> list[str] | None:
         if isinstance(res.result, list) and all(
             isinstance(item, str) for item in res.result
         ):
-            return _resolve_paths(res.result)
+            return _nodes_from_ls_result(res.result)
 
         raise ValueError(f"Unexpected result from dbt ls: {res.result}")
     except Exception as e:

@@ -1,11 +1,11 @@
 import threading
 from collections import Counter
-from datetime import datetime
+from datetime import UTC, datetime
 
-from ..compatibility import dbt_core_import_error_message
+from ..compatibility import dbt_core_import_error_message, release_connections
 from ..logger import log_debug, log_error, log_info, log_warn
 from ..models import SourceFreshness
-from ..target_finder import find_target_in_args
+from ..target_finder import find_flag_value, find_target_in_args
 from ..utils import load_json
 from .fallbacks.registry import FALLBACK_BY_ADAPTER_TYPE, loaded_at_fields_unset
 
@@ -13,17 +13,31 @@ from .fallbacks.registry import FALLBACK_BY_ADAPTER_TYPE, loaded_at_fields_unset
 def get_args_for_source_freshness(
     user_args: tuple | list[str],
     scope_to_selection: bool = False,
-    paths_to_run: list[str] | None = None,
+    selectors_to_run: list[str] | None = None,
 ) -> list[str]:
     """Build the `dbt source freshness` CLI args: forwards `--target`, and when
-    scoped, an ancestor-expanded `--select` built from `paths_to_run`."""
+    scoped, an ancestor-expanded `--select` built from `selectors_to_run`.
+
+    Selects by dotted fqn, not `path:`: dbt resolves `path:` by globbing the real
+    filesystem from the project root, so package-owned nodes -- whose paths are
+    relative to their package -- never match. fqns come from the manifest and are
+    package-qualified, so they work for both.
+
+    fqns match as a prefix over the subtree, so a model sharing a name with a
+    sibling directory can pull in that directory's sources too. That widens the
+    check rather than narrowing it, so it costs time, never correctness.
+    """
     args: list[str] = ["source", "freshness", "-q"]
     target = find_target_in_args(list(user_args))
     if target:
         args.extend(["--target", target])
-    if scope_to_selection and paths_to_run:
+    # Otherwise freshness resolves a different profile than the user's run.
+    for flag in ("--profiles-dir", "--profile", "--vars"):
+        if (value := find_flag_value(list(user_args), flag)) is not None:
+            args.extend([flag, value])
+    if scope_to_selection and selectors_to_run:
         args.append("--select")
-        args.extend(f"+path:{path}" for path in paths_to_run)
+        args.extend(f"+{selector}" for selector in selectors_to_run)
     return args
 
 
@@ -98,7 +112,7 @@ def _get_source_freshness_v2(
     user_args: tuple | list[str],
     require_explicit_source_freshness: bool,
     scope_to_selection: bool,
-    paths_to_run: list[str] | None,
+    selectors_to_run: list[str] | None,
 ) -> SourceFreshness | None:
     """dbt-core >=2.0 (Fusion) moved task execution into its Rust engine and no longer
     exposes `dbt.task.freshness` / `dbt.adapters` for Orchestra to patch in-process.
@@ -112,6 +126,9 @@ def _get_source_freshness_v2(
 
     A stale source (`status: "Error"`) is kept: its `max_loaded_at` is real -- the data
     genuinely has not moved -- which is exactly the signal reuse needs.
+
+    Nothing is released afterwards: the engine owns its own connections, and there is
+    no in-process adapter to clean up.
     """
     from dbt.cli.main import dbtRunner
 
@@ -124,11 +141,12 @@ def _get_source_freshness_v2(
     try:
         result = dbtRunner().invoke(
             args=get_args_for_source_freshness(
-                user_args, scope_to_selection, paths_to_run
+                user_args, scope_to_selection, selectors_to_run
             )
         )
         results = load_json("target/sources.json")["results"]
         _log_freshness_outcome(result, results)
+
         excluded: set[str] = set()
         if require_explicit_source_freshness:
             explicit = _explicit_freshness_source_ids(results)
@@ -175,9 +193,10 @@ def get_source_freshness(
     user_args: tuple | list[str],
     require_explicit_source_freshness: bool = False,
     scope_to_selection: bool = False,
-    paths_to_run: list[str] | None = None,
+    selectors_to_run: list[str] | None = None,
 ) -> SourceFreshness | None:
     try:
+        from dbt.adapters.factory import FACTORY
         from dbt.artifacts.resources.v1.components import FreshnessThreshold
         from dbt.artifacts.schemas.freshness import SourceDefinition
         from dbt.artifacts.schemas.freshness.v3.freshness import (
@@ -193,12 +212,12 @@ def get_source_freshness(
             from dbt.cli.main import dbtRunner  # noqa: F401
         except ImportError:
             log_error(dbt_core_import_error_message(missing_dbt_core_error))
-            raise missing_dbt_core_error
+            raise
         return _get_source_freshness_v2(
             user_args,
             require_explicit_source_freshness,
             scope_to_selection,
-            paths_to_run,
+            selectors_to_run,
         )
 
     def default_freshness_result(compiled_node) -> SourceFreshnessResult:
@@ -211,8 +230,8 @@ def get_source_freshness(
             message=None,
             failures=None,
             node=compiled_node,
-            max_loaded_at=datetime.now(),
-            snapshotted_at=datetime.now(),
+            max_loaded_at=datetime.now(UTC),
+            snapshotted_at=datetime.now(UTC),
             age=0,
         )
 
@@ -254,7 +273,7 @@ def get_source_freshness(
     try:
         dbtRunner().invoke(
             args=get_args_for_source_freshness(
-                user_args, scope_to_selection, paths_to_run
+                user_args, scope_to_selection, selectors_to_run
             )
         )
         if sources_without_explicit_freshness:
@@ -272,3 +291,6 @@ def get_source_freshness(
         )
     except Exception as e:
         log_warn(f"Error running dbt source freshness: {e}")
+    finally:
+        for adapter in FACTORY.adapters.values():
+            release_connections(adapter)

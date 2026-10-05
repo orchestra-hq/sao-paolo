@@ -1,7 +1,11 @@
 import json
 import os
 
-from azure.core.exceptions import ClientAuthenticationError, HttpResponseError, ResourceNotFoundError
+from azure.core.exceptions import (
+    ClientAuthenticationError,
+    HttpResponseError,
+    ResourceNotFoundError,
+)
 from azure.identity import DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient, ContentSettings
 from pydantic import ValidationError

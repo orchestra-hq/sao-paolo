@@ -34,7 +34,7 @@ def build_dependency_graphs(
         in_degree[child] += 1
 
     # Initialize in_degree for all nodes (nodes with no dependencies will have 0)
-    for node_id in dag.nodes.keys():
+    for node_id in dag.nodes:
         if node_id not in in_degree:
             in_degree[node_id] = 0
 
@@ -170,7 +170,7 @@ def calculate_nodes_to_run(dag: ParsedDag):
     children, parents, in_degree = build_dependency_graphs(dag)
 
     # Queue for nodes with no upstream dependencies (in_degree 0)
-    queue = deque[str]([n for n in dag.nodes.keys() if in_degree[n] == 0])
+    queue = deque[str]([n for n in dag.nodes if in_degree[n] == 0])
 
     while queue:
         current = queue.popleft()

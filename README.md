@@ -224,7 +224,7 @@ For boolean settings, if the environment variable is **set**, the merged value i
 | `seed_state_orchestration` | bool | `false` | When `true`, seed nodes can be reused from state like models; when `false`, seeds are always treated as dirty for reuse. This feature should be considered experimental and may change in the future. |
 | `require_explicit_source_freshness` | bool | `false` | When `true`, sources without an explicit `loaded_at_field` or `loaded_at_query` are excluded from state-aware orchestration: no implicit/fallback freshness is inferred for them, and models depending on them always run. Use this when implicit freshness is unreliable (for example, sources defined on top of views, where warehouse metadata reflects the view rather than the underlying data). |
 | `verify_relations_exist` | bool | `false` | Opt in to confirming a node's table/view is actually in the warehouse before skipping it (see [Verifying relations still exist](#verifying-relations-still-exist)). Off by default, so existing behaviour is unchanged until you enable it. |
-| `scope_source_freshness_to_selection` | bool | `false` | When `true`, `dbt source freshness` only checks sources upstream of the selection already resolved for node reuse (via `dbt ls`), passed as `--select +path:<file>` per selected path so dbt's own selection engine resolves the ancestor sources -- no `--resource-type` filter needed, since `source freshness` only ever touches sources anyway. When `false` (default), freshness is checked for every source in the project regardless of selection, matching prior behaviour. |
+| `scope_source_freshness_to_selection` | bool | `false` | When `true`, `dbt source freshness` only checks sources upstream of the selection already resolved for node reuse (via `dbt ls`), passed as `--select +<fqn>` per selected node so dbt's own selection engine resolves the ancestor sources -- no `--resource-type` filter needed, since `source freshness` only ever touches sources anyway. Selection is by fqn rather than path because dbt resolves `path:` by globbing the filesystem from the project root, which never matches a node owned by an installed package. When `false` (default), freshness is checked for every source in the project regardless of selection, matching prior behaviour. |
 
 ### Resolving multiple backend state configurations
 
@@ -250,7 +250,7 @@ When **both** are omitted, Orchestra can still run **adapter-specific** SQL to i
 | **Google BigQuery** | `bigquery` | Same as Snowflake — configure `loaded_at_*`; no Orchestra fallback. |
 | **AWS Redshift** | `redshift` | Same as Snowflake — configure `loaded_at_*`; no Orchestra fallback. |
 | **PostgreSQL** | `postgres` | Same as Snowflake — configure `loaded_at_*`; no Orchestra fallback. |
-| **DuckDB** | `duckdb` | **Not supported** |
+| **DuckDB** | `duckdb` | Configure `loaded_at_*`; no Orchestra fallback. |
 | **Other adapters** | varies | No Orchestra fallback unless listed above; use `loaded_at_*` or verify dbt's default behavior for your warehouse. |
 
 For adapters without a registered fallback, if both `loaded_at` settings are missing, Orchestra follows dbt's `FreshnessRunner` behavior (which may surface as warnings or a non-actionable result depending on dbt and the warehouse).

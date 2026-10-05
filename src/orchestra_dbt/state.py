@@ -2,9 +2,10 @@ from datetime import datetime
 from functools import lru_cache
 from typing import cast
 
-from .logger import log_debug, log_warn
+from .logger import log_warn
 from .state_backends import resolved_state_backend
 from .state_backends.base import StateBackend
+from .state_backends.http import HttpStateBackend
 from .state_errors import StateLoadError, StateSaveError
 
 __all__ = [
@@ -30,23 +31,33 @@ def load_state() -> StateApiModel:
     return resolved_state_backend().load()
 
 
-def save_state(state: StateApiModel, updated_asset_external_ids: set[str]) -> None:
-    """Merge only this run's updated nodes onto the latest stored state.
+def save_state(
+    state: StateApiModel, updated_asset_external_ids: set[str]
+) -> None:
+    """Save only this run's updated nodes, leaving every other stored node as it is.
 
-    Re-reads state at save time so a run with a narrow selector does not revert
-    another concurrent run's writes to nodes it did not execute itself.
+    The HTTP backend upserts each node it is sent, so it is sent only the updates.
+    File backends rewrite the whole file, so the updates are merged onto state
+    re-read at save time, or a concurrent run's writes would be reverted.
     """
+    updates = {
+        asset_external_id: state.state[asset_external_id]
+        for asset_external_id in updated_asset_external_ids
+        if asset_external_id in state.state
+    }
+    if not updates:
+        return
     backend: StateBackend = resolved_state_backend()
+    if isinstance(backend, HttpStateBackend):
+        backend.save(StateApiModel(state=updates))
+        return
     try:
         latest = backend.load()
     except StateLoadError as e:
         raise StateSaveError(
             f"Refusing to save: could not load latest state to merge onto: {e}"
         )
-    for asset_external_id in updated_asset_external_ids:
-        updated_item = state.state.get(asset_external_id)
-        if updated_item is not None:
-            latest.state[asset_external_id] = updated_item
+    latest.state.update(updates)
     backend.save(latest)
 
 
@@ -59,28 +70,10 @@ def _load_run_results() -> dict:
 
 
 def get_last_updated_from_run_results(node_id: str) -> datetime | None:
-    run_results = _load_run_results()
     try:
-        for r in run_results.get("results", []):
-            if r["unique_id"] != node_id:
-                continue
-            if str(r.get("status", "")).lower() != "success":
-                continue
-
-            for entry in reversed(r.get("timing") or []):
-                if entry.get("completed_at"):
-                    return entry["completed_at"]
-            # dbt 2.x can write an empty `timing` array. Without a fallback the node
-            # gets no state at all, so it is dirty on every subsequent run -- and the
-            # whole run's sources go unrecorded with it. The artifact's own write time
-            # is within a run's length of the real value.
-            generated_at = (run_results.get("metadata") or {}).get("generated_at")
-            if generated_at:
-                log_debug(
-                    f"No timing in run results for '{node_id}'; "
-                    "using the artifact's generated_at as last updated."
-                )
-            return generated_at
+        for r in _load_run_results().get("results", []):
+            if r["unique_id"] == node_id and r["status"] == "success":
+                return r["timing"][-1]["completed_at"]
     except Exception as e:
         log_warn(f"Failed to get last updated from run results for '{node_id}': {e}")
     return None
@@ -101,14 +94,13 @@ def update_state(
 
         sources_dict: dict[str, datetime] = {}
         for edge in parsed_dag.edges:
-            if edge.to_ == node_id:
-                if edge.from_ in parsed_dag.nodes:
-                    parent_node = parsed_dag.nodes[edge.from_]
-                    if (
-                        parent_node.node_type == NodeType.SOURCE
-                        and edge.from_ in source_freshness.sources
-                    ):
-                        sources_dict[edge.from_] = source_freshness.sources[edge.from_]
+            if edge.to_ == node_id and edge.from_ in parsed_dag.nodes:
+                parent_node = parsed_dag.nodes[edge.from_]
+                if (
+                    parent_node.node_type == NodeType.SOURCE
+                    and edge.from_ in source_freshness.sources
+                ):
+                    sources_dict[edge.from_] = source_freshness.sources[edge.from_]
 
         state.state[materialisation_node.asset_external_id] = StateItem(
             checksum=materialisation_node.checksum,
