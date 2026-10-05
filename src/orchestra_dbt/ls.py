@@ -5,9 +5,7 @@ from .compatibility import dbt_core_import_error_message
 from .constants import RESOURCE_TYPES_TO_LS
 from .logger import log_debug, log_error, log_info, log_warn
 
-# Flags `dbt build`/`run`/`test` accept but `dbt ls` does not. Forwarding one makes dbt
-# ls exit with "No such option", which costs us node-path discovery for the whole run.
-# tests/unit/test_ls.py checks this against the installed dbt's own options.
+# Build/run/test flags dbt ls rejects ("No such option"); checked in test_ls.py.
 DBT_LS_ARGS_NOT_ACCEPTED = {
     "--empty",
     "--no-empty",
