@@ -128,6 +128,22 @@ def find_missing_relations(
     return missing
 
 
+def _find_missing_relations_v1(candidates: Collection[str]) -> set[str] | None:
+    """The in-process 1.x check; None for an adapter it is not enabled for."""
+    adapter, manifest = _acquire_adapter()
+    adapter_type: str = adapter.type()
+    if adapter_type in _UNSUPPORTED_ADAPTERS:
+        log_debug(f"Existence checks are not enabled for the '{adapter_type}' adapter.")
+        return None
+    try:
+        with adapter.connection_named(_CONNECTION_NAME):
+            adapter.clear_transaction()
+            return find_missing_relations(adapter, manifest, candidates)
+    finally:
+        # The real dbt run is a subprocess started straight after this.
+        release_connections(adapter)
+
+
 def apply_relation_existence_gate(
     parsed_dag: ParsedDag, paths_to_run: list[str] | None
 ) -> None:
@@ -145,20 +161,9 @@ def apply_relation_existence_gate(
 
     started_at = perf_counter()
     try:
-        adapter, manifest = _acquire_adapter()
-        adapter_type: str = adapter.type()
-        if adapter_type in _UNSUPPORTED_ADAPTERS:
-            log_debug(
-                f"Existence checks are not enabled for the '{adapter_type}' adapter."
-            )
+        missing = _find_missing_relations_v1(candidates)
+        if missing is None:
             return
-        try:
-            with adapter.connection_named(_CONNECTION_NAME):
-                adapter.clear_transaction()
-                missing = find_missing_relations(adapter, manifest, candidates)
-        finally:
-            # The real dbt run is a subprocess started straight after this.
-            release_connections(adapter)
     except Exception as e:
         log_warn(
             f"Warehouse existence check failed; reuse decisions are unchanged. {e}"
