@@ -8,7 +8,7 @@ from ..compatibility import (
 )
 from ..logger import log_debug, log_error, log_info, log_warn
 from ..models import SourceFreshness
-from ..target_finder import find_flag_value, find_target_in_args
+from ..target_finder import profile_args
 from ..utils import load_json
 from .fallbacks.registry import FALLBACK_BY_ADAPTER_TYPE, loaded_at_fields_unset
 
@@ -30,14 +30,7 @@ def get_args_for_source_freshness(
     sibling directory can pull in that directory's sources too. That widens the
     check rather than narrowing it, so it costs time, never correctness.
     """
-    args: list[str] = ["source", "freshness", "-q"]
-    target = find_target_in_args(list(user_args))
-    if target:
-        args.extend(["--target", target])
-    # Otherwise freshness resolves a different profile than the user's run.
-    for flag in ("--profiles-dir", "--profile", "--vars"):
-        if (value := find_flag_value(list(user_args), flag)) is not None:
-            args.extend([flag, value])
+    args: list[str] = ["source", "freshness", "-q", *profile_args(list(user_args))]
     if scope_to_selection and selectors_to_run:
         args.append("--select")
         args.extend(f"+{selector}" for selector in selectors_to_run)

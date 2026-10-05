@@ -35,3 +35,14 @@ def find_flag_value(args: list[str], flag: str) -> str | None:
         elif arg.startswith(f"{flag}="):
             value = arg.removeprefix(f"{flag}=")
     return value
+
+
+def profile_args(user_args: list[str]) -> list[str]:
+    """The flags a helper dbt invocation needs to resolve the same profile as the run."""
+    args: list[str] = []
+    if target := find_target_in_args(user_args):
+        args.extend(["--target", target])
+    for flag in ("--profiles-dir", "--profile", "--vars"):
+        if (value := find_flag_value(user_args, flag)) is not None:
+            args.extend([flag, value])
+    return args
