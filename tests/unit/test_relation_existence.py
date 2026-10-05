@@ -1,6 +1,9 @@
+import json
 import re
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
+from typing import ClassVar
 from unittest.mock import MagicMock
 
 import pytest
@@ -750,3 +753,75 @@ class TestEndToEndFromStateThroughTheGate:
         assert node.reason == reason_after_gate, (
             "the sweep must not touch a node the gate already marked dirty"
         )
+
+class FakeDbtV2Runner:
+    """Answers the existence run-operation the way dbt 2.x does: via its JSON log."""
+
+    def __init__(self, existing: set[str], failing_schemas: frozenset[str] = frozenset()):
+        self.existing = existing
+        self.failing_schemas = failing_schemas
+        self.calls: list[list[str]] = []
+
+    def invoke(self, args: list[str]) -> SimpleNamespace:
+        self.calls.append(args)
+        sql = args[args.index("--sql") + 1]
+        checks = json.loads(sql[sql.index(" in ") + 4 : sql.index(".items()")])
+        if any(schema in self.failing_schemas for _, schema, _ in checks.values()):
+            return SimpleNamespace(success=False, exception="permission denied")
+        out = {uid: r[2] in self.existing for uid, r in checks.items()}
+        msg = relation_existence._RESULT_MARKER + json.dumps(out)
+        log_dir = Path(args[args.index("--log-path") + 1])
+        (log_dir / "dbt.log").write_text(json.dumps({"data": {"msg": msg}}) + "\n")
+        return SimpleNamespace(success=True, exception=None)
+
+
+class TestFindMissingRelationsV2:
+    _MANIFEST: ClassVar[dict] = {
+        "nodes": {
+            "model.p.a": {"database": "db", "schema": "s1", "alias": "a"},
+            "model.p.b": {"database": "db", "schema": "s1", "alias": "b"},
+            "model.p.c": {"database": "db", "schema": "s2", "alias": "c"},
+        }
+    }
+
+    def _run(self, monkeypatch, runner, user_args=()):
+        monkeypatch.setattr(relation_existence, "load_json", lambda _: self._MANIFEST)
+        monkeypatch.setattr("dbt.cli.main.dbtRunner", lambda: runner)
+        return relation_existence.find_missing_relations_v2(
+            ["model.p.a", "model.p.b", "model.p.c"], list(user_args)
+        )
+
+    def test_one_invocation_reports_missing_with_the_runs_profile(
+        self, monkeypatch
+    ) -> None:
+        runner = FakeDbtV2Runner(existing={"a", "c"})
+
+        missing = self._run(monkeypatch, runner, ["dbt", "build", "--target", "prod"])
+
+        assert missing == {"model.p.b"}
+        assert len(runner.calls) == 1
+        assert runner.calls[0][runner.calls[0].index("--target") + 1] == "prod"
+
+    def test_unreadable_schema_is_isolated_on_retry(self, monkeypatch) -> None:
+        """One bad schema must not switch the check off for every other schema."""
+        runner = FakeDbtV2Runner(existing={"a"}, failing_schemas=frozenset({"s1"}))
+
+        missing = self._run(monkeypatch, runner)
+
+        assert missing == {"model.p.c"}
+        assert len(runner.calls) == 3
+
+    def test_gate_uses_it_when_dbt_adapters_is_absent(self, monkeypatch) -> None:
+        monkeypatch.setattr(relation_existence, "find_spec", lambda _: None)
+        monkeypatch.setattr(
+            relation_existence,
+            "find_missing_relations_v2",
+            MagicMock(return_value={"model.p.a"}),
+        )
+        dag = ParsedDag(nodes={"model.p.a": _node("model.p.a")}, edges=[])
+
+        apply_relation_existence_gate(dag, None, ["dbt", "build"])
+
+        node = dag.nodes["model.p.a"]
+        assert isinstance(node, MaterialisationNode)
+        assert node.freshness == Freshness.DIRTY

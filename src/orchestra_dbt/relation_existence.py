@@ -1,16 +1,24 @@
+import json
+import tempfile
 from collections.abc import Collection
+from importlib.util import find_spec
+from pathlib import Path
 from time import perf_counter
 from typing import Any, cast
 
 from .compatibility import release_connections
 from .logger import log_debug, log_info, log_warn
 from .models import Freshness, MaterialisationNode, NodeType, ParsedDag
+from .target_finder import find_flag_value, find_target_in_args
+from .utils import load_json
 
 # Adapters whose relation listing can't be trusted to gate reuse on. dbt-spark swallows
 # unrecognised errors and returns [], which would read as "the whole schema is gone".
 _UNSUPPORTED_ADAPTERS = frozenset({"spark"})
 
 _CONNECTION_NAME = "orchestra_relation_existence"
+
+_RESULT_MARKER = "ORCHESTRA_RELATIONS_EXIST="
 
 
 def _acquire_adapter() -> tuple[Any, Any]:
@@ -128,6 +136,86 @@ def find_missing_relations(
     return missing
 
 
+def _relations_exist(
+    runner: Any, user_args: list[str], checks: dict[str, list[str]]
+) -> dict[str, bool] | None:
+    """`{unique_id: exists}` via one dbt 2.x `run-operation`; None if it failed."""
+    # adapter.get_relation lists each schema once and matches names as dbt does.
+    sql = (
+        "{% set out = {} %}"
+        f"{{% for unique_id, r in {json.dumps(checks)}.items() %}}"
+        "{% do out.update({unique_id: adapter.get_relation("
+        "database=r[0], schema=r[1], identifier=r[2]) is not none}) %}"
+        "{% endfor %}"
+        f"{{{{ log('{_RESULT_MARKER}' ~ tojson(out), info=True) }}}}"
+    )
+    # Resolve the same profile as the user's run.
+    profile_flags: list[str] = []
+    if target := find_target_in_args(user_args):
+        profile_flags += ["--target", target]
+    for flag in ("--profiles-dir", "--profile", "--vars"):
+        if (value := find_flag_value(user_args, flag)) is not None:
+            profile_flags += [flag, value]
+    with tempfile.TemporaryDirectory() as log_dir:
+        result = runner.invoke(
+            [
+                "run-operation",
+                "--sql",
+                sql,
+                *profile_flags,
+                "--log-format-file",
+                "json",
+                "--log-path",
+                log_dir,
+                "-q",
+            ]
+        )
+        if not result.success:
+            log_debug(f"Relation existence run-operation failed: {result.exception}")
+            return None
+        # run-operation returns nothing to Python; the macro logs its answer instead.
+        with open(Path(log_dir) / "dbt.log") as log_file:
+            line = next(line for line in log_file if _RESULT_MARKER in line)
+    return json.loads(json.loads(line)["data"]["msg"].removeprefix(_RESULT_MARKER))
+
+
+def find_missing_relations_v2(
+    candidates: Collection[str], user_args: list[str]
+) -> set[str]:
+    """dbt 2.x has no `dbt.adapters`; on failure, retry per schema to isolate it."""
+    from dbt.cli.main import dbtRunner
+
+    manifest_nodes = load_json("target/manifest.json")["nodes"]
+    by_schema: dict[tuple[str, str], dict[str, list[str]]] = {}
+    for unique_id in candidates:
+        node = manifest_nodes[unique_id]
+        by_schema.setdefault((node["database"], node["schema"]), {})[unique_id] = [
+            node["database"],
+            node["schema"],
+            node["alias"],
+        ]
+
+    runner = dbtRunner()
+    exists = _relations_exist(
+        runner,
+        user_args,
+        {k: v for checks in by_schema.values() for k, v in checks.items()},
+    )
+    if exists is None:
+        exists = {}
+        for (database, schema), checks in by_schema.items():
+            schema_exists = _relations_exist(runner, user_args, checks)
+            if schema_exists is None:
+                log_warn(
+                    f"Could not list relations in {database}.{schema}. "
+                    f"Leaving reuse decisions for that schema unchanged."
+                )
+                continue
+            exists.update(schema_exists)
+
+    return {unique_id for unique_id, found in exists.items() if not found}
+
+
 def _find_missing_relations_v1(candidates: Collection[str]) -> set[str] | None:
     """The in-process 1.x check; None for an adapter it is not enabled for."""
     adapter, manifest = _acquire_adapter()
@@ -145,7 +233,9 @@ def _find_missing_relations_v1(candidates: Collection[str]) -> set[str] | None:
 
 
 def apply_relation_existence_gate(
-    parsed_dag: ParsedDag, paths_to_run: list[str] | None
+    parsed_dag: ParsedDag,
+    paths_to_run: list[str] | None,
+    user_args: list[str] | None = None,
 ) -> None:
     """Stop reusing nodes whose warehouse relation no longer exists.
 
@@ -161,7 +251,10 @@ def apply_relation_existence_gate(
 
     started_at = perf_counter()
     try:
-        missing = _find_missing_relations_v1(candidates)
+        if find_spec("dbt.adapters") is None:
+            missing = find_missing_relations_v2(candidates, user_args or [])
+        else:
+            missing = _find_missing_relations_v1(candidates)
         if missing is None:
             return
     except Exception as e:
