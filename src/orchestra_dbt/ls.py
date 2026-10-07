@@ -3,7 +3,8 @@ from typing import NamedTuple
 
 from .compatibility import dbt_core_import_error_message
 from .constants import RESOURCE_TYPES_TO_LS
-from .logger import log_debug, log_error, log_info, log_warn
+from .logger import log_error, log_info, log_warn
+from .utils import load_json
 
 # Build/run/test flags dbt ls rejects ("No such option"); checked in test_ls.py.
 DBT_LS_ARGS_NOT_ACCEPTED = {
@@ -62,6 +63,18 @@ def get_args_for_ls(user_args: tuple) -> list[str]:
     return command_args + resource_type_args + list_user_args + output_args
 
 
+def _nodes_from_fqns(fqns: list[str]) -> NodesToRun:
+    """dbt 2.x's `ls` doesn't yet respect the output format args, so it always
+    returns fqns; map them to paths through the manifest."""
+    path_by_fqn = {
+        ".".join(node["fqn"]): node["original_file_path"]
+        for node in load_json("target/manifest.json")["nodes"].values()
+        # A singular test can share a root model's fqn; ls only returned these types.
+        if node["resource_type"] in RESOURCE_TYPES_TO_LS
+    }
+    return NodesToRun(paths=[path_by_fqn[fqn] for fqn in fqns], selectors=fqns)
+
+
 def get_nodes_to_run(args: tuple) -> NodesToRun | None:
     try:
         from dbt.cli.main import (
@@ -82,6 +95,8 @@ def get_nodes_to_run(args: tuple) -> NodesToRun | None:
         if isinstance(res.result, list) and all(
             isinstance(item, str) for item in res.result
         ):
+            if not all(item.startswith("{") for item in res.result):
+                return _nodes_from_fqns(res.result)
             # One JSON object per node, carrying the keys asked for above. A missing
             # key raises, which the handler below turns into "couldn't resolve" --
             # better than silently returning two lists that disagree.
@@ -93,7 +108,5 @@ def get_nodes_to_run(args: tuple) -> NodesToRun | None:
 
         raise ValueError(f"Unexpected result from dbt ls: {res.result}")
     except Exception as e:
-        log_debug(e)
-
-    log_warn("Error getting [dbt ls] of nodes that will be executed.")
-    return None
+        log_warn(f"Error getting [dbt ls] of nodes that will be executed: {e}")
+        return None
