@@ -5,6 +5,23 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0](https://github.com/orchestra-hq/sao-paolo/compare/1.3.1...1.4.0) (2026-10-07)
+
+
+### Added
+
+* retry saving state to Orchestra up to 3 times with jittered backoff on 5xx, 429 and network errors, so a transient failure no longer drops the run's state ([#88](https://github.com/orchestra-hq/sao-paolo/issues/88)) ([fbc40e0](https://github.com/orchestra-hq/sao-paolo/commit/fbc40e027e846299b8fcb0a03371f52020971e7b))
+* send only the nodes a run updated to the Orchestra state API, instead of re-reading and rewriting the account's whole state; concurrent runs no longer overwrite each other or trigger state API 500s, and a run that built nothing no longer saves ([#87](https://github.com/orchestra-hq/sao-paolo/issues/87)) ([12a3eac](https://github.com/orchestra-hq/sao-paolo/commit/12a3eacb7ec58b9ed1045661030690c816189891))
+
+
+### Fixed
+
+* always log the reuse count ([#92](https://github.com/orchestra-hq/sao-paolo/issues/92)) ([63833db](https://github.com/orchestra-hq/sao-paolo/commit/63833dbfedb3fd3f5f0ae90548e1fd7032871652))
+* forward profile flags to the source freshness run ([#90](https://github.com/orchestra-hq/sao-paolo/issues/90)) ([484f72b](https://github.com/orchestra-hq/sao-paolo/commit/484f72b1ce09a7b50e9f2d5002d1f8f09edcb6a0))
+* release duckdb file lock before running dbt; add dbt 2.x CI via duckdb ([#89](https://github.com/orchestra-hq/sao-paolo/issues/89)) ([603cf5b](https://github.com/orchestra-hq/sao-paolo/commit/603cf5bfefb5202f8d14ade9ebedf786e8731827))
+* strip build-only flags before calling dbt ls ([#91](https://github.com/orchestra-hq/sao-paolo/issues/91)) ([e43fab4](https://github.com/orchestra-hq/sao-paolo/commit/e43fab45bd4b1b816d215ac94ba84e4a0536cee4))
+* the supported dbt-core version message quoted &lt;1.12, wrongly warning users on dbt-core 1.12; it now matches the allowed range (&lt;1.13) ([#84](https://github.com/orchestra-hq/sao-paolo/issues/84)) ([abe9fdc](https://github.com/orchestra-hq/sao-paolo/commit/abe9fdcfea7d9047e8af25c0936412817b25665e))
+
 ## [1.3.1] - 2026-09-17
 
 ### Added
