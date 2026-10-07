@@ -31,9 +31,7 @@ def load_state() -> StateApiModel:
     return resolved_state_backend().load()
 
 
-def save_state(
-    state: StateApiModel, updated_asset_external_ids: set[str]
-) -> None:
+def save_state(state: StateApiModel, updated_asset_external_ids: set[str]) -> None:
     """Save only this run's updated nodes, leaving every other stored node as it is.
 
     The HTTP backend upserts each node it is sent, so it is sent only the updates.

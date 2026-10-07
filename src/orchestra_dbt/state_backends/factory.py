@@ -71,8 +71,14 @@ def resolved_state_backend(cwd: Path | None = None) -> StateBackend:
         case StateBackendKind.AZURE:
             from .azure import AzureStateBackend
 
-            if cfg.azure_account is None or cfg.azure_container is None or cfg.azure_key is None:
+            if (
+                cfg.azure_account is None
+                or cfg.azure_container is None
+                or cfg.azure_key is None
+            ):
                 raise RuntimeError(
                     "State backend config is AZURE but azure_account, azure_container, or azure_key is missing"
                 )
-            return AzureStateBackend(cfg.azure_account, cfg.azure_container, cfg.azure_key)
+            return AzureStateBackend(
+                cfg.azure_account, cfg.azure_container, cfg.azure_key
+            )

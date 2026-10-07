@@ -98,7 +98,9 @@ class GCSStateBackend:
         payload = state.model_dump_json(exclude_none=True)
         try:
             blob = client.bucket(bucket).blob(key)
-            blob.upload_from_string(payload, content_type="application/json; charset=utf-8")
+            blob.upload_from_string(
+                payload, content_type="application/json; charset=utf-8"
+            )
         except (Forbidden, Unauthorized) as e:
             raise StateSaveError(
                 f"Permission denied writing gs://{bucket}/{key}. "

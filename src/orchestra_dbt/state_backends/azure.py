@@ -106,9 +106,7 @@ class AzureStateBackend:
         try:
             state = StateApiModel.model_validate(data)
         except (ValidationError, ValueError) as e:
-            raise StateLoadError(
-                f"State blob at {uri} failed validation: {e}"
-            ) from e
+            raise StateLoadError(f"State blob at {uri} failed validation: {e}") from e
 
         apply_integration_account_filter(state)
         log_state_loaded("azure", state)
