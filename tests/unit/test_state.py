@@ -177,14 +177,18 @@ class TestSaveState:
                             last_updated=datetime(2024, 1, 1, 14, 0, 0, tzinfo=UTC),
                             checksum="123",
                             sources={
-                                "source.test": datetime(2024, 1, 1, 11, 0, 0, tzinfo=UTC),
+                                "source.test": datetime(
+                                    2024, 1, 1, 11, 0, 0, tzinfo=UTC
+                                ),
                             },
                         ),
                         "model.new": StateItem(
                             last_updated=datetime(2024, 1, 1, 14, 0, 0, tzinfo=UTC),
                             checksum="456",
                             sources={
-                                "source.test": datetime(2024, 1, 1, 11, 0, 0, tzinfo=UTC),
+                                "source.test": datetime(
+                                    2024, 1, 1, 11, 0, 0, tzinfo=UTC
+                                ),
                             },
                         ),
                         "model.not_run": StateItem(
@@ -232,10 +236,10 @@ class TestSaveState:
             is None
         )
 
-
     def test_save_state_without_updates_makes_no_request(self, httpx_mock: HTTPXMock):
         save_state(state=_ONE_NODE_STATE, updated_asset_external_ids=set())
         assert httpx_mock.get_requests() == []
+
 
 class TestUpdateState:
     @pytest.fixture(autouse=True)
@@ -326,7 +330,9 @@ class TestUpdateState:
         )
         source_freshness = SourceFreshness(
             sources={
-                "source.test_db.test_schema.test_table": datetime(2024, 1, 1, 11, 0, 0, tzinfo=UTC)
+                "source.test_db.test_schema.test_table": datetime(
+                    2024, 1, 1, 11, 0, 0, tzinfo=UTC
+                )
             }
         )
 
@@ -334,7 +340,9 @@ class TestUpdateState:
 
         assert "model.test_project.model_a" in state.state
         assert state.state["model.test_project.model_a"].sources == {
-            "source.test_db.test_schema.test_table": datetime(2024, 1, 1, 11, 0, 0, tzinfo=UTC)
+            "source.test_db.test_schema.test_table": datetime(
+                2024, 1, 1, 11, 0, 0, tzinfo=UTC
+            )
         }
 
     @patch("src.orchestra_dbt.state.load_json")
@@ -536,8 +544,12 @@ class TestUpdateState:
         )
         source_freshness = SourceFreshness(
             sources={
-                "source.test_db.test_schema.table1": datetime(2024, 1, 1, 11, 0, 0, tzinfo=UTC),
-                "source.test_db.test_schema.table2": datetime(2024, 1, 1, 11, 30, 0, tzinfo=UTC),
+                "source.test_db.test_schema.table1": datetime(
+                    2024, 1, 1, 11, 0, 0, tzinfo=UTC
+                ),
+                "source.test_db.test_schema.table2": datetime(
+                    2024, 1, 1, 11, 30, 0, tzinfo=UTC
+                ),
             }
         )
 
@@ -600,7 +612,9 @@ class TestUpdateState:
         # Only table1 is in source_freshness
         source_freshness = SourceFreshness(
             sources={
-                "source.test_db.test_schema.table1": datetime(2024, 1, 1, 11, 0, 0, tzinfo=UTC)
+                "source.test_db.test_schema.table1": datetime(
+                    2024, 1, 1, 11, 0, 0, tzinfo=UTC
+                )
             }
         )
 
@@ -1028,11 +1042,14 @@ class TestLoadStateGCS:
         # the bucket exists so the missing-blob path is exercised.
         from cloud_storage_mocker._core import Client as MockClient
 
-        with gcs_patch(
-            mounts=[
-                Mount("test-bucket", tmp_path / "gcs", readable=True, writable=True)
-            ]
-        ), patch.object(MockClient, "get_bucket", return_value=None, create=True):
+        with (
+            gcs_patch(
+                mounts=[
+                    Mount("test-bucket", tmp_path / "gcs", readable=True, writable=True)
+                ]
+            ),
+            patch.object(MockClient, "get_bucket", return_value=None, create=True),
+        ):
             assert load_state() == StateApiModel(state={})
 
     def test_load_state_gcs_success(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
@@ -1064,10 +1081,13 @@ class TestLoadStateGCS:
 
         from google.auth.exceptions import DefaultCredentialsError
 
-        with patch(
-            "orchestra_dbt.state_backends.gcs.storage.Client",
-            side_effect=DefaultCredentialsError("no credentials"),
-        ), pytest.raises(StateLoadError):
+        with (
+            patch(
+                "orchestra_dbt.state_backends.gcs.storage.Client",
+                side_effect=DefaultCredentialsError("no credentials"),
+            ),
+            pytest.raises(StateLoadError),
+        ):
             load_state()
 
 
@@ -1113,10 +1133,13 @@ class TestSaveStateGCS:
 
         from google.auth.exceptions import DefaultCredentialsError
 
-        with patch(
-            "orchestra_dbt.state_backends.gcs.storage.Client",
-            side_effect=DefaultCredentialsError("no credentials"),
-        ), pytest.raises(StateSaveError):
+        with (
+            patch(
+                "orchestra_dbt.state_backends.gcs.storage.Client",
+                side_effect=DefaultCredentialsError("no credentials"),
+            ),
+            pytest.raises(StateSaveError),
+        ):
             save_state(_ONE_NODE_STATE, updated_asset_external_ids={"model.test"})
 
 
