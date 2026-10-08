@@ -94,8 +94,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # dbt v2 ships as dbt-oss (Apache 2.0, our default) and dbt (the full
-        # distribution, dbt Product Licensing Agreement). Users may install either.
         dbt_package: ["dbt-oss", "dbt"]
     name: tutorial-dbt-v2 (${{ matrix.dbt_package }})
     env:
