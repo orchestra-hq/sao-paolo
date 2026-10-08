@@ -153,6 +153,9 @@ class TestGetArgsForSourceFreshness:
 class TestGetSourceFreshness:
     def _patched_dbt_modules(self, mock_runner_factory):
         return {
+            # Else the real module imports dbt_common.exceptions.events, which the mock
+            # below hides, and these tests silently run the 2.x path.
+            "dbt.adapters.factory": Mock(FACTORY=Mock(adapters={})),
             "dbt.artifacts.resources.v1.components": Mock(FreshnessThreshold=object),
             "dbt.artifacts.schemas.freshness": Mock(
                 SourceDefinition=type("SourceDefinition", (), {"has_freshness": False})
