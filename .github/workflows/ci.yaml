@@ -104,7 +104,7 @@ jobs:
       - name: Install dependencies
         run: |
           uv venv
-          uv pip install . "dbt>=2,<3" pytest
+          uv pip install . "dbt-oss>=2,<3" pytest
           uv run --no-sync dbt --version
       - name: Run tutorial dbt build (cold and warm state)
         continue-on-error: true

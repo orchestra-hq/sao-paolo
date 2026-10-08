@@ -13,7 +13,9 @@ There are a few core reasons to use this project:
 ## Compatibility and prerequisites
 
 - **Python:** 3.11, 3.12, and 3.13 only (see `requires-python` in `pyproject.toml`).
-- **dbt-core:** 1.10.x and 1.11.x when using stateful orchestration.
+- **dbt-core:** 1.10.x to 1.12.x when using stateful orchestration.
+- **dbt v2:** not yet supported for stateful orchestration. CI tests dbt v2
+  using the `dbt-oss` package.
 - **A dbt Core project:** an existing dbt Core project where you already run `dbt build` / `dbt run` / `dbt test`.
 
 ## Installing
