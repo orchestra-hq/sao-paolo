@@ -58,11 +58,34 @@ def _get_source_freshness_v2(
     log_info("Calculating source freshness")
 
     try:
-        result = dbtRunner().invoke(
-            args=get_args_for_source_freshness(
-                user_args, scope_to_selection, selectors_to_run
+        # 2.x's sources.json omits loaded_at_*; the manifest has them.
+        implicit = {
+            unique_id: "source:" + ".".join(source["fqn"])
+            for unique_id, source in load_json("target/manifest.json")[
+                "sources"
+            ].items()
+            if not any(
+                source["config"][key] for key in ("loaded_at_field", "loaded_at_query")
             )
-        )
+        }
+        # --check-all includes sources without a freshness block, as 1.x's patch does.
+        args = [
+            *get_args_for_source_freshness(
+                user_args, scope_to_selection, selectors_to_run
+            ),
+            "--check-all",
+        ]
+        runner = dbtRunner()
+        result = runner.invoke(args)
+        if result.exception and implicit:
+            # Some adapters can't do metadata freshness on 2.x and abort the whole
+            # run (duckdb: "not yet implemented"). 1.x treats such sources as changed.
+            log_warn(
+                f"dbt source freshness failed ({result.exception}). Retrying without the "
+                f"{len(implicit)} source(s) that have no loaded_at_field or loaded_at_query; "
+                "models depending on them will always run."
+            )
+            result = runner.invoke([*args, "--exclude", *implicit.values()])
         results = load_json("target/sources.json")["results"]
         if result.exception:
             log_warn(
@@ -70,15 +93,10 @@ def _get_source_freshness_v2(
             )
         excluded: set[str] = set()
         if require_explicit_source_freshness:
-            # 2.x's sources.json omits loaded_at_*; the manifest has them.
-            manifest_sources = load_json("target/manifest.json")["sources"]
             excluded = {
                 source["unique_id"]
                 for source in results
-                if not any(
-                    manifest_sources[source["unique_id"]]["config"][key]
-                    for key in ("loaded_at_field", "loaded_at_query")
-                )
+                if source["unique_id"] in implicit
             }
             if excluded:
                 log_warn(

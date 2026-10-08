@@ -315,40 +315,15 @@ class TestGetSourceFreshnessOnDbtCoreV2:
     }
 
     def test_falls_back_to_native_freshness_when_v1_internals_are_unavailable(self):
-        mock_runner = Mock()
-        mock_runner.invoke.return_value = Mock(exception=None)
-        mock_runner_factory = Mock(return_value=mock_runner)
-
-        freshness_result = {
-            "results": [
-                {
-                    "unique_id": "source.proj.raw.x",
-                    "max_loaded_at": datetime(2026, 3, 31, tzinfo=UTC),
-                    "criteria": {"loaded_at_field": "updated_at"},
-                },
-            ]
-        }
-
-        modules = {
-            **self._V1_ONLY_MODULES,
-            "dbt.cli.main": Mock(dbtRunner=mock_runner_factory),
-        }
-
-        with (
-            patch.dict("sys.modules", modules),
-            patch(
-                "src.orchestra_dbt.source_freshness.load_json",
-                return_value=freshness_result,
-            ),
-        ):
-            result = get_source_freshness(("--target", "prod"))
-
-        mock_runner.invoke.assert_called_once_with(
-            args=["source", "freshness", "-q", "--target", "prod"]
+        runner, result = self._run(
+            {"results": [_result("source.proj.raw.x")]},
+            user_args=("--target", "prod"),
         )
-        assert result == SourceFreshness(
-            sources={"source.proj.raw.x": datetime(2026, 3, 31, tzinfo=UTC)}
+
+        runner.invoke.assert_called_once_with(
+            ["source", "freshness", "-q", "--target", "prod", "--check-all"]
         )
+        assert result == SourceFreshness(sources={"source.proj.raw.x": _AT})
 
     def test_still_raises_when_dbt_core_is_entirely_missing(self):
         modules = {**self._V1_ONLY_MODULES, "dbt.cli.main": None}
@@ -356,20 +331,30 @@ class TestGetSourceFreshnessOnDbtCoreV2:
         with patch.dict("sys.modules", modules), pytest.raises(ImportError):
             get_source_freshness(())
 
-    def _run(self, freshness_result, manifest=None, exception=None, **kwargs):
-        mock_runner = Mock()
-        mock_runner.invoke.return_value = Mock(exception=exception)
+    def _run(
+        self,
+        freshness_result,
+        manifest=None,
+        exceptions=(None,),
+        user_args=(),
+        **kwargs,
+    ):
+        """`manifest` defaults to every result's source having a loaded_at_field."""
+        if manifest is None:
+            manifest = {
+                r["unique_id"]: "updated_at" for r in freshness_result["results"]
+            }
+        runner = Mock()
+        runner.invoke.side_effect = [Mock(exception=e) for e in exceptions]
         modules = {
             **self._V1_ONLY_MODULES,
-            "dbt.cli.main": Mock(dbtRunner=Mock(return_value=mock_runner)),
+            "dbt.cli.main": Mock(dbtRunner=Mock(return_value=runner)),
         }
 
         def fake_load_json(path):
             if path == "target/sources.json":
                 return freshness_result
-            if manifest is None:
-                raise FileNotFoundError(path)
-            return manifest
+            return {"sources": {uid: _source(uid, f) for uid, f in manifest.items()}}
 
         with (
             patch.dict("sys.modules", modules),
@@ -378,123 +363,83 @@ class TestGetSourceFreshnessOnDbtCoreV2:
                 side_effect=fake_load_json,
             ),
         ):
-            return get_source_freshness((), **kwargs)
+            return runner, get_source_freshness(user_args, **kwargs)
 
     def test_keeps_sources_dbt_resolved_from_metadata(self):
         """dbt 2.x still computes metadata freshness without loaded_at_*; keep those."""
-        result = self._run(
-            {
-                "results": [
-                    {
-                        "unique_id": "source.proj.raw.metadata_only",
-                        "max_loaded_at": datetime(2026, 3, 31, tzinfo=UTC),
-                        "criteria": {"loaded_at_field": None, "loaded_at_query": None},
-                    }
-                ]
-            }
+        _, result = self._run(
+            {"results": [_result("source.proj.raw.metadata_only")]},
+            manifest={"source.proj.raw.metadata_only": None},
         )
 
-        assert result == SourceFreshness(
-            sources={"source.proj.raw.metadata_only": datetime(2026, 3, 31, tzinfo=UTC)}
-        )
-
-    _TWO_SOURCES: ClassVar[dict] = {
-        "results": [
-            # dbt 2.x omits loaded_at_* from criteria, hence the manifest lookup.
-            {
-                "unique_id": "source.proj.raw.metadata_only",
-                "max_loaded_at": datetime(2026, 3, 31, tzinfo=UTC),
-                "criteria": {"error_after": {"count": 24, "period": "hour"}},
-            },
-            {
-                "unique_id": "source.proj.raw.explicit",
-                "max_loaded_at": datetime(2026, 3, 30, tzinfo=UTC),
-                "criteria": {"error_after": {"count": 24, "period": "hour"}},
-            },
-        ]
-    }
+        assert result == SourceFreshness(sources={"source.proj.raw.metadata_only": _AT})
 
     def test_require_explicit_source_freshness_excludes_via_manifest(self):
-        result = self._run(
-            self._TWO_SOURCES,
-            manifest={
-                "sources": {
-                    "source.proj.raw.metadata_only": {
-                        "config": {"loaded_at_field": None, "loaded_at_query": None}
-                    },
-                    "source.proj.raw.explicit": {
-                        "config": {
-                            "loaded_at_field": "updated_at",
-                            "loaded_at_query": None,
-                        }
-                    },
-                }
-            },
-            require_explicit_source_freshness=True,
-        )
-
-        assert result == SourceFreshness(
-            sources={"source.proj.raw.explicit": datetime(2026, 3, 30, tzinfo=UTC)}
-        )
-
-    def test_sources_dbt_never_checked_are_not_treated_as_failures(self):
-        """Sources without a `freshness:` block never reach sources.json."""
-        result = self._run(
+        """dbt 2.x omits loaded_at_* from sources.json's criteria, hence the manifest."""
+        _, result = self._run(
             {
                 "results": [
-                    {
-                        "unique_id": "source.proj.raw.checked",
-                        "max_loaded_at": datetime(2026, 3, 31, tzinfo=UTC),
-                        "criteria": {"error_after": {"count": 24, "period": "hour"}},
-                    }
+                    _result("source.proj.raw.metadata_only"),
+                    _result("source.proj.raw.explicit"),
                 ]
             },
             manifest={
-                "sources": {
-                    "source.proj.raw.checked": {
-                        "config": {
-                            "loaded_at_field": "updated_at",
-                            "loaded_at_query": None,
-                        }
-                    },
-                    "source.proj.raw.never_checked": {
-                        "config": {
-                            "loaded_at_field": "updated_at",
-                            "loaded_at_query": None,
-                        }
-                    },
-                    "source.proj.raw.no_freshness_block": {
-                        "config": {"loaded_at_field": None, "loaded_at_query": None}
-                    },
-                }
+                "source.proj.raw.metadata_only": None,
+                "source.proj.raw.explicit": "updated_at",
             },
             require_explicit_source_freshness=True,
         )
 
-        assert result == SourceFreshness(
-            sources={"source.proj.raw.checked": datetime(2026, 3, 31, tzinfo=UTC)}
+        assert result == SourceFreshness(sources={"source.proj.raw.explicit": _AT})
+
+    def test_retries_without_implicit_sources_when_the_run_fails(self):
+        """duckdb's 2.x engine panics on metadata freshness and aborts every source."""
+        runner, result = self._run(
+            {"results": [_result("source.proj.raw.explicit")]},
+            manifest={
+                "source.proj.raw.explicit": "updated_at",
+                "source.proj.raw.implicit": None,
+            },
+            exceptions=(Exception("not yet implemented"), None),
         )
+
+        assert runner.invoke.call_args_list[1].args[0][-2:] == [
+            "--exclude",
+            "source:proj.raw.implicit",
+        ]
+        assert result == SourceFreshness(sources={"source.proj.raw.explicit": _AT})
+
+    def test_no_retry_without_implicit_sources(self):
+        runner, _ = self._run(
+            {"results": [_result("source.proj.raw.explicit")]},
+            exceptions=(Exception("boom"),),
+        )
+
+        runner.invoke.assert_called_once()
 
     def test_engine_error_warns(self):
         with patch("src.orchestra_dbt.source_freshness.log_warn") as warn:
-            self._run({"results": []}, exception=Exception("boom"))
+            self._run({"results": []}, exceptions=(Exception("boom"),))
         assert any("boom" in c.args[0] for c in warn.call_args_list)
 
     def test_keeps_stale_error_status_sources(self):
         """A stale source's max_loaded_at is still a real reading."""
-        result = self._run(
-            {
-                "results": [
-                    {
-                        "unique_id": "source.proj.raw.stale",
-                        "max_loaded_at": datetime(2026, 5, 26, tzinfo=UTC),
-                        "status": "Error",
-                        "criteria": {"error_after": {"count": 24, "period": "hour"}},
-                    }
-                ]
-            }
+        _, result = self._run(
+            {"results": [{**_result("source.proj.raw.stale"), "status": "Error"}]}
         )
 
-        assert result == SourceFreshness(
-            sources={"source.proj.raw.stale": datetime(2026, 5, 26, tzinfo=UTC)}
-        )
+        assert result == SourceFreshness(sources={"source.proj.raw.stale": _AT})
+
+
+_AT = datetime(2026, 3, 31, tzinfo=UTC)
+
+
+def _result(unique_id: str) -> dict:
+    return {"unique_id": unique_id, "max_loaded_at": _AT}
+
+
+def _source(unique_id: str, loaded_at_field: str | None) -> dict:
+    return {
+        "fqn": unique_id.split(".")[1:],
+        "config": {"loaded_at_field": loaded_at_field, "loaded_at_query": None},
+    }
