@@ -14,11 +14,8 @@ There are a few core reasons to use this project:
 
 - **Python:** 3.11, 3.12, and 3.13 only (see `requires-python` in `pyproject.toml`).
 - **dbt-core:** 1.10.x to 1.12.x when using stateful orchestration.
-- **dbt v2:** not yet supported for stateful orchestration. dbt v2 ships as two
-  PyPI packages: `dbt-oss`, which is Apache 2.0, and `dbt`, the full distribution
-  under the dbt Product Licensing Agreement. CI tests both, and we recommend
-  `dbt-oss`. Install only one of them: both provide the same `dbt`
-  command, and whichever installs last silently replaces the other.
+- **dbt v2:** not yet supported for stateful orchestration. CI tests dbt v2
+  using the `dbt-oss` package.
 - **A dbt Core project:** an existing dbt Core project where you already run `dbt build` / `dbt run` / `dbt test`.
 
 ## Installing
