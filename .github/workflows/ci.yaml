@@ -91,6 +91,13 @@ jobs:
   tutorial-dbt-v2:
     runs-on: ubuntu-latest
     needs: [test]
+    strategy:
+      fail-fast: false
+      matrix:
+        # dbt v2 ships as dbt-oss (Apache 2.0, our default) and dbt (the full
+        # distribution, dbt Product Licensing Agreement). Users may install either.
+        dbt_package: ["dbt-oss", "dbt"]
+    name: tutorial-dbt-v2 (${{ matrix.dbt_package }})
     env:
       DBT_TARGET: duckdb
     steps:
@@ -104,7 +111,7 @@ jobs:
       - name: Install dependencies
         run: |
           uv venv
-          uv pip install . "dbt>=2,<3" pytest
+          uv pip install . "${{ matrix.dbt_package }}>=2,<3" pytest
           uv run --no-sync dbt --version
       - name: Run tutorial dbt build (cold and warm state)
         continue-on-error: true
