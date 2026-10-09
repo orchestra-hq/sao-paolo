@@ -254,6 +254,34 @@ class TestGetSourceFreshness:
             sources={"source.proj.raw.x": datetime(2026, 3, 31, tzinfo=UTC)}
         )
 
+    def test_failed_run_ignores_the_previous_sources_json(self):
+        """dbtRunner reports failure on the result, and a failed run leaves the
+        previous sources.json in place."""
+        mock_runner = Mock()
+        mock_runner.invoke.return_value = Mock(exception=RuntimeError("boom"))
+        stale = {
+            "results": [
+                {
+                    "unique_id": "source.proj.raw.x",
+                    "max_loaded_at": datetime(2020, 1, 1, tzinfo=UTC),
+                }
+            ]
+        }
+
+        with (
+            patch.dict(
+                "sys.modules",
+                self._patched_dbt_modules(Mock(return_value=mock_runner)),
+            ),
+            patch(
+                "src.orchestra_dbt.source_freshness.load_json", return_value=stale
+            ) as load_json,
+        ):
+            result = get_source_freshness(())
+
+        assert result is None
+        load_json.assert_not_called()
+
     def test_scoped_still_runs_databricks_fallback_for_a_used_source(self):
         """Scoping restricts which sources dbt selects (--select +<fqn>), it does
         not change what the runner does for a source dbt does select. A Databricks
@@ -407,10 +435,28 @@ class TestGetSourceFreshnessOnDbtCoreV2:
 
         runner.invoke.assert_called_once()
 
-    def test_engine_error_warns(self):
+    def test_failed_run_ignores_the_previous_sources_json(self):
+        """A failed run writes nothing, so sources.json is the last run's."""
         with patch("src.orchestra_dbt.source_freshness.log_warn") as warn:
-            self._run({"results": []}, exceptions=(Exception("boom"),))
+            _, result = self._run(
+                {"results": [_result("source.proj.raw.x")]},
+                exceptions=(Exception("boom"),),
+            )
+
+        assert result is None
         assert any("boom" in c.args[0] for c in warn.call_args_list)
+
+    def test_failed_retry_ignores_the_previous_sources_json(self):
+        _, result = self._run(
+            {"results": [_result("source.proj.raw.explicit")]},
+            manifest={
+                "source.proj.raw.explicit": "updated_at",
+                "source.proj.raw.implicit": None,
+            },
+            exceptions=(Exception("not yet implemented"), Exception("boom")),
+        )
+
+        assert result is None
 
     def test_keeps_stale_error_status_sources(self):
         """A stale source's max_loaded_at is still a real reading."""

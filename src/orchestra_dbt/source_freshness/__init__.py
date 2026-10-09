@@ -88,11 +88,11 @@ def _get_source_freshness_v2(
                 "models depending on them will always run."
             )
             result = runner.invoke([*args, "--exclude", *implicit.values()])
-        results = load_json("target/sources.json")["results"]
+        # A failed run leaves the old sources.json behind. Not `success`: stale
+        # sources fail that.
         if result.exception:
-            log_warn(
-                f"dbt source freshness errored: {result.exception}. Using whatever results it wrote."
-            )
+            raise RuntimeError(f"dbt v2 source freshness failed: {result.exception}")
+        results = load_json("target/sources.json")["results"]
         excluded: set[str] = set()
         if require_explicit_source_freshness:
             excluded = {
@@ -198,11 +198,13 @@ def get_source_freshness(
     FreshnessTask.get_runner_type = lambda self, _: OrchestraFreshnessRunner
 
     try:
-        dbtRunner().invoke(
+        result = dbtRunner().invoke(
             args=get_args_for_source_freshness(
                 user_args, scope_to_selection, selectors_to_run
             )
         )
+        if result.exception:
+            raise RuntimeError(f"dbt 1.x source freshness failed: {result.exception}")
         if sources_without_explicit_freshness:
             log_warn(
                 f"{len(sources_without_explicit_freshness)} source(s) have no explicit freshness "
