@@ -173,9 +173,16 @@ def _relations_exist(
             log_debug(f"Relation existence run-operation failed: {result.exception}")
             return None
         # run-operation returns nothing to Python; the macro logs its answer instead.
+        # Match the message, not the line: the logged command line holds the SQL too.
         with open(Path(log_dir) / "dbt.log") as log_file:
-            line = next(line for line in log_file if _RESULT_MARKER in line)
-    return json.loads(json.loads(line)["data"]["msg"].removeprefix(_RESULT_MARKER))
+            msg = next(
+                msg
+                for line in log_file
+                if (msg := json.loads(line)["data"].get("msg", "")).startswith(
+                    _RESULT_MARKER
+                )
+            )
+    return json.loads(msg.removeprefix(_RESULT_MARKER))
 
 
 def find_missing_relations_v2(

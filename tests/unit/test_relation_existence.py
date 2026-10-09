@@ -774,7 +774,11 @@ class FakeDbtV2Runner:
         out = {uid: r[2] in self.existing for uid, r in checks.items()}
         msg = relation_existence._RESULT_MARKER + json.dumps(out)
         log_dir = Path(args[args.index("--log-path") + 1])
-        (log_dir / "dbt.log").write_text(json.dumps({"data": {"msg": msg}}) + "\n")
+        # dbt logs its command line first, and that holds the SQL, marker included.
+        command = {"data": {"args": {"invocation_command": " ".join(args)}}}
+        (log_dir / "dbt.log").write_text(
+            json.dumps(command) + "\n" + json.dumps({"data": {"msg": msg}}) + "\n"
+        )
         return SimpleNamespace(success=True, exception=None)
 
 
