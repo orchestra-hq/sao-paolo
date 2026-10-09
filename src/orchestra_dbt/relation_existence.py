@@ -20,6 +20,17 @@ _CONNECTION_NAME = "orchestra_relation_existence"
 _RESULT_MARKER = "ORCHESTRA_RELATIONS_EXIST="
 
 
+class _ExistenceCheckFailed(Exception):
+    pass
+
+
+def _warn_unlistable(database: str | None, schema: str, reason: object) -> None:
+    log_warn(
+        f"Could not list relations in {database}.{schema}: {reason}. "
+        f"Leaving reuse decisions for that schema unchanged."
+    )
+
+
 def _acquire_adapter() -> tuple[Any, Any]:
     """Return the (adapter, manifest) dbt already registered in this process.
 
@@ -74,10 +85,7 @@ def _list_schema(adapter: Any, database: str | None, schema: str) -> set[str] | 
             if relation.identifier
         }
     except Exception as e:
-        log_warn(
-            f"Could not list relations in {database}.{schema}: {e}. "
-            f"Leaving reuse decisions for that schema unchanged."
-        )
+        _warn_unlistable(database, schema, e)
         return None
 
 
@@ -137,8 +145,8 @@ def find_missing_relations(
 
 def _relations_exist(
     runner: Any, user_args: list[str], checks: dict[str, list[str]]
-) -> dict[str, bool] | None:
-    """`{unique_id: exists}` via one dbt 2.x `run-operation`; None if it failed."""
+) -> dict[str, bool]:
+    """`{unique_id: exists}` via one dbt 2.x `run-operation`."""
     # adapter.get_relation lists each schema once and matches names as dbt does.
     sql = (
         "{% set out = {} %}"
@@ -170,18 +178,22 @@ def _relations_exist(
             ]
         )
         if not result.success:
-            log_debug(f"Relation existence run-operation failed: {result.exception}")
-            return None
+            raise _ExistenceCheckFailed(result.exception)
         # run-operation returns nothing to Python; the macro logs its answer instead.
         # Match the message, not the line: the logged command line holds the SQL too.
         with open(Path(log_dir) / "dbt.log") as log_file:
             msg = next(
-                msg
-                for line in log_file
-                if (msg := json.loads(line)["data"].get("msg", "")).startswith(
-                    _RESULT_MARKER
-                )
+                (
+                    msg
+                    for line in log_file
+                    if (msg := json.loads(line)["data"].get("msg", "")).startswith(
+                        _RESULT_MARKER
+                    )
+                ),
+                None,
             )
+    if msg is None:
+        raise _ExistenceCheckFailed("no existence result in dbt's log")
     return json.loads(msg.removeprefix(_RESULT_MARKER))
 
 
@@ -202,22 +214,27 @@ def find_missing_relations_v2(
         ]
 
     runner = dbtRunner()
-    exists = _relations_exist(
-        runner,
-        user_args,
-        {k: v for checks in by_schema.values() for k, v in checks.items()},
-    )
-    if exists is None:
+    try:
+        exists = _relations_exist(
+            runner,
+            user_args,
+            {k: v for checks in by_schema.values() for k, v in checks.items()},
+        )
+    except _ExistenceCheckFailed as e:
+        log_debug(f"Relation existence run-operation failed: {e}")
         exists = {}
+        failures = 0
         for (database, schema), checks in by_schema.items():
-            schema_exists = _relations_exist(runner, user_args, checks)
-            if schema_exists is None:
-                log_warn(
-                    f"Could not list relations in {database}.{schema}. "
-                    f"Leaving reuse decisions for that schema unchanged."
-                )
-                continue
-            exists.update(schema_exists)
+            try:
+                exists.update(_relations_exist(runner, user_args, checks))
+            except _ExistenceCheckFailed as e:
+                _warn_unlistable(database, schema, e)
+                failures += 1
+                # ponytail: the first two retries failing reads as systemic (profile,
+                # auth), not one bad schema; stop rather than retry every schema.
+                if failures == 2 and not exists:
+                    log_warn("Skipping the existence check for the remaining schemas.")
+                    break
 
     return {unique_id for unique_id, found in exists.items() if not found}
 

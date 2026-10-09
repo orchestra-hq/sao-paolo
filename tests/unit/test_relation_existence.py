@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import ClassVar
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -759,10 +759,14 @@ class FakeDbtV2Runner:
     """Answers the existence run-operation the way dbt 2.x does: via its JSON log."""
 
     def __init__(
-        self, existing: set[str], failing_schemas: frozenset[str] = frozenset()
+        self,
+        existing: set[str],
+        failing_schemas: frozenset[str] = frozenset(),
+        answers: bool = True,
     ):
         self.existing = existing
         self.failing_schemas = failing_schemas
+        self.answers = answers
         self.calls: list[list[str]] = []
 
     def invoke(self, args: list[str]) -> SimpleNamespace:
@@ -776,9 +780,8 @@ class FakeDbtV2Runner:
         log_dir = Path(args[args.index("--log-path") + 1])
         # dbt logs its command line first, and that holds the SQL, marker included.
         command = {"data": {"args": {"invocation_command": " ".join(args)}}}
-        (log_dir / "dbt.log").write_text(
-            json.dumps(command) + "\n" + json.dumps({"data": {"msg": msg}}) + "\n"
-        )
+        lines = [command, {"data": {"msg": msg}}] if self.answers else [command]
+        (log_dir / "dbt.log").write_text("".join(json.dumps(x) + "\n" for x in lines))
         return SimpleNamespace(success=True, exception=None)
 
 
@@ -791,11 +794,12 @@ class TestFindMissingRelationsV2:
         }
     }
 
-    def _run(self, monkeypatch, runner, user_args=()):
-        monkeypatch.setattr(relation_existence, "load_json", lambda _: self._MANIFEST)
+    def _run(self, monkeypatch, runner, user_args=(), manifest=None):
+        manifest = manifest or self._MANIFEST
+        monkeypatch.setattr(relation_existence, "load_json", lambda _: manifest)
         monkeypatch.setattr("dbt.cli.main.dbtRunner", lambda: runner)
         return relation_existence.find_missing_relations_v2(
-            ["model.p.a", "model.p.b", "model.p.c"], list(user_args)
+            list(manifest["nodes"]), list(user_args)
         )
 
     def test_one_invocation_reports_missing_with_the_runs_profile(
@@ -816,6 +820,31 @@ class TestFindMissingRelationsV2:
         missing = self._run(monkeypatch, runner)
 
         assert missing == {"model.p.c"}
+        assert len(runner.calls) == 3
+
+    def test_missing_answer_fails_soft_and_says_why(self, monkeypatch) -> None:
+        runner = FakeDbtV2Runner(existing=set(), answers=False)
+
+        with patch.object(relation_existence, "log_warn") as warn:
+            missing = self._run(monkeypatch, runner)
+
+        assert missing == set()
+        assert any("no existence result" in c.args[0] for c in warn.call_args_list)
+
+    def test_systemic_failure_stops_after_two_schemas(self, monkeypatch) -> None:
+        manifest = {
+            "nodes": {
+                f"model.p.{s}": {"database": "db", "schema": s, "alias": s}
+                for s in ("s1", "s2", "s3", "s4")
+            }
+        }
+        runner = FakeDbtV2Runner(
+            existing=set(), failing_schemas=frozenset({"s1", "s2", "s3", "s4"})
+        )
+
+        missing = self._run(monkeypatch, runner, manifest=manifest)
+
+        assert missing == set()
         assert len(runner.calls) == 3
 
     def test_gate_uses_it_on_dbt_v2(self, monkeypatch) -> None:
