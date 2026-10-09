@@ -197,11 +197,11 @@ def _relations_exist(
     return json.loads(msg.removeprefix(_RESULT_MARKER))
 
 
-def find_missing_relations_v2(
+def _find_missing_relations_v2(
     candidates: Collection[str], user_args: list[str]
 ) -> set[str] | None:
     """dbt 2.x has no `dbt.adapters`; on failure, retry per schema to isolate it.
-    None for an adapter it is not enabled for."""
+    None for an adapter it is not enabled for, or when no schema could be read."""
     from dbt.cli.main import dbtRunner
 
     manifest = load_json("target/manifest.json")
@@ -227,10 +227,15 @@ def find_missing_relations_v2(
             {k: v for checks in by_schema.values() for k, v in checks.items()},
         )
     except _ExistenceCheckFailed as e:
+        if len(by_schema) == 1:
+            # A retry per schema would repeat the invocation that just failed.
+            ((database, schema),) = by_schema
+            _warn_unlistable(database, schema, e)
+            return None
         log_debug(f"Relation existence run-operation failed: {e}")
         exists = {}
         failures = 0
-        for (database, schema), checks in by_schema.items():
+        for attempted, ((database, schema), checks) in enumerate(by_schema.items(), 1):
             try:
                 exists.update(_relations_exist(runner, user_args, checks))
             except _ExistenceCheckFailed as e:
@@ -239,8 +244,13 @@ def find_missing_relations_v2(
                 # ponytail: the first two retries failing reads as systemic (profile,
                 # auth), not one bad schema; stop rather than retry every schema.
                 if failures == 2 and not exists:
-                    log_warn("Skipping the existence check for the remaining schemas.")
+                    if attempted < len(by_schema):
+                        log_warn(
+                            "Skipping the existence check for the remaining schemas."
+                        )
                     break
+        if not exists:
+            return None
 
     return {unique_id for unique_id, found in exists.items() if not found}
 
@@ -264,7 +274,7 @@ def _find_missing_relations_v1(candidates: Collection[str]) -> set[str] | None:
 def apply_relation_existence_gate(
     parsed_dag: ParsedDag,
     paths_to_run: list[str] | None,
-    user_args: list[str] | None = None,
+    user_args: list[str],
 ) -> None:
     """Stop reusing nodes whose warehouse relation no longer exists.
 
@@ -281,7 +291,7 @@ def apply_relation_existence_gate(
     started_at = perf_counter()
     try:
         if is_dbt_v2():
-            missing = find_missing_relations_v2(candidates, user_args or [])
+            missing = _find_missing_relations_v2(candidates, user_args)
         else:
             missing = _find_missing_relations_v1(candidates)
         if missing is None:

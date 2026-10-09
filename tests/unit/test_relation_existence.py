@@ -415,7 +415,7 @@ class TestApplyRelationExistenceGate:
             nodes={"model.p.d": _node("model.p.d", freshness=Freshness.DIRTY)}, edges=[]
         )
 
-        apply_relation_existence_gate(dag, None)
+        apply_relation_existence_gate(dag, None, ["dbt", "build"])
 
         acquire.assert_not_called()
 
@@ -432,7 +432,7 @@ class TestApplyRelationExistenceGate:
         self._stub_adapter(monkeypatch, **kwargs)
         dag = ParsedDag(nodes={"model.p.a": _node("model.p.a")}, edges=[])
 
-        apply_relation_existence_gate(dag, None)
+        apply_relation_existence_gate(dag, None, ["dbt", "build"])
 
         node = dag.nodes["model.p.a"]
         assert isinstance(node, MaterialisationNode)
@@ -447,7 +447,7 @@ class TestApplyRelationExistenceGate:
         )
         dag = ParsedDag(nodes={"model.p.a": _node("model.p.a")}, edges=[])
 
-        apply_relation_existence_gate(dag, None)
+        apply_relation_existence_gate(dag, None, ["dbt", "build"])
 
         node = dag.nodes["model.p.a"]
         assert isinstance(node, MaterialisationNode)
@@ -457,7 +457,7 @@ class TestApplyRelationExistenceGate:
         self._stub_adapter(monkeypatch, missing={"model.p.a"})
         dag = ParsedDag(nodes={"model.p.a": _node("model.p.a")}, edges=[])
 
-        apply_relation_existence_gate(dag, None)
+        apply_relation_existence_gate(dag, None, ["dbt", "build"])
 
         node = dag.nodes["model.p.a"]
         assert isinstance(node, MaterialisationNode)
@@ -469,7 +469,9 @@ class TestApplyRelationExistenceGate:
         adapter = self._stub_adapter(monkeypatch)
 
         apply_relation_existence_gate(
-            ParsedDag(nodes={"model.p.a": _node("model.p.a")}, edges=[]), None
+            ParsedDag(nodes={"model.p.a": _node("model.p.a")}, edges=[]),
+            None,
+            ["dbt", "build"],
         )
 
         adapter.cleanup_connections.assert_called_once()
@@ -504,7 +506,7 @@ class TestApplyRelationExistenceGate:
             edges=[],
         )
 
-        apply_relation_existence_gate(dag, None)
+        apply_relation_existence_gate(dag, None, ["dbt", "build"])
 
         node = dag.nodes["model.p.readable_name"]
         assert isinstance(node, MaterialisationNode)
@@ -516,7 +518,7 @@ class TestApplyRelationExistenceGate:
         self._stub_adapter(monkeypatch, missing={"model.p.a"})
         dag = ParsedDag(nodes={"model.p.a": _node("model.p.a")}, edges=[])
 
-        apply_relation_existence_gate(dag, None)
+        apply_relation_existence_gate(dag, None, ["dbt", "build"])
 
         out = capsys.readouterr().out
         assert re.search(
@@ -537,7 +539,7 @@ class TestApplyRelationExistenceGate:
         self._stub_adapter(monkeypatch, **kwargs)
         dag = ParsedDag(nodes={"model.p.a": _node("model.p.a")}, edges=[])
 
-        apply_relation_existence_gate(dag, None)
+        apply_relation_existence_gate(dag, None, ["dbt", "build"])
 
         out = capsys.readouterr().out
         assert "took" not in out, label
@@ -658,7 +660,7 @@ class TestEndToEndFromStateThroughTheGate:
             MagicMock(return_value=(adapter, manifest_for_check)),
         )
 
-        apply_relation_existence_gate(dag, None)
+        apply_relation_existence_gate(dag, None, ["dbt", "build"])
 
         assert node.freshness == Freshness.DIRTY
         assert "db.analytics.legacy_alias" in node.reason
@@ -742,7 +744,7 @@ class TestEndToEndFromStateThroughTheGate:
             MagicMock(return_value=(adapter, manifest_for_check)),
         )
 
-        apply_relation_existence_gate(dag, None)
+        apply_relation_existence_gate(dag, None, ["dbt", "build"])
         assert node.freshness == Freshness.DIRTY
         reason_after_gate = node.reason
         assert "deleted hence rerun" in reason_after_gate
@@ -799,7 +801,7 @@ class TestFindMissingRelationsV2:
         manifest = manifest or self._MANIFEST
         monkeypatch.setattr(relation_existence, "load_json", lambda _: manifest)
         monkeypatch.setattr("dbt.cli.main.dbtRunner", lambda: runner)
-        return relation_existence.find_missing_relations_v2(
+        return relation_existence._find_missing_relations_v2(
             list(manifest["nodes"]), list(user_args)
         )
 
@@ -829,8 +831,10 @@ class TestFindMissingRelationsV2:
         with patch.object(relation_existence, "log_warn") as warn:
             missing = self._run(monkeypatch, runner)
 
-        assert missing == set()
+        assert missing is None
         assert any("no existence result" in c.args[0] for c in warn.call_args_list)
+        # Both schemas were tried, so none remain to skip.
+        assert not any("remaining" in c.args[0] for c in warn.call_args_list)
 
     def test_systemic_failure_stops_after_two_schemas(self, monkeypatch) -> None:
         manifest = {
@@ -844,10 +848,42 @@ class TestFindMissingRelationsV2:
             existing=set(), failing_schemas=frozenset({"s1", "s2", "s3", "s4"})
         )
 
-        missing = self._run(monkeypatch, runner, manifest=manifest)
+        with patch.object(relation_existence, "log_warn") as warn:
+            missing = self._run(monkeypatch, runner, manifest=manifest)
 
-        assert missing == set()
+        assert missing is None
         assert len(runner.calls) == 3
+        assert any("remaining" in c.args[0] for c in warn.call_args_list)
+
+    def test_one_schema_is_not_retried(self, monkeypatch) -> None:
+        manifest = {
+            "metadata": {"adapter_type": "duckdb"},
+            "nodes": {"model.p.a": {"database": "db", "schema": "s1", "alias": "a"}},
+        }
+        runner = FakeDbtV2Runner(existing=set(), failing_schemas=frozenset({"s1"}))
+
+        assert self._run(monkeypatch, runner, manifest=manifest) is None
+        assert len(runner.calls) == 1
+
+    @pytest.mark.parametrize(
+        ("user_args", "forwarded"),
+        [
+            (["--target", "prod"], ["--target", "prod"]),
+            (["--profiles-dir=/p"], ["--profiles-dir", "/p"]),
+            (["--profile", "other"], ["--profile", "other"]),
+            (["--vars", "{x: 1}"], ["--vars", "{x: 1}"]),
+        ],
+    )
+    def test_forwards_the_runs_profile_flags(
+        self, monkeypatch, user_args, forwarded
+    ) -> None:
+        runner = FakeDbtV2Runner(existing={"a", "b", "c"})
+
+        self._run(monkeypatch, runner, ["dbt", "build", *user_args])
+
+        call = runner.calls[0]
+        start = call.index(forwarded[0])
+        assert call[start : start + 2] == forwarded
 
     def test_skips_adapters_it_is_not_enabled_for(self, monkeypatch) -> None:
         """Experimental spark on v2, same exclusion as 1.x."""
@@ -866,7 +902,7 @@ class TestFindMissingRelationsV2:
         monkeypatch.setattr(relation_existence, "is_dbt_v2", lambda: True)
         monkeypatch.setattr(
             relation_existence,
-            "find_missing_relations_v2",
+            "_find_missing_relations_v2",
             MagicMock(return_value={"model.p.a"}),
         )
         dag = ParsedDag(nodes={"model.p.a": _node("model.p.a")}, edges=[])
