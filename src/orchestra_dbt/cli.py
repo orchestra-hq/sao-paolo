@@ -221,7 +221,7 @@ def main(args: tuple[str, ...]) -> None:
 
     # A node can be clean on paper but missing from the warehouse; force it back into the run.
     if settings.verify_relations_exist:
-        apply_relation_existence_gate(parsed_dag, paths_to_run)
+        apply_relation_existence_gate(parsed_dag, paths_to_run, list(dbt_args))
 
     # Edit the DAG inline.
     calculate_nodes_to_run(parsed_dag)
