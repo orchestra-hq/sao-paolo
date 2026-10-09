@@ -388,8 +388,10 @@ class TestConstructDag:
     ) -> None:
         """`orc dbt build --project-dir proj` from the parent: the manifest's
         `original_file_path` is project-relative, so the seed is read under `proj`."""
+        seed_content = b"id\n1\n"
+        seed_digest = sha256(seed_content).hexdigest()
         (tmp_path / "proj" / "seeds").mkdir(parents=True)
-        (tmp_path / "proj" / "seeds" / "my_seed.csv").write_bytes(b"id\n1\n")
+        (tmp_path / "proj" / "seeds" / "my_seed.csv").write_bytes(seed_content)
         monkeypatch.chdir(tmp_path)
 
         manifest = {
@@ -421,7 +423,7 @@ class TestConstructDag:
             state={
                 "acct.my_seed": StateItem(
                     last_updated=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
-                    checksum=sha256(b"id\n1\n").hexdigest(),
+                    checksum=seed_digest,
                     sources={},
                 ),
             }
@@ -432,6 +434,7 @@ class TestConstructDag:
             SourceFreshness(sources={}), state, project_dir=project_dir
         ).nodes["seed.test_project.my_seed"]
         assert isinstance(node, MaterialisationNode)
+        assert node.checksum == seed_digest
         assert node.freshness == Freshness.CLEAN
 
     def test_construct_dag_skips_function_dependency(
