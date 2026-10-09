@@ -1,10 +1,7 @@
-import json
 import re
 from datetime import UTC, datetime
-from pathlib import Path
 from types import SimpleNamespace
-from typing import ClassVar
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -522,7 +519,9 @@ class TestApplyRelationExistenceGate:
 
         out = capsys.readouterr().out
         assert re.search(
-            r"Warehouse existence check for 1 node\(s\) took \d+\.\d\ds\.", out
+            r"Warehouse existence check \(dbt 1\.x adapter\) for 1 node\(s\) "
+            r"took \d+\.\d\ds\.",
+            out,
         )
 
     @pytest.mark.parametrize(
@@ -758,112 +757,56 @@ class TestEndToEndFromStateThroughTheGate:
 
 
 class FakeDbtV2Runner:
-    """Answers the existence run-operation the way dbt 2.x does: via its JSON log."""
+    """Answers `parse --write-catalog` the way dbt 2.x does: the catalog lists what the
+    warehouse holds, keyed by unique_id."""
 
     def __init__(
-        self,
-        existing: set[str],
-        failing_schemas: frozenset[str] = frozenset(),
-        answers: bool = True,
+        self, existing: set[str], adapter_type: str = "duckdb", exception=None
     ):
         self.existing = existing
-        self.failing_schemas = failing_schemas
-        self.answers = answers
+        self.adapter_type = adapter_type
+        self.exception = exception
         self.calls: list[list[str]] = []
 
     def invoke(self, args: list[str]) -> SimpleNamespace:
         self.calls.append(args)
-        sql = args[args.index("--sql") + 1]
-        checks = json.loads(sql[sql.index(" in ") + 4 : sql.index(".items()")])
-        if any(schema in self.failing_schemas for _, schema, _ in checks.values()):
-            return SimpleNamespace(success=False, exception="permission denied")
-        out = {uid: r[2] in self.existing for uid, r in checks.items()}
-        msg = relation_existence._RESULT_MARKER + json.dumps(out)
-        log_dir = Path(args[args.index("--log-path") + 1])
-        # dbt logs its command line first, and that holds the SQL, marker included.
-        command = {"data": {"args": {"invocation_command": " ".join(args)}}}
-        lines = [command, {"data": {"msg": msg}}] if self.answers else [command]
-        (log_dir / "dbt.log").write_text("".join(json.dumps(x) + "\n" for x in lines))
-        return SimpleNamespace(success=True, exception=None)
+        if self.exception:
+            return SimpleNamespace(exception=self.exception, result=None, catalog=None)
+        return SimpleNamespace(
+            exception=None,
+            result=SimpleNamespace(
+                metadata=SimpleNamespace(adapter_type=self.adapter_type)
+            ),
+            catalog=SimpleNamespace(nodes={uid: object() for uid in self.existing}),
+        )
 
 
 class TestFindMissingRelationsV2:
-    _MANIFEST: ClassVar[dict] = {
-        "metadata": {"adapter_type": "duckdb"},
-        "nodes": {
-            "model.p.a": {"database": "db", "schema": "s1", "alias": "a"},
-            "model.p.b": {"database": "db", "schema": "s1", "alias": "b"},
-            "model.p.c": {"database": "db", "schema": "s2", "alias": "c"},
-        },
-    }
+    _CANDIDATES = ("model.p.a", "model.p.b", "model.p.c")
 
-    def _run(self, monkeypatch, runner, user_args=(), manifest=None):
-        manifest = manifest or self._MANIFEST
-        monkeypatch.setattr(relation_existence, "load_json", lambda _: manifest)
+    def _run(self, monkeypatch, runner, user_args=()):
         monkeypatch.setattr("dbt.cli.main.dbtRunner", lambda: runner)
         return relation_existence._find_missing_relations_v2(
-            list(manifest["nodes"]), list(user_args)
+            self._CANDIDATES, list(user_args)
         )
 
-    def test_one_invocation_reports_missing_with_the_runs_profile(
-        self, monkeypatch
-    ) -> None:
-        runner = FakeDbtV2Runner(existing={"a", "c"})
+    def test_reports_candidates_missing_from_the_catalog(self, monkeypatch) -> None:
+        runner = FakeDbtV2Runner(existing={"model.p.a", "model.p.c", "model.p.other"})
 
-        missing = self._run(monkeypatch, runner, ["dbt", "build", "--target", "prod"])
+        assert self._run(monkeypatch, runner) == {"model.p.b"}
+        assert runner.calls[0][:2] == ["parse", "--write-catalog"]
 
-        assert missing == {"model.p.b"}
-        assert len(runner.calls) == 1
-        assert runner.calls[0][runner.calls[0].index("--target") + 1] == "prod"
+    def test_failed_parse_raises_so_the_gate_fails_soft(self, monkeypatch) -> None:
+        runner = FakeDbtV2Runner(existing=set(), exception="target 'nope' not found")
 
-    def test_unreadable_schema_is_isolated_on_retry(self, monkeypatch) -> None:
-        """One bad schema must not switch the check off for every other schema."""
-        runner = FakeDbtV2Runner(existing={"a"}, failing_schemas=frozenset({"s1"}))
+        with pytest.raises(RuntimeError, match="target 'nope' not found"):
+            self._run(monkeypatch, runner)
 
-        missing = self._run(monkeypatch, runner)
+    def test_skips_adapters_it_is_not_enabled_for(self, monkeypatch) -> None:
+        """Experimental spark on v2, same exclusion as 1.x."""
+        runner = FakeDbtV2Runner(existing=set(), adapter_type="spark")
 
-        assert missing == {"model.p.c"}
-        assert len(runner.calls) == 3
-
-    def test_missing_answer_fails_soft_and_says_why(self, monkeypatch) -> None:
-        runner = FakeDbtV2Runner(existing=set(), answers=False)
-
-        with patch.object(relation_existence, "log_warn") as warn:
-            missing = self._run(monkeypatch, runner)
-
-        assert missing is None
-        assert any("no existence result" in c.args[0] for c in warn.call_args_list)
-        # Both schemas were tried, so none remain to skip.
-        assert not any("remaining" in c.args[0] for c in warn.call_args_list)
-
-    def test_systemic_failure_stops_after_two_schemas(self, monkeypatch) -> None:
-        manifest = {
-            "metadata": {"adapter_type": "duckdb"},
-            "nodes": {
-                f"model.p.{s}": {"database": "db", "schema": s, "alias": s}
-                for s in ("s1", "s2", "s3", "s4")
-            },
-        }
-        runner = FakeDbtV2Runner(
-            existing=set(), failing_schemas=frozenset({"s1", "s2", "s3", "s4"})
-        )
-
-        with patch.object(relation_existence, "log_warn") as warn:
-            missing = self._run(monkeypatch, runner, manifest=manifest)
-
-        assert missing is None
-        assert len(runner.calls) == 3
-        assert any("remaining" in c.args[0] for c in warn.call_args_list)
-
-    def test_one_schema_is_not_retried(self, monkeypatch) -> None:
-        manifest = {
-            "metadata": {"adapter_type": "duckdb"},
-            "nodes": {"model.p.a": {"database": "db", "schema": "s1", "alias": "a"}},
-        }
-        runner = FakeDbtV2Runner(existing=set(), failing_schemas=frozenset({"s1"}))
-
-        assert self._run(monkeypatch, runner, manifest=manifest) is None
-        assert len(runner.calls) == 1
+        assert self._run(monkeypatch, runner) is None
 
     @pytest.mark.parametrize(
         ("user_args", "forwarded"),
@@ -877,7 +820,7 @@ class TestFindMissingRelationsV2:
     def test_forwards_the_runs_profile_flags(
         self, monkeypatch, user_args, forwarded
     ) -> None:
-        runner = FakeDbtV2Runner(existing={"a", "b", "c"})
+        runner = FakeDbtV2Runner(existing=set(self._CANDIDATES))
 
         self._run(monkeypatch, runner, ["dbt", "build", *user_args])
 
@@ -885,18 +828,19 @@ class TestFindMissingRelationsV2:
         start = call.index(forwarded[0])
         assert call[start : start + 2] == forwarded
 
-    def test_skips_adapters_it_is_not_enabled_for(self, monkeypatch) -> None:
-        """Experimental spark on v2, same exclusion as 1.x."""
-        runner = FakeDbtV2Runner(existing=set())
-
-        missing = self._run(
-            monkeypatch,
-            runner,
-            manifest={**self._MANIFEST, "metadata": {"adapter_type": "spark"}},
+    def test_timing_names_the_v2_method(self, monkeypatch, capsys) -> None:
+        monkeypatch.setattr(relation_existence, "is_dbt_v2", lambda: True)
+        monkeypatch.setattr(
+            relation_existence, "_find_missing_relations_v2", lambda *_: set()
         )
+        dag = ParsedDag(nodes={"model.p.a": _node("model.p.a")}, edges=[])
 
-        assert missing is None
-        assert runner.calls == []
+        apply_relation_existence_gate(dag, None, ["dbt", "build"])
+
+        assert re.search(
+            r"Warehouse existence check \(dbt v2 catalog\) for 1 node\(s\) took",
+            capsys.readouterr().out,
+        )
 
     def test_gate_uses_it_on_dbt_v2(self, monkeypatch) -> None:
         monkeypatch.setattr(relation_existence, "is_dbt_v2", lambda: True)
