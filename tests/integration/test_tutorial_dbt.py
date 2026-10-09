@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -51,10 +52,15 @@ def _tutorial_env(state_file: Path | None = None) -> dict[str, str]:
     return env
 
 
-def _run_build(env: dict[str, str], label: str) -> subprocess.CompletedProcess[str]:
+def _run_build(
+    env: dict[str, str],
+    label: str,
+    cwd: Path = _TUTORIAL_DBT,
+    extra_args: tuple[str, ...] = (),
+) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(
-        ["orc", "dbt", "build"],
-        cwd=_TUTORIAL_DBT,
+        ["orc", "dbt", "build", *extra_args],
+        cwd=cwd,
         env=env,
         check=False,
         capture_output=True,
@@ -129,6 +135,36 @@ def test_warm_state_reuses_nodes(tmp_path: Path) -> None:
     assert warm.returncode == 0
     _assert_state_loaded(warm)
     assert "REUSED model.sao_tutorial.stg_events" in warm.stdout
+
+
+@requires_warehouse
+def test_warm_state_reuses_nodes_with_project_dir(tmp_path: Path) -> None:
+    """Run from outside the project: reused nodes must really be left out of dbt's run."""
+    project_dir = tmp_path / "proj"
+    shutil.copytree(
+        _TUTORIAL_DBT,
+        project_dir,
+        ignore=shutil.ignore_patterns("target", "logs", "*.duckdb"),
+    )
+    state_file = tmp_path / "dbt_state.json"
+    state_file.write_text(json.dumps({"state": {}}), encoding="utf-8")
+    env = _tutorial_env(state_file)
+    # The tutorial enables this in its own pyproject.toml, which is only found from the cwd.
+    env["ORCHESTRA_USE_STATEFUL"] = "true"
+    args = ("--project-dir", "proj")
+
+    assert _run_build(env, "cold run", cwd=tmp_path, extra_args=args).returncode == 0
+    warm = _run_build(env, "warm run", cwd=tmp_path, extra_args=args)
+    assert warm.returncode == 0
+    _assert_state_loaded(warm)
+    assert "REUSED seed.sao_tutorial.raw_events" in warm.stdout
+    assert "REUSED model.sao_tutorial.stg_events" in warm.stdout
+
+    run_results = json.loads((project_dir / "target" / "run_results.json").read_text())
+    ran = {result["unique_id"] for result in run_results["results"]}
+    assert "model.sao_tutorial.stg_events" not in ran
+    assert not (tmp_path / "target").exists()
+    assert not (tmp_path / "selectors.yml").exists()
 
 
 @requires_postgres
