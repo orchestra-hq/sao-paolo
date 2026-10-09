@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -361,7 +362,7 @@ class TestModifyDbtCommand:
         ) as mock_update:
             result = modify_dbt_command(cmd)
             assert result == cmd
-        mock_update.assert_called_once_with("test_selector")
+        mock_update.assert_called_once_with("test_selector", Path("selectors.yml"))
 
     @pytest.mark.parametrize("subcommand", ["build", "test"])
     def test_modify_dbt_command_with_selector_does_not_generate_selector(
@@ -379,7 +380,7 @@ class TestModifyDbtCommand:
         assert result == cmd
         assert "--exclude" not in result
         assert "--selector" in result
-        mock_update.assert_called_once_with("test_selector")
+        mock_update.assert_called_once_with("test_selector", Path("selectors.yml"))
         mock_save_yaml.assert_not_called()
 
     def test_modify_dbt_command_with_selector_no_tag(self):
@@ -432,6 +433,15 @@ class TestSplitSelectionArgs:
 
 
 class TestSelectorsFileSnapshot:
+    def test_generated_selector_written_to_given_file(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        selectors_file = tmp_path / "proj" / "selectors.yml"
+        selectors_file.parent.mkdir()
+
+        cmd = modify_dbt_command(["dbt", "build", "--select", "a"], selectors_file)
+        assert not (tmp_path / "selectors.yml").exists()
+        assert cmd[-1] in selectors_file.read_text()
+
     def test_snapshot_returns_none_when_missing(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         assert snapshot_selectors_file() is None

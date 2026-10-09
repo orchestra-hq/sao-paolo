@@ -43,6 +43,7 @@ from .state import (
     update_state,
 )
 from .state_types import StateBackendKind
+from .target_finder import find_project_dir, find_target_dir
 
 
 def _usage_program() -> str:
@@ -93,9 +94,13 @@ def _complete_run(
     source_freshness: SourceFreshness,
     dbt_exit_code: int,
     state_load_ok: bool,
+    target_dir: Path,
 ) -> None:
     updated_asset_external_ids = update_state(
-        state=state, parsed_dag=parsed_dag, source_freshness=source_freshness
+        state=state,
+        parsed_dag=parsed_dag,
+        source_freshness=source_freshness,
+        target_dir=target_dir,
     )
     try:
         save_state(state=state, updated_asset_external_ids=updated_asset_external_ids)
@@ -127,6 +132,8 @@ def main(args: tuple[str, ...]) -> None:
         sys.exit(1)
 
     dbt_args: tuple[str, ...] = tuple(args)
+    project_dir = find_project_dir(list(dbt_args))
+    target_dir = find_target_dir(list(dbt_args), project_dir)
 
     if len(dbt_args) < 2:
         log_error("dbt requires a subcommand (e.g. run, build, test).")
@@ -138,7 +145,7 @@ def main(args: tuple[str, ...]) -> None:
             sys.exit(1)
         match dbt_args[2]:
             case "is_warn":
-                is_warn()
+                is_warn(target_dir)
             case _:
                 log_error(f"dbt orchestra command '{dbt_args[2]}' not known.")
                 sys.exit(1)
@@ -164,7 +171,7 @@ def main(args: tuple[str, ...]) -> None:
     _validate_environment()
 
     try:
-        nodes_to_run = get_nodes_to_run(dbt_args[2:])
+        nodes_to_run = get_nodes_to_run(dbt_args[2:], target_dir)
     except ImportError as import_error:
         log_error(dbt_core_import_error_message(import_error))
         sys.exit(1)
@@ -185,6 +192,7 @@ def main(args: tuple[str, ...]) -> None:
             require_explicit_source_freshness=settings.require_explicit_source_freshness,
             scope_to_selection=settings.scope_source_freshness_to_selection,
             selectors_to_run=nodes_to_run.selectors if nodes_to_run else None,
+            target_dir=target_dir,
         )
     except ImportError as import_error:
         log_error(dbt_core_import_error_message(import_error))
@@ -204,7 +212,9 @@ def main(args: tuple[str, ...]) -> None:
         state = StateApiModel(state={})
         state_load_ok = False
 
-    parsed_dag = construct_dag(source_freshness, state)
+    parsed_dag = construct_dag(
+        source_freshness, state, project_dir=project_dir, target_dir=target_dir
+    )
 
     # Propagate freshness config to upstream nodes
     propagate_freshness_config(parsed_dag)
@@ -217,6 +227,7 @@ def main(args: tuple[str, ...]) -> None:
             source_freshness,
             dbt_exit_code=subprocess.run(dbt_args, check=False).returncode,
             state_load_ok=state_load_ok,
+            target_dir=target_dir,
         )
 
     # A node can be clean on paper but missing from the warehouse; force it back into the run.
@@ -242,19 +253,24 @@ def main(args: tuple[str, ...]) -> None:
     log_info(f"{len(nodes_to_reuse)}/{node_count} nodes reused.")
 
     if len(nodes_to_reuse) != 0:
-        patch_sql_files(nodes_to_reuse)
-        patch_seed_properties(nodes_to_reuse)
+        patch_sql_files(nodes_to_reuse, project_dir=project_dir)
+        patch_seed_properties(nodes_to_reuse, project_dir / "seeds" / "properties.yml")
 
-        selectors_snapshot = snapshot_selectors_file()
-        result = subprocess.run(modify_dbt_command(cmd=list(dbt_args)), check=False)
+        selectors_file = project_dir / "selectors.yml"
+        selectors_snapshot = snapshot_selectors_file(selectors_file)
+        result = subprocess.run(
+            modify_dbt_command(cmd=list(dbt_args), selectors_file=selectors_file),
+            check=False,
+        )
 
         if settings.local_run:
             revert_patching(
                 file_paths_to_revert=[
                     node.file_path for node in nodes_to_reuse.values()
-                ]
+                ],
+                project_dir=project_dir,
             )
-            restore_selectors_file(selectors_snapshot)
+            restore_selectors_file(selectors_snapshot, selectors_file)
     else:
         result = subprocess.run(list(dbt_args), check=False)
 
@@ -264,4 +280,5 @@ def main(args: tuple[str, ...]) -> None:
         source_freshness,
         dbt_exit_code=result.returncode,
         state_load_ok=state_load_ok,
+        target_dir=target_dir,
     )
