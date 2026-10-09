@@ -1,6 +1,5 @@
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from typing import ClassVar
 from unittest.mock import Mock, patch
 
 import pytest
@@ -303,18 +302,9 @@ class TestGetSourceFreshness:
 
 
 class TestGetSourceFreshnessOnDbtCoreV2:
-    """dbt 2.x has no dbt.task.freshness; fall back to `dbt source freshness`."""
+    """dbt 2.x has no dbt.task.freshness; run dbt's own `dbt source freshness`."""
 
-    _V1_ONLY_MODULES: ClassVar[dict[str, None]] = {
-        "dbt.artifacts.resources.v1.components": None,
-        "dbt.artifacts.schemas.freshness": None,
-        "dbt.artifacts.schemas.freshness.v3.freshness": None,
-        "dbt.artifacts.schemas.results": None,
-        "dbt.task.freshness": None,
-        "dbt_common.exceptions": None,
-    }
-
-    def test_falls_back_to_native_freshness_when_v1_internals_are_unavailable(self):
+    def test_runs_dbts_own_freshness(self):
         runner, result = self._run(
             {"results": [_result("source.proj.raw.x")]},
             user_args=("--target", "prod"),
@@ -325,10 +315,12 @@ class TestGetSourceFreshnessOnDbtCoreV2:
         )
         assert result == SourceFreshness(sources={"source.proj.raw.x": _AT})
 
-    def test_still_raises_when_dbt_core_is_entirely_missing(self):
-        modules = {**self._V1_ONLY_MODULES, "dbt.cli.main": None}
-
-        with patch.dict("sys.modules", modules), pytest.raises(ImportError):
+    def test_dbt_1_x_without_its_internals_raises_rather_than_falling_back(self):
+        with (
+            patch("src.orchestra_dbt.source_freshness.is_dbt_v2", return_value=False),
+            patch.dict("sys.modules", {"dbt.task.freshness": None}),
+            pytest.raises(ImportError),
+        ):
             get_source_freshness(())
 
     def _run(
@@ -346,10 +338,7 @@ class TestGetSourceFreshnessOnDbtCoreV2:
             }
         runner = Mock()
         runner.invoke.side_effect = [Mock(exception=e) for e in exceptions]
-        modules = {
-            **self._V1_ONLY_MODULES,
-            "dbt.cli.main": Mock(dbtRunner=Mock(return_value=runner)),
-        }
+        modules = {"dbt.cli.main": Mock(dbtRunner=Mock(return_value=runner))}
 
         def fake_load_json(path):
             if path == "target/sources.json":
@@ -357,6 +346,7 @@ class TestGetSourceFreshnessOnDbtCoreV2:
             return {"sources": {uid: _source(uid, f) for uid, f in manifest.items()}}
 
         with (
+            patch("src.orchestra_dbt.source_freshness.is_dbt_v2", return_value=True),
             patch.dict("sys.modules", modules),
             patch(
                 "src.orchestra_dbt.source_freshness.load_json",

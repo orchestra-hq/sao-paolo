@@ -1,7 +1,11 @@
 import threading
 from datetime import UTC, datetime
 
-from ..compatibility import dbt_core_import_error_message, release_connections
+from ..compatibility import (
+    dbt_core_import_error_message,
+    is_dbt_v2,
+    release_connections,
+)
 from ..logger import log_debug, log_error, log_info, log_warn
 from ..models import SourceFreshness
 from ..target_finder import find_flag_value, find_target_in_args
@@ -54,8 +58,6 @@ def _get_source_freshness_v2(
 ) -> SourceFreshness | None:
     """dbt 2.x has no `dbt.task.freshness` to patch, so run its own `dbt source freshness`."""
     from dbt.cli.main import dbtRunner
-
-    log_info("Calculating source freshness")
 
     try:
         # 2.x's sources.json omits loaded_at_*; the manifest has them.
@@ -122,6 +124,15 @@ def get_source_freshness(
     scope_to_selection: bool = False,
     selectors_to_run: list[str] | None = None,
 ) -> SourceFreshness | None:
+    log_info("Calculating source freshness")
+    if is_dbt_v2():
+        return _get_source_freshness_v2(
+            user_args,
+            require_explicit_source_freshness,
+            scope_to_selection,
+            selectors_to_run,
+        )
+
     try:
         from dbt.adapters.factory import FACTORY
         from dbt.artifacts.resources.v1.components import FreshnessThreshold
@@ -135,18 +146,8 @@ def get_source_freshness(
         from dbt.task.freshness import FreshnessRunner, FreshnessTask
         from dbt_common.exceptions import DbtRuntimeError
     except ImportError as missing_dbt_core_error:
-        # dbt 2.x drops the modules above but still ships dbtRunner.
-        try:
-            from dbt.cli.main import dbtRunner
-        except ImportError:
-            log_error(dbt_core_import_error_message(missing_dbt_core_error))
-            raise missing_dbt_core_error
-        return _get_source_freshness_v2(
-            user_args,
-            require_explicit_source_freshness,
-            scope_to_selection,
-            selectors_to_run,
-        )
+        log_error(dbt_core_import_error_message(missing_dbt_core_error))
+        raise
 
     def default_freshness_result(compiled_node) -> SourceFreshnessResult:
         return SourceFreshnessResult(
@@ -192,8 +193,6 @@ def get_source_freshness(
                     f"Unable to calculate source freshness for {compiled_node.unique_id}: {e}"
                 )
             return default_freshness_result(compiled_node)
-
-    log_info("Calculating source freshness")
 
     SourceDefinition.has_freshness = True  # pyright: ignore[reportAttributeAccessIssue]
     FreshnessTask.get_runner_type = lambda self, _: OrchestraFreshnessRunner
