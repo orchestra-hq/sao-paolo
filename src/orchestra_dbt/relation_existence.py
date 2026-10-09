@@ -20,17 +20,6 @@ _CONNECTION_NAME = "orchestra_relation_existence"
 _RESULT_MARKER = "ORCHESTRA_RELATIONS_EXIST="
 
 
-class _ExistenceCheckFailed(Exception):
-    pass
-
-
-def _warn_unlistable(database: str | None, schema: str, reason: object) -> None:
-    log_warn(
-        f"Could not list relations in {database}.{schema}: {reason}. "
-        f"Leaving reuse decisions for that schema unchanged."
-    )
-
-
 def _acquire_adapter() -> tuple[Any, Any]:
     """Return the (adapter, manifest) dbt already registered in this process.
 
@@ -85,7 +74,10 @@ def _list_schema(adapter: Any, database: str | None, schema: str) -> set[str] | 
             if relation.identifier
         }
     except Exception as e:
-        _warn_unlistable(database, schema, e)
+        log_warn(
+            f"Could not list relations in {database}.{schema}: {e}. "
+            f"Leaving reuse decisions for that schema unchanged."
+        )
         return None
 
 
@@ -178,7 +170,7 @@ def _relations_exist(
             ]
         )
         if not result.success:
-            raise _ExistenceCheckFailed(result.exception)
+            raise RuntimeError(result.exception)
         # run-operation returns nothing to Python; the macro logs its answer instead.
         # Match the message, not the line: the logged command line holds the SQL too.
         with open(Path(log_dir) / "dbt.log") as log_file:
@@ -193,7 +185,7 @@ def _relations_exist(
                 None,
             )
     if msg is None:
-        raise _ExistenceCheckFailed("no existence result in dbt's log")
+        raise RuntimeError("no existence result in dbt's log")
     return json.loads(msg.removeprefix(_RESULT_MARKER))
 
 
@@ -226,11 +218,14 @@ def _find_missing_relations_v2(
             user_args,
             {k: v for checks in by_schema.values() for k, v in checks.items()},
         )
-    except _ExistenceCheckFailed as e:
+    except RuntimeError as e:
         if len(by_schema) == 1:
             # A retry per schema would repeat the invocation that just failed.
             ((database, schema),) = by_schema
-            _warn_unlistable(database, schema, e)
+            log_warn(
+                f"Could not list relations in {database}.{schema}: {e}. "
+                f"Leaving reuse decisions for that schema unchanged."
+            )
             return None
         log_debug(f"Relation existence run-operation failed: {e}")
         exists = {}
@@ -238,8 +233,11 @@ def _find_missing_relations_v2(
         for attempted, ((database, schema), checks) in enumerate(by_schema.items(), 1):
             try:
                 exists.update(_relations_exist(runner, user_args, checks))
-            except _ExistenceCheckFailed as e:
-                _warn_unlistable(database, schema, e)
+            except RuntimeError as e:
+                log_warn(
+                    f"Could not list relations in {database}.{schema}: {e}. "
+                    f"Leaving reuse decisions for that schema unchanged."
+                )
                 failures += 1
                 # ponytail: the first two retries failing reads as systemic (profile,
                 # auth), not one bad schema; stop rather than retry every schema.
