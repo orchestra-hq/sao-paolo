@@ -1,12 +1,11 @@
 import json
 import tempfile
 from collections.abc import Collection
-from importlib.util import find_spec
 from pathlib import Path
 from time import perf_counter
 from typing import Any, cast
 
-from .compatibility import release_connections
+from .compatibility import is_dbt_v2, release_connections
 from .logger import log_debug, log_info, log_warn
 from .models import Freshness, MaterialisationNode, NodeType, ParsedDag
 from .target_finder import find_flag_value, find_target_in_args
@@ -251,7 +250,7 @@ def apply_relation_existence_gate(
 
     started_at = perf_counter()
     try:
-        if find_spec("dbt.adapters") is None:
+        if is_dbt_v2():
             missing = find_missing_relations_v2(candidates, user_args or [])
         else:
             missing = _find_missing_relations_v1(candidates)

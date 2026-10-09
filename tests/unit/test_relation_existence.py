@@ -754,10 +754,13 @@ class TestEndToEndFromStateThroughTheGate:
             "the sweep must not touch a node the gate already marked dirty"
         )
 
+
 class FakeDbtV2Runner:
     """Answers the existence run-operation the way dbt 2.x does: via its JSON log."""
 
-    def __init__(self, existing: set[str], failing_schemas: frozenset[str] = frozenset()):
+    def __init__(
+        self, existing: set[str], failing_schemas: frozenset[str] = frozenset()
+    ):
         self.existing = existing
         self.failing_schemas = failing_schemas
         self.calls: list[list[str]] = []
@@ -811,8 +814,8 @@ class TestFindMissingRelationsV2:
         assert missing == {"model.p.c"}
         assert len(runner.calls) == 3
 
-    def test_gate_uses_it_when_dbt_adapters_is_absent(self, monkeypatch) -> None:
-        monkeypatch.setattr(relation_existence, "find_spec", lambda _: None)
+    def test_gate_uses_it_on_dbt_v2(self, monkeypatch) -> None:
+        monkeypatch.setattr(relation_existence, "is_dbt_v2", lambda: True)
         monkeypatch.setattr(
             relation_existence,
             "find_missing_relations_v2",
