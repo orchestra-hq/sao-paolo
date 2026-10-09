@@ -1,6 +1,12 @@
+from pathlib import Path
+
 import pytest
 
-from src.orchestra_dbt.target_finder import find_flag_value, find_target_in_args
+from src.orchestra_dbt.target_finder import (
+    find_flag_value,
+    find_target_dir,
+    find_target_in_args,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -115,3 +121,25 @@ class TestFindFlagValue:
     )
     def test_matches_click(self, args: list[str], expected: str | None) -> None:
         assert find_flag_value(args, "--profile") == expected
+
+
+class TestFindTargetDir:
+    @pytest.fixture(autouse=True)
+    def _no_target_path_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("DBT_TARGET_PATH", raising=False)
+        monkeypatch.delenv("DBT_ENGINE_TARGET_PATH", raising=False)
+
+    def test_defaults_to_target_under_the_project(self):
+        assert find_target_dir(["dbt", "build"], Path("proj")) == Path("proj/target")
+
+    def test_flag_beats_engine_env_beats_plain_env(self, monkeypatch):
+        monkeypatch.setenv("DBT_TARGET_PATH", "plain")
+        assert find_target_dir([], Path("proj")) == Path("proj/plain")
+        monkeypatch.setenv("DBT_ENGINE_TARGET_PATH", "engine")
+        assert find_target_dir([], Path("proj")) == Path("proj/engine")
+        assert find_target_dir(["--target-path=flag"], Path("proj")) == Path(
+            "proj/flag"
+        )
+
+    def test_absolute_target_path_ignores_the_project(self):
+        assert find_target_dir(["--target-path", "/abs"], Path("proj")) == Path("/abs")

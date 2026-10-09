@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -28,6 +29,20 @@ class TestGetArgsForSourceFreshness:
             "source",
             "freshness",
             "-q",
+        ]
+
+    def test_forwards_project_and_target_path(self):
+        """Otherwise freshness runs against the cwd and writes sources.json elsewhere."""
+        assert get_args_for_source_freshness(
+            ("dbt", "build", "--project-dir", "proj", "--target-path=out")
+        ) == [
+            "source",
+            "freshness",
+            "-q",
+            "--project-dir",
+            "proj",
+            "--target-path",
+            "out",
         ]
 
     def test_forwards_profile_resolution_flags(self):
@@ -369,7 +384,7 @@ class TestGetSourceFreshnessOnDbtCoreV2:
         modules = {"dbt.cli.main": Mock(dbtRunner=Mock(return_value=runner))}
 
         def fake_load_json(path):
-            if path == "target/sources.json":
+            if path == Path("target/sources.json"):
                 return freshness_result
             return {"sources": {uid: _source(uid, f) for uid, f in manifest.items()}}
 

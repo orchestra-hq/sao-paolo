@@ -1,32 +1,36 @@
 import os
 import uuid
+from pathlib import Path
 from typing import Any
 
 from .constants import INDIRECT_SELECTION_CAUTIOUS, ORCHESTRA_REUSED_NODE
 from .logger import log_error, log_warn
 from .utils import load_yaml, save_yaml
 
-_SELECTORS_FILE = "selectors.yml"
 _SELECT_FLAGS = frozenset({"--select", "-s", "--models", "--model", "-m"})
 _EXCLUDE_FLAGS = frozenset({"--exclude"})
 _TEST_RUNNING_SUBCOMMANDS = frozenset({"build", "test"})
 
 
-def snapshot_selectors_file() -> bytes | None:
+def snapshot_selectors_file(
+    selectors_file: Path = Path("selectors.yml"),
+) -> bytes | None:
     try:
-        with open(_SELECTORS_FILE, "rb") as f:
+        with open(selectors_file, "rb") as f:
             return f.read()
     except FileNotFoundError:
         return None
 
 
-def restore_selectors_file(snapshot: bytes | None) -> None:
+def restore_selectors_file(
+    snapshot: bytes | None, selectors_file: Path = Path("selectors.yml")
+) -> None:
     if snapshot is not None:
-        with open(_SELECTORS_FILE, "wb") as f:
+        with open(selectors_file, "wb") as f:
             f.write(snapshot)
         return
     try:
-        os.remove(_SELECTORS_FILE)
+        os.remove(selectors_file)
     except FileNotFoundError:
         pass
 
@@ -48,9 +52,11 @@ def _get_reused_selector_definition(existing_selector: str) -> dict[str, Any]:
     }
 
 
-def update_selectors_yaml(selector_tag: str) -> bool:
+def update_selectors_yaml(
+    selector_tag: str, selectors_file: Path = Path("selectors.yml")
+) -> bool:
     try:
-        selectors_yml = load_yaml(_SELECTORS_FILE)
+        selectors_yml = load_yaml(selectors_file)
     except FileNotFoundError:
         log_error(
             "A `--selector` was used on the command, but no `selectors.yml` file found."
@@ -83,7 +89,7 @@ def update_selectors_yaml(selector_tag: str) -> bool:
     )
 
     try:
-        save_yaml(_SELECTORS_FILE, {"selectors": selectors})
+        save_yaml(selectors_file, {"selectors": selectors})
     except Exception as e:
         log_error(f"Error saving selectors.yml: {e}")
         return False
@@ -125,9 +131,11 @@ def _build_generated_selector_definition(
     return {"union": union}
 
 
-def _append_generated_selector(definition: dict[str, Any]) -> str | None:
+def _append_generated_selector(
+    definition: dict[str, Any], selectors_file: Path
+) -> str | None:
     try:
-        selectors_yml = load_yaml(_SELECTORS_FILE)
+        selectors_yml = load_yaml(selectors_file)
     except FileNotFoundError:
         selectors_yml = None
     except Exception as e:
@@ -148,7 +156,7 @@ def _append_generated_selector(definition: dict[str, Any]) -> str | None:
     selectors_yml["selectors"] = selectors
 
     try:
-        save_yaml(_SELECTORS_FILE, selectors_yml)
+        save_yaml(selectors_file, selectors_yml)
     except Exception as e:
         log_error(f"Error saving selectors.yml: {e}")
         return None
@@ -160,12 +168,16 @@ def _command_runs_tests(cmd: list[str]) -> bool:
     return len(cmd) > 1 and cmd[1] in _TEST_RUNNING_SUBCOMMANDS
 
 
-def modify_dbt_command(cmd: list[str]) -> list[str]:
+def modify_dbt_command(
+    cmd: list[str], selectors_file: Path = Path("selectors.yml")
+) -> list[str]:
     if "--selector" in cmd:
         success_updating_selectors = False
         try:
             selector_tag = cmd[cmd.index("--selector") + 1]
-            success_updating_selectors = update_selectors_yaml(selector_tag)
+            success_updating_selectors = update_selectors_yaml(
+                selector_tag, selectors_file
+            )
             if not success_updating_selectors:
                 log_warn("dbt will not run in stateful mode.")
         except IndexError:
@@ -179,7 +191,7 @@ def modify_dbt_command(cmd: list[str]) -> list[str]:
 
     if user_has_selection and _command_runs_tests(cmd):
         definition = _build_generated_selector_definition(includes, excludes)
-        selector_name = _append_generated_selector(definition)
+        selector_name = _append_generated_selector(definition, selectors_file)
         if selector_name is not None:
             return [cmd[0], cmd[1], *passthrough, "--selector", selector_name]
         log_warn(
