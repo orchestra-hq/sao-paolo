@@ -199,11 +199,17 @@ def _relations_exist(
 
 def find_missing_relations_v2(
     candidates: Collection[str], user_args: list[str]
-) -> set[str]:
-    """dbt 2.x has no `dbt.adapters`; on failure, retry per schema to isolate it."""
+) -> set[str] | None:
+    """dbt 2.x has no `dbt.adapters`; on failure, retry per schema to isolate it.
+    None for an adapter it is not enabled for."""
     from dbt.cli.main import dbtRunner
 
-    manifest_nodes = load_json("target/manifest.json")["nodes"]
+    manifest = load_json("target/manifest.json")
+    adapter_type = manifest["metadata"]["adapter_type"]
+    if adapter_type in _UNSUPPORTED_ADAPTERS:
+        log_debug(f"Existence checks are not enabled for the '{adapter_type}' adapter.")
+        return None
+    manifest_nodes = manifest["nodes"]
     by_schema: dict[tuple[str, str], dict[str, list[str]]] = {}
     for unique_id in candidates:
         node = manifest_nodes[unique_id]

@@ -787,11 +787,12 @@ class FakeDbtV2Runner:
 
 class TestFindMissingRelationsV2:
     _MANIFEST: ClassVar[dict] = {
+        "metadata": {"adapter_type": "duckdb"},
         "nodes": {
             "model.p.a": {"database": "db", "schema": "s1", "alias": "a"},
             "model.p.b": {"database": "db", "schema": "s1", "alias": "b"},
             "model.p.c": {"database": "db", "schema": "s2", "alias": "c"},
-        }
+        },
     }
 
     def _run(self, monkeypatch, runner, user_args=(), manifest=None):
@@ -833,10 +834,11 @@ class TestFindMissingRelationsV2:
 
     def test_systemic_failure_stops_after_two_schemas(self, monkeypatch) -> None:
         manifest = {
+            "metadata": {"adapter_type": "duckdb"},
             "nodes": {
                 f"model.p.{s}": {"database": "db", "schema": s, "alias": s}
                 for s in ("s1", "s2", "s3", "s4")
-            }
+            },
         }
         runner = FakeDbtV2Runner(
             existing=set(), failing_schemas=frozenset({"s1", "s2", "s3", "s4"})
@@ -846,6 +848,19 @@ class TestFindMissingRelationsV2:
 
         assert missing == set()
         assert len(runner.calls) == 3
+
+    def test_skips_adapters_it_is_not_enabled_for(self, monkeypatch) -> None:
+        """Experimental spark on v2, same exclusion as 1.x."""
+        runner = FakeDbtV2Runner(existing=set())
+
+        missing = self._run(
+            monkeypatch,
+            runner,
+            manifest={**self._MANIFEST, "metadata": {"adapter_type": "spark"}},
+        )
+
+        assert missing is None
+        assert runner.calls == []
 
     def test_gate_uses_it_on_dbt_v2(self, monkeypatch) -> None:
         monkeypatch.setattr(relation_existence, "is_dbt_v2", lambda: True)
