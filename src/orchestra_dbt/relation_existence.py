@@ -132,8 +132,7 @@ def find_missing_relations(
 def _find_missing_relations_v2(
     candidates: Collection[str], user_args: list[str]
 ) -> set[str] | None:
-    """dbt 2.x has no `dbt.adapters`; `parse --write-catalog` queries the warehouse for
-    every relation that exists. None for an adapter it is not enabled for."""
+    """Candidates missing from dbt 2.x's catalog; None for an unsupported adapter."""
     from dbt.cli.main import dbtRunner
 
     # Resolve the same profile as the user's run.
@@ -144,7 +143,7 @@ def _find_missing_relations_v2(
         if (value := find_flag_value(user_args, flag)) is not None:
             profile_flags += [flag, value]
 
-    # Any: type-checking sees dbt-core 1.x, whose result has no `catalog`.
+    # Any: the type checker uses the dev install's dbt 1.x types, which lack v2's fields.
     result: Any = dbtRunner().invoke(["parse", "--write-catalog", "-q", *profile_flags])
     if result.exception:
         raise RuntimeError(f"dbt parse --write-catalog failed: {result.exception}")
