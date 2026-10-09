@@ -47,15 +47,6 @@ def _dbt_setting(args: list[str], flag: str, name: str) -> str | None:
     )
 
 
-_project_dir = Path(".")
-
-
-def resolve_project_dir(args: list[str]) -> None:
-    """Remember the dbt project dir: the flag beats DBT_ENGINE_* beats DBT_*."""
-    global _project_dir
-    _project_dir = Path(_dbt_setting(args, "--project-dir", "PROJECT_DIR") or ".")
-
-
-def project_path(path: str = ".") -> Path:
-    """A project-relative path (e.g. a manifest `original_file_path`) as seen from cwd."""
-    return _project_dir / path
+def find_project_dir(args: list[str]) -> Path:
+    """The dbt project dir: the flag beats DBT_ENGINE_* beats DBT_*."""
+    return Path(_dbt_setting(args, "--project-dir", "PROJECT_DIR") or ".")

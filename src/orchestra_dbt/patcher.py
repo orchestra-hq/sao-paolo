@@ -7,7 +7,6 @@ from pathlib import Path
 from .constants import ORCHESTRA_REUSED_NODE
 from .logger import log_debug, log_error, log_info, log_warn
 from .models import MaterialisationNode
-from .target_finder import project_path
 from .utils import load_yaml, save_yaml
 
 
@@ -67,9 +66,9 @@ def revert_patch_file(file_path: Path) -> None:
     file_path.write_text(content, encoding="utf-8")
 
 
-def _get_sql_files(cwd: Path) -> list[Path]:
+def _get_sql_files(project_dir: Path) -> list[Path]:
     filtered_files: list[Path] = []
-    for root, _, files in os.walk(cwd, followlinks=True):
+    for root, _, files in os.walk(project_dir, followlinks=True):
         # Skip .venv directories
         if ".venv" in root:
             continue
@@ -79,9 +78,10 @@ def _get_sql_files(cwd: Path) -> list[Path]:
     return filtered_files
 
 
-def patch_sql_files(nodes_to_reuse: dict[str, MaterialisationNode]) -> None:
-    cwd = project_path()
-    sql_files = _get_sql_files(cwd)
+def patch_sql_files(
+    nodes_to_reuse: dict[str, MaterialisationNode], project_dir: Path = Path(".")
+) -> None:
+    sql_files = _get_sql_files(project_dir)
 
     if not sql_files:
         log_warn("No .sql files found in project directory.")
@@ -91,7 +91,7 @@ def patch_sql_files(nodes_to_reuse: dict[str, MaterialisationNode]) -> None:
     }
 
     for file in sql_files:
-        relative_path = str(file.relative_to(cwd))
+        relative_path = str(file.relative_to(project_dir))
         if relative_path in file_paths_to_nodes:
             node: MaterialisationNode = file_paths_to_nodes[relative_path]
             try:
@@ -106,12 +106,13 @@ def patch_sql_files(nodes_to_reuse: dict[str, MaterialisationNode]) -> None:
                 log_warn(f"Failed to add tag to {file}: {e}")
 
 
-def revert_patching(file_paths_to_revert: list[str]) -> None:
-    cwd = project_path()
-    sql_files = _get_sql_files(cwd)
+def revert_patching(
+    file_paths_to_revert: list[str], project_dir: Path = Path(".")
+) -> None:
+    sql_files = _get_sql_files(project_dir)
 
     for file in sql_files:
-        relative_path = str(file.relative_to(cwd))
+        relative_path = str(file.relative_to(project_dir))
         if relative_path in file_paths_to_revert:
             try:
                 revert_patch_file(file_path=file)
@@ -122,8 +123,9 @@ def revert_patching(file_paths_to_revert: list[str]) -> None:
 def patch_seed_properties(
     nodes_to_reuse: dict[str, MaterialisationNode],
     seed_properties_file_path: str = "seeds/properties.yml",
+    project_dir: Path = Path("."),
 ) -> None:
-    seed_properties_file_path = str(project_path(seed_properties_file_path))
+    seed_properties_file_path = str(project_dir / seed_properties_file_path)
     seeds_to_reuse: dict[str, MaterialisationNode] = {
         node.file_path.split("/")[-1].removesuffix(".csv"): node
         for node in nodes_to_reuse.values()

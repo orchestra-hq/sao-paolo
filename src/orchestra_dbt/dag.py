@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from .asset_external_id import generate_asset_external_id
 from .build_after import parse_freshness_config
 from .checksum import calculate_checksum
@@ -14,7 +16,6 @@ from .models import (
     StateApiModel,
 )
 from .state_types import StateBackendKind
-from .target_finder import project_path
 from .utils import load_json
 
 _IGNORED_PREFIXES = ("function.",)
@@ -61,6 +62,7 @@ def construct_dag(
     source_freshness: SourceFreshness,
     state: StateApiModel,
     manifest_override: str | None = None,
+    project_dir: Path = Path("."),
 ) -> ParsedDag:
     manifest = load_json(manifest_override or "target/manifest.json")
 
@@ -110,7 +112,7 @@ def construct_dag(
                 checksum: str | None = calculate_checksum(
                     resource_type,
                     node_checksum=str(node["checksum"]["checksum"]),
-                    file_path=str(project_path(file_path)),
+                    file_path=str(project_dir / file_path),
                 )
                 if not checksum:
                     track_state = False

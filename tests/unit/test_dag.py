@@ -4,7 +4,6 @@ from hashlib import sha256
 import pytest
 
 import src.orchestra_dbt.dag as dag_module
-from src.orchestra_dbt import target_finder
 from src.orchestra_dbt.config import OrchestraDbtSettings
 from src.orchestra_dbt.dag import calculate_freshness_on_node, construct_dag
 from src.orchestra_dbt.models import (
@@ -18,6 +17,7 @@ from src.orchestra_dbt.models import (
     StateApiModel,
     StateItem,
 )
+from src.orchestra_dbt.target_finder import find_project_dir
 
 
 class TestCalculateFreshnessOnNode:
@@ -391,8 +391,6 @@ class TestConstructDag:
         (tmp_path / "proj" / "seeds").mkdir(parents=True)
         (tmp_path / "proj" / "seeds" / "my_seed.csv").write_bytes(b"id\n1\n")
         monkeypatch.chdir(tmp_path)
-        monkeypatch.setattr(target_finder, "_project_dir", target_finder.Path("."))
-        target_finder.resolve_project_dir(["build", "--project-dir", "proj"])
 
         manifest = {
             "metadata": {"project_name": "test_project"},
@@ -429,9 +427,10 @@ class TestConstructDag:
             }
         )
 
-        node = construct_dag(SourceFreshness(sources={}), state).nodes[
-            "seed.test_project.my_seed"
-        ]
+        project_dir = find_project_dir(["build", "--project-dir", "proj"])
+        node = construct_dag(
+            SourceFreshness(sources={}), state, project_dir=project_dir
+        ).nodes["seed.test_project.my_seed"]
         assert isinstance(node, MaterialisationNode)
         assert node.freshness == Freshness.CLEAN
 

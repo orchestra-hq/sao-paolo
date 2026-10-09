@@ -43,7 +43,7 @@ from .state import (
     update_state,
 )
 from .state_types import StateBackendKind
-from .target_finder import resolve_project_dir
+from .target_finder import find_project_dir
 
 
 def _usage_program() -> str:
@@ -128,7 +128,7 @@ def main(args: tuple[str, ...]) -> None:
         sys.exit(1)
 
     dbt_args: tuple[str, ...] = tuple(args)
-    resolve_project_dir(list(dbt_args))
+    project_dir = find_project_dir(list(dbt_args))
 
     if len(dbt_args) < 2:
         log_error("dbt requires a subcommand (e.g. run, build, test).")
@@ -206,7 +206,7 @@ def main(args: tuple[str, ...]) -> None:
         state = StateApiModel(state={})
         state_load_ok = False
 
-    parsed_dag = construct_dag(source_freshness, state)
+    parsed_dag = construct_dag(source_freshness, state, project_dir=project_dir)
 
     # Propagate freshness config to upstream nodes
     propagate_freshness_config(parsed_dag)
@@ -244,8 +244,8 @@ def main(args: tuple[str, ...]) -> None:
     log_info(f"{len(nodes_to_reuse)}/{node_count} nodes reused.")
 
     if len(nodes_to_reuse) != 0:
-        patch_sql_files(nodes_to_reuse)
-        patch_seed_properties(nodes_to_reuse)
+        patch_sql_files(nodes_to_reuse, project_dir=project_dir)
+        patch_seed_properties(nodes_to_reuse, project_dir=project_dir)
 
         selectors_snapshot = snapshot_selectors_file()
         result = subprocess.run(modify_dbt_command(cmd=list(dbt_args)), check=False)
@@ -254,7 +254,8 @@ def main(args: tuple[str, ...]) -> None:
             revert_patching(
                 file_paths_to_revert=[
                     node.file_path for node in nodes_to_reuse.values()
-                ]
+                ],
+                project_dir=project_dir,
             )
             restore_selectors_file(selectors_snapshot)
     else:
