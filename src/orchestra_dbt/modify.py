@@ -12,9 +12,7 @@ _EXCLUDE_FLAGS = frozenset({"--exclude"})
 _TEST_RUNNING_SUBCOMMANDS = frozenset({"build", "test"})
 
 
-def snapshot_selectors_file(
-    selectors_file: Path,
-) -> bytes | None:
+def snapshot_selectors_file(selectors_file: Path) -> bytes | None:
     try:
         with open(selectors_file, "rb") as f:
             return f.read()
