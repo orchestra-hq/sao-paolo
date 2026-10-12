@@ -117,6 +117,7 @@ def construct_dag(
                     resource_type,
                     node_checksum=str(node["checksum"]["checksum"]),
                     file_path=str(project_dir / file_path),
+                    raw_code=str(node["raw_code"]),
                 )
                 if not checksum:
                     track_state = False

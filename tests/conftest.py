@@ -20,6 +20,7 @@ def sample_manifest():
             "model.test_project.model_a": {
                 "resource_type": "model",
                 "checksum": {"checksum": "def456"},
+                "raw_code": "select 'a'",
                 "config": {"freshness": None},
                 "package_name": "test_project",
                 "original_file_path": "models/model_a.sql",
@@ -30,6 +31,7 @@ def sample_manifest():
             "model.test_project_2.model_b": {
                 "resource_type": "model",
                 "checksum": {"checksum": "ghi789"},
+                "raw_code": "select 'b'",
                 "config": {"freshness": None, "materialized": "incremental"},
                 "package_name": "test_project_2",
                 "original_file_path": "models/model_b.sql",
@@ -40,6 +42,7 @@ def sample_manifest():
             "model.test_project.model_c": {
                 "resource_type": "model",
                 "checksum": {"checksum": "456"},
+                "raw_code": "select 'c'",
                 "config": {"freshness": None},
                 "package_name": "test_project",
                 "original_file_path": "models/model_c.sql",

@@ -20,6 +20,11 @@ from src.orchestra_dbt.models import (
 )
 from src.orchestra_dbt.target_finder import find_project_dir
 
+# Model checksums of the `raw_code` in `sample_manifest`.
+MODEL_A_CHECKSUM = sha256(b"select 'a'").hexdigest()
+MODEL_B_CHECKSUM = sha256(b"select 'b'").hexdigest()
+MODEL_C_CHECKSUM = sha256(b"select 'c'").hexdigest()
+
 
 class TestCalculateFreshnessOnNode:
     def test_calculate_freshness_on_node_snapshot(self):
@@ -196,7 +201,7 @@ class TestConstructDag:
             state={
                 "integration_account_id.model.test_project.model_a": StateItem(
                     last_updated=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
-                    checksum="def456",
+                    checksum=MODEL_A_CHECKSUM,
                     sources={
                         "source.test_db.test_schema.test_table": datetime(
                             2024, 1, 3, 12, 0, 0, tzinfo=UTC
@@ -225,7 +230,7 @@ class TestConstructDag:
                     asset_external_id="integration_account_id.model.test_project.model_a",
                     freshness=Freshness.CLEAN,
                     last_updated=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
-                    checksum="def456",
+                    checksum=MODEL_A_CHECKSUM,
                     dbt_path="models/model_a.sql",
                     file_path="models/model_a.sql",
                     sources={
@@ -239,7 +244,7 @@ class TestConstructDag:
                 "model.test_project_2.model_b": MaterialisationNode(
                     asset_external_id="integration_account_id.model.test_project_2.model_b",
                     freshness=Freshness.DIRTY,
-                    checksum="ghi789",
+                    checksum=MODEL_B_CHECKSUM,
                     dbt_path="models/model_b.sql",
                     file_path="dbt_packages/test_project_2/models/model_b.sql",
                     reason="Model not previously seen in state.",
@@ -250,7 +255,7 @@ class TestConstructDag:
                     asset_external_id="integration_account_id.model.test_project.model_c",
                     freshness=Freshness.DIRTY,
                     last_updated=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
-                    checksum="456",
+                    checksum=MODEL_C_CHECKSUM,
                     dbt_path="models/model_c.sql",
                     file_path="models/model_c.sql",
                     reason="Checksum changed since last run.",
@@ -312,6 +317,7 @@ class TestConstructDag:
                 "seed.test_project.my_seed": {
                     "resource_type": "seed",
                     "checksum": {"checksum": "abc"},
+                    "raw_code": "",
                     "config": {},
                     "package_name": "test_project",
                     "original_file_path": "seeds/my_seed.csv",
@@ -347,6 +353,7 @@ class TestConstructDag:
                 "seed.test_project.my_seed": {
                     "resource_type": "seed",
                     "checksum": {"checksum": "abc"},
+                    "raw_code": "",
                     "config": {},
                     "package_name": "test_project",
                     "original_file_path": "seeds/my_seed.csv",
@@ -401,6 +408,7 @@ class TestConstructDag:
                 "seed.test_project.my_seed": {
                     "resource_type": "seed",
                     "checksum": {"checksum": "abc"},
+                    "raw_code": "",
                     "config": {},
                     "package_name": "test_project",
                     "original_file_path": "seeds/my_seed.csv",
@@ -455,6 +463,7 @@ class TestConstructDag:
                 "seed.my_package.pkg_seed": {
                     "resource_type": "seed",
                     "checksum": {"checksum": "abc"},
+                    "raw_code": "",
                     "config": {},
                     "package_name": "my_package",
                     "original_file_path": "seeds/pkg_seed.csv",
@@ -494,6 +503,7 @@ class TestConstructDag:
                 "model.test_project.my_model": {
                     "resource_type": "model",
                     "checksum": {"checksum": "abc123"},
+                    "raw_code": "",
                     "config": {},
                     "package_name": "test_project",
                     "original_file_path": "models/my_model.sql",
