@@ -7,7 +7,6 @@ from pydantic import ValidationError
 
 from ..models import StateApiModel
 from ..state_errors import StateLoadError, StateSaveError
-from ..state_filters import apply_integration_account_filter
 from .logging import log_state_loaded, log_state_saved
 
 
@@ -31,7 +30,6 @@ class LocalFileStateBackend:
         except (ValidationError, ValueError) as e:
             raise StateLoadError(f"State file failed validation ({path}): {e}")
 
-        apply_integration_account_filter(state)
         log_state_loaded("local_file", state)
         return state
 

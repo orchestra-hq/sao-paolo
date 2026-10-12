@@ -8,6 +8,7 @@ from .state_backends import resolved_state_backend
 from .state_backends.base import StateBackend
 from .state_backends.http import HttpStateBackend
 from .state_errors import StateLoadError, StateSaveError
+from .state_filters import apply_integration_account_filter
 
 __all__ = [
     "StateLoadError",
@@ -29,7 +30,9 @@ from .utils import load_json
 
 
 def load_state() -> StateApiModel:
-    return resolved_state_backend().load()
+    state = resolved_state_backend().load()
+    apply_integration_account_filter(state)
+    return state
 
 
 def save_state(state: StateApiModel, updated_asset_external_ids: set[str]) -> None:
@@ -37,7 +40,9 @@ def save_state(state: StateApiModel, updated_asset_external_ids: set[str]) -> No
 
     The HTTP backend upserts each node it is sent, so it is sent only the updates.
     File backends rewrite the whole file, so the updates are merged onto state
-    re-read at save time, or a concurrent run's writes would be reverted.
+    re-read at save time, or a concurrent run's writes would be reverted. That
+    re-read is unfiltered, so other integration accounts' entries in a shared
+    file are kept.
     """
     updates = {
         asset_external_id: state.state[asset_external_id]
