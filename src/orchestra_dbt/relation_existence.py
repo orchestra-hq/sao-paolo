@@ -2,9 +2,10 @@ from collections.abc import Collection
 from time import perf_counter
 from typing import Any, cast
 
-from .compatibility import release_connections
+from .compatibility import is_dbt_v2, release_connections
 from .logger import log_debug, log_info, log_warn
 from .models import Freshness, MaterialisationNode, NodeType, ParsedDag
+from .target_finder import find_flag_value, find_target_in_args
 
 # Adapters whose relation listing can't be trusted to gate reuse on. dbt-spark swallows
 # unrecognised errors and returns [], which would read as "the whole schema is gone".
@@ -128,8 +129,53 @@ def find_missing_relations(
     return missing
 
 
+def _find_missing_relations_v2(
+    candidates: Collection[str], user_args: list[str]
+) -> set[str] | None:
+    """Candidates missing from dbt 2.x's catalog; None for an unsupported adapter."""
+    from dbt.cli.main import dbtRunner
+
+    # Resolve the same profile as the user's run.
+    profile_flags: list[str] = []
+    if target := find_target_in_args(user_args):
+        profile_flags += ["--target", target]
+    for flag in ("--profiles-dir", "--profile", "--vars"):
+        if (value := find_flag_value(user_args, flag)) is not None:
+            profile_flags += [flag, value]
+
+    # Any: the type checker uses the dev install's dbt 1.x types, which lack v2's fields.
+    result: Any = dbtRunner().invoke(["parse", "--write-catalog", "-q", *profile_flags])
+    if result.exception:
+        raise RuntimeError(f"dbt parse --write-catalog failed: {result.exception}")
+    adapter_type = result.result.metadata.adapter_type
+    if adapter_type in _UNSUPPORTED_ADAPTERS:
+        log_debug(f"Existence checks are not enabled for the '{adapter_type}' adapter.")
+        return None
+    return {
+        unique_id for unique_id in candidates if unique_id not in result.catalog.nodes
+    }
+
+
+def _find_missing_relations_v1(candidates: Collection[str]) -> set[str] | None:
+    """The in-process 1.x check; None for an adapter it is not enabled for."""
+    adapter, manifest = _acquire_adapter()
+    adapter_type: str = adapter.type()
+    if adapter_type in _UNSUPPORTED_ADAPTERS:
+        log_debug(f"Existence checks are not enabled for the '{adapter_type}' adapter.")
+        return None
+    try:
+        with adapter.connection_named(_CONNECTION_NAME):
+            adapter.clear_transaction()
+            return find_missing_relations(adapter, manifest, candidates)
+    finally:
+        # The real dbt run is a subprocess started straight after this.
+        release_connections(adapter)
+
+
 def apply_relation_existence_gate(
-    parsed_dag: ParsedDag, paths_to_run: list[str] | None
+    parsed_dag: ParsedDag,
+    paths_to_run: list[str] | None,
+    user_args: list[str],
 ) -> None:
     """Stop reusing nodes whose warehouse relation no longer exists.
 
@@ -143,30 +189,24 @@ def apply_relation_existence_gate(
         )
         return
 
+    v2 = is_dbt_v2()
     started_at = perf_counter()
     try:
-        adapter, manifest = _acquire_adapter()
-        adapter_type: str = adapter.type()
-        if adapter_type in _UNSUPPORTED_ADAPTERS:
-            log_debug(
-                f"Existence checks are not enabled for the '{adapter_type}' adapter."
-            )
+        if v2:
+            missing = _find_missing_relations_v2(candidates, user_args)
+        else:
+            missing = _find_missing_relations_v1(candidates)
+        if missing is None:
             return
-        try:
-            with adapter.connection_named(_CONNECTION_NAME):
-                adapter.clear_transaction()
-                missing = find_missing_relations(adapter, manifest, candidates)
-        finally:
-            # The real dbt run is a subprocess started straight after this.
-            release_connections(adapter)
     except Exception as e:
         log_warn(
             f"Warehouse existence check failed; reuse decisions are unchanged. {e}"
         )
         return
 
+    method = "dbt v2 catalog" if v2 else "dbt 1.x adapter"
     log_info(
-        f"Warehouse existence check for {len(candidates)} node(s) took "
+        f"Warehouse existence check ({method}) for {len(candidates)} node(s) took "
         f"{perf_counter() - started_at:.2f}s."
     )
 
