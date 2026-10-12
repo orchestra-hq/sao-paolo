@@ -31,7 +31,7 @@ class TestHttpStateBackendSave:
     def test_saves_without_retrying(self, httpx_mock: HTTPXMock, sleeps):
         httpx_mock.add_response(method="PATCH", url=STATE_URL)
 
-        HttpStateBackend().save(STATE)
+        HttpStateBackend("dev").save(STATE)
 
         assert len(httpx_mock.get_requests()) == 1
         assert sleeps == []
@@ -43,7 +43,7 @@ class TestHttpStateBackendSave:
         httpx_mock.add_response(method="PATCH", url=STATE_URL, status_code=status_code)
         httpx_mock.add_response(method="PATCH", url=STATE_URL)
 
-        HttpStateBackend().save(STATE)
+        HttpStateBackend("dev").save(STATE)
 
         assert len(httpx_mock.get_requests()) == 2
         assert len(sleeps) == 1
@@ -54,7 +54,7 @@ class TestHttpStateBackendSave:
         )
         httpx_mock.add_response(method="PATCH", url=STATE_URL)
 
-        HttpStateBackend().save(STATE)
+        HttpStateBackend("dev").save(STATE)
 
         assert len(httpx_mock.get_requests()) == 2
         assert len(sleeps) == 1
@@ -65,7 +65,7 @@ class TestHttpStateBackendSave:
         for _ in range(3):
             httpx_mock.add_response(method="PATCH", url=STATE_URL, status_code=500)
 
-        HttpStateBackend().save(STATE)
+        HttpStateBackend("dev").save(STATE)
 
         assert len(httpx_mock.get_requests()) == 3
         assert len(sleeps) == 2
@@ -79,7 +79,7 @@ class TestHttpStateBackendSave:
                 httpx.ConnectError("connection refused"), method="PATCH", url=STATE_URL
             )
 
-        HttpStateBackend().save(STATE)
+        HttpStateBackend("dev").save(STATE)
 
         assert len(httpx_mock.get_requests()) == 3
         assert len(sleeps) == 2
@@ -90,7 +90,7 @@ class TestHttpStateBackendSave:
     ):
         httpx_mock.add_response(method="PATCH", url=STATE_URL, status_code=403)
 
-        HttpStateBackend().save(STATE)
+        HttpStateBackend("dev").save(STATE)
 
         assert len(httpx_mock.get_requests()) == 1
         assert sleeps == []

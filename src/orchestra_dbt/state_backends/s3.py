@@ -12,9 +12,12 @@ from .logging import log_state_loaded, log_state_saved
 
 
 class S3StateBackend:
-    def __init__(self, bucket: str, key: str) -> None:
+    def __init__(
+        self, bucket: str, key: str, integration_account_id: str | None = None
+    ) -> None:
         self._bucket = bucket
         self._key = key
+        self._integration_account_id = integration_account_id
 
     def load(self) -> StateApiModel:
         bucket, key = self._bucket, self._key
@@ -48,7 +51,7 @@ class S3StateBackend:
                 f"State object at s3://{bucket}/{key} failed validation: {e}"
             ) from e
 
-        apply_integration_account_filter(state)
+        apply_integration_account_filter(state, self._integration_account_id)
         log_state_loaded("s3", state)
         return state
 

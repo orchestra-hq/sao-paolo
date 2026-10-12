@@ -9,9 +9,9 @@ import click
 from .build_after import propagate_freshness_config
 from .compatibility import dbt_core_import_error_message
 from .config import (
+    OrchestraDbtSettings,
     get_orchestra_api_key,
     load_orchestra_dbt_settings,
-    resolve_state_backend_config,
 )
 from .constants import SERVICE_NAME
 from .dag import construct_dag
@@ -42,6 +42,7 @@ from .state import (
     save_state,
     update_state,
 )
+from .state_backends import resolve_state_backend_config
 from .state_types import StateBackendKind
 from .target_finder import find_project_dir, find_target_dir
 
@@ -58,8 +59,8 @@ def _welcome() -> None:
     log_info(f"Version: {project_version}. Stateful orchestration enabled.")
 
 
-def _validate_environment() -> None:
-    backend_cfg = resolve_state_backend_config()
+def _validate_environment(settings: OrchestraDbtSettings) -> None:
+    backend_cfg = resolve_state_backend_config(settings)
     match backend_cfg.kind:
         case StateBackendKind.LOCAL_FILE:
             log_debug("State backend: local file (path configured).")
@@ -95,6 +96,7 @@ def _complete_run(
     dbt_exit_code: int,
     state_load_ok: bool,
     target_dir: Path,
+    settings: OrchestraDbtSettings,
 ) -> None:
     updated_asset_external_ids = update_state(
         state=state,
@@ -103,7 +105,11 @@ def _complete_run(
         target_dir=target_dir,
     )
     try:
-        save_state(state=state, updated_asset_external_ids=updated_asset_external_ids)
+        save_state(
+            state=state,
+            updated_asset_external_ids=updated_asset_external_ids,
+            settings=settings,
+        )
     except StateSaveError as e:
         # A save failure is only fatal if we had good state to begin with. If the
         # initial load already failed, we never had reliable state to protect, so
@@ -168,7 +174,7 @@ def main(args: tuple[str, ...]) -> None:
         _run_dbt_passthrough(dbt_args)
 
     _welcome()
-    _validate_environment()
+    _validate_environment(settings)
 
     try:
         nodes_to_run = get_nodes_to_run(dbt_args[2:], target_dir)
@@ -202,7 +208,7 @@ def main(args: tuple[str, ...]) -> None:
     log_info(f"Collected {len(source_freshness.sources)} source(s) information.")
 
     try:
-        state = load_state()
+        state = load_state(settings)
         state_load_ok = True
     except StateLoadError as e:
         log_warn(
@@ -213,7 +219,11 @@ def main(args: tuple[str, ...]) -> None:
         state_load_ok = False
 
     parsed_dag = construct_dag(
-        source_freshness, state, project_dir=project_dir, target_dir=target_dir
+        source_freshness,
+        state,
+        settings,
+        project_dir=project_dir,
+        target_dir=target_dir,
     )
 
     # Propagate freshness config to upstream nodes
@@ -228,6 +238,7 @@ def main(args: tuple[str, ...]) -> None:
             dbt_exit_code=subprocess.run(dbt_args, check=False).returncode,
             state_load_ok=state_load_ok,
             target_dir=target_dir,
+            settings=settings,
         )
 
     # A node can be clean on paper but missing from the warehouse; force it back into the run.
@@ -281,4 +292,5 @@ def main(args: tuple[str, ...]) -> None:
         dbt_exit_code=result.returncode,
         state_load_ok=state_load_ok,
         target_dir=target_dir,
+        settings=settings,
     )

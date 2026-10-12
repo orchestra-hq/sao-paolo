@@ -1,5 +1,6 @@
 import pytest
 
+from src.orchestra_dbt.config import OrchestraDbtSettings
 from src.orchestra_dbt.state_backends.factory import resolve_state_backend_config
 from src.orchestra_dbt.state_types import (
     StateBackendKind,
@@ -68,7 +69,7 @@ def test_gs_uri_routes_to_gcs_backend(
     monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
     monkeypatch.setenv("ORCHESTRA_STATE_FILE", "gs://my-bucket/path/state.json")
 
-    cfg = resolve_state_backend_config()
+    cfg = resolve_state_backend_config(OrchestraDbtSettings())
 
     assert cfg.kind == StateBackendKind.GCS
     assert cfg.gcs_bucket == "my-bucket"
@@ -141,7 +142,7 @@ def test_abfss_uri_routes_to_azure_backend(
         "abfss://mycontainer@myaccount.dfs.core.windows.net/path/state.json",
     )
 
-    cfg = resolve_state_backend_config()
+    cfg = resolve_state_backend_config(OrchestraDbtSettings())
 
     assert cfg.kind == StateBackendKind.AZURE
     assert cfg.azure_account == "myaccount"
@@ -159,7 +160,7 @@ def test_abfs_uri_routes_to_azure_backend(
         "abfs://mycontainer@myaccount.dfs.core.windows.net/path/state.json",
     )
 
-    cfg = resolve_state_backend_config()
+    cfg = resolve_state_backend_config(OrchestraDbtSettings())
 
     assert cfg.kind == StateBackendKind.AZURE
     assert cfg.azure_account == "myaccount"

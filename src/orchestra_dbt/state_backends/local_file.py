@@ -12,8 +12,9 @@ from .logging import log_state_loaded, log_state_saved
 
 
 class LocalFileStateBackend:
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, integration_account_id: str | None = None) -> None:
         self._path = path
+        self._integration_account_id = integration_account_id
 
     def load(self) -> StateApiModel:
         path = self._path
@@ -31,7 +32,7 @@ class LocalFileStateBackend:
         except (ValidationError, ValueError) as e:
             raise StateLoadError(f"State file failed validation ({path}): {e}")
 
-        apply_integration_account_filter(state)
+        apply_integration_account_filter(state, self._integration_account_id)
         log_state_loaded("local_file", state)
         return state
 

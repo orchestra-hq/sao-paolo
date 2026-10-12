@@ -175,13 +175,9 @@ class TestConstructDag:
         self, monkeypatch: pytest.MonkeyPatch, sample_manifest: dict
     ) -> None:
         monkeypatch.setattr(dag_module, "load_json", lambda _: sample_manifest)
-        monkeypatch.setattr(
-            dag_module,
-            "load_orchestra_dbt_settings",
-            lambda: OrchestraDbtSettings(
-                integration_account_id="integration_account_id",
-                local_run=False,
-            ),
+        settings = OrchestraDbtSettings(
+            integration_account_id="integration_account_id",
+            local_run=False,
         )
 
         source_freshness = SourceFreshness(
@@ -215,7 +211,7 @@ class TestConstructDag:
             }
         )
 
-        assert construct_dag(source_freshness, state) == ParsedDag(
+        assert construct_dag(source_freshness, state, settings) == ParsedDag(
             nodes={
                 "source.test_db.test_schema.test_table": SourceNode(
                     last_updated=datetime(2024, 1, 3, 12, 0, 0, tzinfo=UTC),
@@ -295,7 +291,7 @@ class TestConstructDag:
             }
         )
 
-        dag = construct_dag(source_freshness, state)
+        dag = construct_dag(source_freshness, state, OrchestraDbtSettings())
 
         assert "model.test_project.model_a" in dag.nodes
         # Model should be DIRTY since checksum doesn't match
@@ -322,16 +318,14 @@ class TestConstructDag:
         }
         monkeypatch.setattr(dag_module, "load_json", lambda _: manifest)
         monkeypatch.setattr(dag_module, "calculate_checksum", lambda *a, **k: "stable")
-        monkeypatch.setattr(
-            dag_module,
-            "load_orchestra_dbt_settings",
-            lambda: OrchestraDbtSettings(
-                integration_account_id="acct",
-                seed_state_orchestration=False,
-            ),
+        settings = OrchestraDbtSettings(
+            integration_account_id="acct",
+            seed_state_orchestration=False,
         )
 
-        dag = construct_dag(SourceFreshness(sources={}), StateApiModel(state={}))
+        dag = construct_dag(
+            SourceFreshness(sources={}), StateApiModel(state={}), settings
+        )
         node = dag.nodes["seed.test_project.my_seed"]
         assert isinstance(node, MaterialisationNode)
         assert node.freshness == Freshness.DIRTY
@@ -357,14 +351,10 @@ class TestConstructDag:
         }
         monkeypatch.setattr(dag_module, "load_json", lambda _: manifest)
         monkeypatch.setattr(dag_module, "calculate_checksum", lambda *a, **k: "stable")
-        monkeypatch.setattr(
-            dag_module,
-            "load_orchestra_dbt_settings",
-            lambda: OrchestraDbtSettings(
-                integration_account_id="acct",
-                seed_state_orchestration=True,
-                local_run=False,
-            ),
+        settings = OrchestraDbtSettings(
+            integration_account_id="acct",
+            seed_state_orchestration=True,
+            local_run=False,
         )
         asset_id = "acct.my_seed"
         state = StateApiModel(
@@ -377,7 +367,7 @@ class TestConstructDag:
             }
         )
 
-        dag = construct_dag(SourceFreshness(sources={}), state)
+        dag = construct_dag(SourceFreshness(sources={}), state, settings)
         node = dag.nodes["seed.test_project.my_seed"]
         assert isinstance(node, MaterialisationNode)
         assert node.freshness == Freshness.CLEAN
@@ -410,14 +400,10 @@ class TestConstructDag:
             "child_map": {},
         }
         monkeypatch.setattr(dag_module, "load_json", lambda _: manifest)
-        monkeypatch.setattr(
-            dag_module,
-            "load_orchestra_dbt_settings",
-            lambda: OrchestraDbtSettings(
-                integration_account_id="acct",
-                seed_state_orchestration=True,
-                local_run=False,
-            ),
+        settings = OrchestraDbtSettings(
+            integration_account_id="acct",
+            seed_state_orchestration=True,
+            local_run=False,
         )
         state = StateApiModel(
             state={
@@ -431,7 +417,7 @@ class TestConstructDag:
 
         project_dir = find_project_dir(["build", "--project-dir", "proj"])
         node = construct_dag(
-            SourceFreshness(sources={}), state, project_dir=project_dir
+            SourceFreshness(sources={}), state, settings, project_dir=project_dir
         ).nodes["seed.test_project.my_seed"]
         assert isinstance(node, MaterialisationNode)
         assert node.checksum == seed_digest
@@ -464,16 +450,14 @@ class TestConstructDag:
         }
         monkeypatch.setattr(dag_module, "load_json", lambda _: manifest)
         monkeypatch.setattr(dag_module, "calculate_checksum", lambda *a, **k: "stable")
-        monkeypatch.setattr(
-            dag_module,
-            "load_orchestra_dbt_settings",
-            lambda: OrchestraDbtSettings(
-                integration_account_id="acct",
-                local_run=False,
-            ),
+        settings = OrchestraDbtSettings(
+            integration_account_id="acct",
+            local_run=False,
         )
 
-        dag = construct_dag(SourceFreshness(sources={}), StateApiModel(state={}))
+        dag = construct_dag(
+            SourceFreshness(sources={}), StateApiModel(state={}), settings
+        )
 
         edge_froms = [e.from_ for e in dag.edges]
         assert "source.test_db.raw.events" in edge_froms

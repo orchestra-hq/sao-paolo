@@ -24,7 +24,7 @@ def stub_run(monkeypatch: pytest.MonkeyPatch) -> list[str]:
         "load_orchestra_dbt_settings",
         lambda: OrchestraDbtSettings(use_stateful=True, verify_relations_exist=True),
     )
-    monkeypatch.setattr(cli, "_validate_environment", lambda: None)
+    monkeypatch.setattr(cli, "_validate_environment", lambda _settings: None)
     monkeypatch.setattr(cli, "get_nodes_to_run", lambda *a, **k: None)
     # Tolerate added kwargs: this fixture must not break when a caller gains an option.
     monkeypatch.setattr(

@@ -28,10 +28,17 @@ def _account_from_connection_string(conn_str: str) -> str | None:
 
 
 class AzureStateBackend:
-    def __init__(self, account: str, container: str, key: str) -> None:
+    def __init__(
+        self,
+        account: str,
+        container: str,
+        key: str,
+        integration_account_id: str | None = None,
+    ) -> None:
         self._account = account
         self._container = container
         self._key = key
+        self._integration_account_id = integration_account_id
 
     def _get_client(self) -> BlobServiceClient:
         # Credential auth is lazy (no token is acquired until the first blob
@@ -108,7 +115,7 @@ class AzureStateBackend:
         except (ValidationError, ValueError) as e:
             raise StateLoadError(f"State blob at {uri} failed validation: {e}") from e
 
-        apply_integration_account_filter(state)
+        apply_integration_account_filter(state, self._integration_account_id)
         log_state_loaded("azure", state)
         return state
 
