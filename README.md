@@ -49,7 +49,7 @@ dbt v2 doesn't support every adapter that 1.x does; Postgres, for example, isn't
 State-aware orchestration works on dbt v2 as it does on 1.x, with these differences:
 
 - **Implicit source freshness** (sources with no `loaded_at_field` or `loaded_at_query`) comes from dbt v2's own metadata freshness, not Orchestra's fallbacks. The Databricks `DESCRIBE HISTORY` fallback is 1.x only. If your adapter can't report metadata freshness on v2 (DuckDB, for example), those sources are left out, and models that depend on them always run.
-- **[Verifying relations still exist](#verifying-relations-still-exist)** reads dbt's catalog from `dbt parse --write-catalog`, which costs one catalog pass per run, rather than the schema listings 1.x uses.
+- **[Verifying relations still exist](#verifying-relations-still-exist)** reads dbt's catalog from `dbt parse --write-catalog`, which costs one catalog pass whenever there are nodes to verify, rather than the schema listings 1.x uses.
 
 ## Running
 
