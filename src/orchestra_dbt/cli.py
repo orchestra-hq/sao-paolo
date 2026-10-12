@@ -162,7 +162,7 @@ def main(args: tuple[str, ...]) -> None:
         sys.exit(0)
 
     try:
-        settings = load_orchestra_dbt_settings()
+        settings = load_orchestra_dbt_settings(project_dir)
     except ValueError as exc:
         log_error(str(exc))
         sys.exit(1)

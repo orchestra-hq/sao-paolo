@@ -23,7 +23,9 @@ def stub_run(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     monkeypatch.setattr(
         cli,
         "load_orchestra_dbt_settings",
-        lambda: OrchestraDbtSettings(use_stateful=True, verify_relations_exist=True),
+        lambda _project_dir: OrchestraDbtSettings(
+            use_stateful=True, verify_relations_exist=True
+        ),
     )
     monkeypatch.setattr(cli, "_validate_environment", lambda _settings: None)
     monkeypatch.setattr(cli, "get_nodes_to_run", lambda *a, **k: None)
@@ -76,7 +78,9 @@ def test_gate_is_skipped_when_the_setting_is_disabled(
     monkeypatch.setattr(
         cli,
         "load_orchestra_dbt_settings",
-        lambda: OrchestraDbtSettings(use_stateful=True, verify_relations_exist=False),
+        lambda _project_dir: OrchestraDbtSettings(
+            use_stateful=True, verify_relations_exist=False
+        ),
     )
 
     _run()
@@ -94,7 +98,7 @@ def test_warns_when_scoping_is_on_but_the_selection_could_not_be_resolved(
     monkeypatch.setattr(
         cli,
         "load_orchestra_dbt_settings",
-        lambda: OrchestraDbtSettings(
+        lambda _project_dir: OrchestraDbtSettings(
             use_stateful=True, scope_source_freshness_to_selection=True
         ),
     )

@@ -4,10 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
-from .project_discovery import (
-    find_pyproject_directory,
-    read_orchestra_dbt_tool_config,
-)
+from .project_discovery import find_orchestra_dbt_config
 
 
 class OrchestraDbtSettings(BaseModel):
@@ -101,11 +98,12 @@ def _merge_env_overrides(settings: OrchestraDbtSettings) -> OrchestraDbtSettings
     return OrchestraDbtSettings.model_validate(settings.model_dump())
 
 
-def load_orchestra_dbt_settings(cwd: Path | None = None) -> OrchestraDbtSettings:
-    pyproject_dir = find_pyproject_directory(cwd or Path.cwd())
-    raw: dict = {}
-    if pyproject_dir is not None:
-        raw = read_orchestra_dbt_tool_config(pyproject_dir)
+def load_orchestra_dbt_settings(project_dir: Path) -> OrchestraDbtSettings:
+    """Settings from the dbt project's pyproject.toml, else the cwd's, with env overrides."""
+    found = find_orchestra_dbt_config(project_dir) or find_orchestra_dbt_config(
+        Path.cwd()
+    )
+    pyproject_dir, raw = found or (None, {})
     try:
         settings = _merge_env_overrides(OrchestraDbtSettings.model_validate(raw))
     except ValidationError as exc:

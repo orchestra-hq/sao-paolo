@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from pathlib import Path
 
 import click
 
@@ -16,7 +17,8 @@ def _log(msg: str, fg: str | None, error: bool = False) -> None:
 
 
 def log_debug(msg) -> None:
-    if load_orchestra_dbt_settings().debug:
+    # The dbt project dir isn't known here, so only the cwd's pyproject.toml can enable this.
+    if load_orchestra_dbt_settings(Path.cwd()).debug:
         _log(msg, None)
 
 
