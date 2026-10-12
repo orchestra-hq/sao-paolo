@@ -4,6 +4,7 @@ Both regressions guarded here silently disable the feature while every other tes
 and the integration tests that would catch them are CI/Postgres-gated.
 """
 
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -31,6 +32,9 @@ def stub_run(monkeypatch: pytest.MonkeyPatch) -> list[str]:
         cli, "get_source_freshness", lambda **k: SourceFreshness(sources={})
     )
     monkeypatch.setattr(cli, "load_state", lambda *a, **k: StateApiModel(state={}))
+    monkeypatch.setattr(
+        cli, "find_packages_install_path", lambda *a: Path("dbt_packages")
+    )
     monkeypatch.setattr(
         cli, "construct_dag", lambda *a, **k: ParsedDag(nodes={}, edges=[])
     )
