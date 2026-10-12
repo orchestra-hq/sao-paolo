@@ -604,6 +604,7 @@ class TestEndToEndFromStateThroughTheGate:
                 "model.test_project.readable_name": {
                     "resource_type": "model",
                     "checksum": {"checksum": "abc123"},
+                    "raw_code": "",
                     "config": {},
                     "package_name": "test_project",
                     "original_file_path": "models/readable_name.sql",
@@ -679,6 +680,7 @@ class TestEndToEndFromStateThroughTheGate:
                 "model.test_project.readable_name": {
                     "resource_type": "model",
                     "checksum": {"checksum": "abc123"},
+                    "raw_code": "",
                     "config": {},
                     "package_name": "test_project",
                     "original_file_path": "models/readable_name.sql",
