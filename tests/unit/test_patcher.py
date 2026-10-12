@@ -103,8 +103,8 @@ class TestPatchSeedProperties:
         "seed_1": MaterialisationNode(
             asset_external_id="integration_account_id.seed_1",
             checksum="checksum_1",
-            dbt_path="dbt_path_1",
-            file_path="seeds/some_path/seed_1.csv",
+            dbt_path="seeds/seed_1.csv",
+            file_path="seeds/seed_1.csv",
             freshness_config=FreshnessConfig(),
             freshness=Freshness.CLEAN,
             sources={},
@@ -114,8 +114,8 @@ class TestPatchSeedProperties:
         "seed_2": MaterialisationNode(
             asset_external_id="integration_account_id.seed_2",
             checksum="checksum_2",
-            dbt_path="dbt_path_2",
-            file_path="seed_2.csv",
+            dbt_path="seeds/seed_2.csv",
+            file_path="seeds/seed_2.csv",
             freshness_config=FreshnessConfig(),
             freshness=Freshness.CLEAN,
             sources={},
@@ -139,9 +139,7 @@ class TestPatchSeedProperties:
         seeds_properties_file.write_text(
             yaml.safe_dump(self.EXISTING_SEED_PROPERTIES), encoding="utf-8"
         )
-        patch_seed_properties(
-            nodes_to_reuse={}, seed_properties_file_path=str(seeds_properties_file)
-        )
+        patch_seed_properties(nodes_to_reuse={}, project_dir=tmp_path)
         assert (
             yaml.safe_load(seeds_properties_file.read_text(encoding="utf-8"))
             == self.EXISTING_SEED_PROPERTIES
@@ -192,7 +190,7 @@ class TestPatchSeedProperties:
 
         patch_seed_properties(
             nodes_to_reuse=self.SEEDS_TO_REUSE,
-            seed_properties_file_path=str(seeds_properties_file),
+            project_dir=tmp_path,
         )
 
         assert yaml.safe_load(seeds_properties_file.read_text(encoding="utf-8")) == {
@@ -217,7 +215,7 @@ class TestPatchSeedProperties:
         seeds_properties_file.write_text("invalid yaml", encoding="utf-8")
         patch_seed_properties(
             nodes_to_reuse=self.SEEDS_TO_REUSE,
-            seed_properties_file_path=str(seeds_properties_file),
+            project_dir=tmp_path,
         )
         assert seeds_properties_file.read_text(encoding="utf-8") == "invalid yaml"
         assert (
@@ -234,7 +232,7 @@ class TestPatchSeedProperties:
 
         patch_seed_properties(
             nodes_to_reuse=self.SEEDS_TO_REUSE,
-            seed_properties_file_path=str(seeds_properties_file),
+            project_dir=tmp_path,
         )
 
         saved = yaml.safe_load(seeds_properties_file.read_text(encoding="utf-8"))
@@ -265,7 +263,7 @@ class TestPatchSeedProperties:
 
         patch_seed_properties(
             nodes_to_reuse=self.SEEDS_TO_REUSE,
-            seed_properties_file_path=str(seeds_properties_file),
+            project_dir=tmp_path,
         )
 
         saved = yaml.safe_load(seeds_properties_file.read_text(encoding="utf-8"))
@@ -284,9 +282,63 @@ class TestPatchSeedProperties:
 
         patch_seed_properties(
             nodes_to_reuse=self.SEEDS_TO_REUSE,
-            seed_properties_file_path=str(seeds_properties_file),
+            project_dir=tmp_path,
         )
 
         output = capsys.readouterr().out
         assert "Unknown error updating seed 'seed_1'" in output
         assert "'config' key must be a dictionary." in output
+
+    def test_patches_the_seeds_own_properties_file(self, tmp_path) -> None:
+        schema_file = tmp_path / "data" / "schema.yml"
+        schema_file.parent.mkdir()
+        original = yaml.safe_dump(
+            {"seeds": [{"name": "seed_1", "description": "Seed one."}]}
+        )
+        schema_file.write_text(original, encoding="utf-8")
+        seed_1 = self.SEEDS_TO_REUSE["seed_1"].model_copy(
+            update={
+                "dbt_path": "data/seed_1.csv",
+                "file_path": "data/seed_1.csv",
+                "patch_path": "my_project://data/schema.yml",
+            }
+        )
+
+        snapshots = patch_seed_properties({"seed_1": seed_1}, project_dir=tmp_path)
+
+        saved = yaml.safe_load(schema_file.read_text(encoding="utf-8"))
+        assert [seed["name"] for seed in saved["seeds"]] == ["seed_1"]
+        assert saved["seeds"][0]["config"]["tags"] == [ORCHESTRA_REUSED_NODE]
+        assert not (tmp_path / "data" / "properties.yml").exists()
+        assert snapshots == {schema_file: original.encode()}
+
+    def test_resolves_patch_path_inside_a_package(self, tmp_path) -> None:
+        schema_file = tmp_path / "dbt_packages" / "pkg" / "seeds" / "schema.yml"
+        schema_file.parent.mkdir(parents=True)
+        schema_file.write_text(
+            yaml.safe_dump({"seeds": [{"name": "seed_1"}]}), encoding="utf-8"
+        )
+        seed_1 = self.SEEDS_TO_REUSE["seed_1"].model_copy(
+            update={
+                "file_path": "dbt_packages/pkg/seeds/seed_1.csv",
+                "patch_path": "pkg://seeds/schema.yml",
+            }
+        )
+
+        patch_seed_properties({"seed_1": seed_1}, project_dir=tmp_path)
+
+        saved = yaml.safe_load(schema_file.read_text(encoding="utf-8"))
+        assert saved["seeds"][0]["config"]["tags"] == [ORCHESTRA_REUSED_NODE]
+
+    def test_writes_next_to_the_csv_without_a_properties_file(self, tmp_path) -> None:
+        seed_1 = self.SEEDS_TO_REUSE["seed_1"].model_copy(
+            update={"dbt_path": "data/seed_1.csv", "file_path": "data/seed_1.csv"}
+        )
+
+        snapshots = patch_seed_properties({"seed_1": seed_1}, project_dir=tmp_path)
+
+        properties_file = tmp_path / "data" / "properties.yml"
+        saved = yaml.safe_load(properties_file.read_text(encoding="utf-8"))
+        assert saved["seeds"][0]["name"] == "seed_1"
+        assert not (tmp_path / "seeds").exists()
+        assert snapshots == {properties_file: None}

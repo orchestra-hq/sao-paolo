@@ -12,25 +12,21 @@ _EXCLUDE_FLAGS = frozenset({"--exclude"})
 _TEST_RUNNING_SUBCOMMANDS = frozenset({"build", "test"})
 
 
-def snapshot_selectors_file(
-    selectors_file: Path = Path("selectors.yml"),
-) -> bytes | None:
+def snapshot_file(file_path: Path) -> bytes | None:
     try:
-        with open(selectors_file, "rb") as f:
+        with open(file_path, "rb") as f:
             return f.read()
     except FileNotFoundError:
         return None
 
 
-def restore_selectors_file(
-    snapshot: bytes | None, selectors_file: Path = Path("selectors.yml")
-) -> None:
+def restore_file(snapshot: bytes | None, file_path: Path) -> None:
     if snapshot is not None:
-        with open(selectors_file, "wb") as f:
+        with open(file_path, "wb") as f:
             f.write(snapshot)
         return
     try:
-        os.remove(selectors_file)
+        os.remove(file_path)
     except FileNotFoundError:
         pass
 

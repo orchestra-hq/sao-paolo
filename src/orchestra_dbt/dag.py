@@ -151,6 +151,7 @@ def construct_dag(
                         else None
                     ),
                     relation_name=relation_name,
+                    patch_path=node.get("patch_path"),
                 )
 
                 for dep in depends_on_nodes:
