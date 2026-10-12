@@ -64,6 +64,7 @@ def construct_dag(
     manifest_override: str | None = None,
     project_dir: Path = Path("."),
     target_dir: Path = Path("target"),
+    packages_install_path: Path = Path("dbt_packages"),
 ) -> ParsedDag:
     manifest = load_json(manifest_override or target_dir / "manifest.json")
 
@@ -105,7 +106,9 @@ def construct_dag(
                 )
                 depends_on_nodes = node.get("depends_on", {}).get("nodes", [])
                 if from_external_package:
-                    file_path = f"dbt_packages/{node['package_name']}/{dbt_path}"
+                    file_path = str(
+                        packages_install_path / node["package_name"] / dbt_path
+                    )
                 else:
                     file_path = dbt_path
 

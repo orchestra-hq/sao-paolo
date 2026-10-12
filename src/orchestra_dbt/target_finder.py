@@ -1,6 +1,9 @@
 import os
 from pathlib import Path
 
+from .compatibility import is_dbt_v2
+from .utils import load_yaml
+
 
 def find_target_in_args(args: list[str]) -> str | None:
     """Resolve the dbt target this run will use, matching click's real parsing rules.
@@ -56,4 +59,21 @@ def find_target_dir(args: list[str], project_dir: Path) -> Path:
     """Where dbt writes artifacts; a relative target path sits under the project dir."""
     return project_dir / (
         _dbt_setting(args, "--target-path", "TARGET_PATH") or "target"
+    )
+
+
+def find_packages_install_path(args: list[str], project_dir: Path) -> Path:
+    """Where dbt installs packages, relative to the project dir unless absolute.
+
+    Only dbt 2.x takes a flag or env var for this; dbt 1.x reads dbt_project.yml alone.
+    """
+    if is_dbt_v2() and (
+        configured := _dbt_setting(
+            args, "--packages-install-path", "PACKAGES_INSTALL_PATH"
+        )
+    ):
+        return Path(configured)
+    return Path(
+        load_yaml(project_dir / "dbt_project.yml").get("packages-install-path")
+        or "dbt_packages"
     )

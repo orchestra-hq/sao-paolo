@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 from hashlib import sha256
+from pathlib import Path
 
 import pytest
 
@@ -436,6 +437,53 @@ class TestConstructDag:
         assert isinstance(node, MaterialisationNode)
         assert node.checksum == seed_digest
         assert node.freshness == Freshness.CLEAN
+
+    def test_construct_dag_reads_package_seed_under_packages_install_path(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ) -> None:
+        """A package installed under a custom `packages-install-path` is read from
+        there, and its `file_path` points there so patching can match it."""
+        seed_content = b"id\n1\n"
+        seed_digest = sha256(seed_content).hexdigest()
+        seed_dir = tmp_path / "vendor" / "my_package" / "seeds"
+        seed_dir.mkdir(parents=True)
+        (seed_dir / "pkg_seed.csv").write_bytes(seed_content)
+
+        manifest = {
+            "metadata": {"project_name": "test_project"},
+            "nodes": {
+                "seed.my_package.pkg_seed": {
+                    "resource_type": "seed",
+                    "checksum": {"checksum": "abc"},
+                    "config": {},
+                    "package_name": "my_package",
+                    "original_file_path": "seeds/pkg_seed.csv",
+                    "relation_name": "pkg_seed",
+                    "depends_on": {"nodes": []},
+                },
+            },
+            "child_map": {},
+        }
+        monkeypatch.setattr(dag_module, "load_json", lambda _: manifest)
+        monkeypatch.setattr(
+            dag_module,
+            "load_orchestra_dbt_settings",
+            lambda: OrchestraDbtSettings(
+                integration_account_id="acct",
+                seed_state_orchestration=True,
+                local_run=False,
+            ),
+        )
+
+        node = construct_dag(
+            SourceFreshness(sources={}),
+            StateApiModel(state={}),
+            project_dir=tmp_path,
+            packages_install_path=Path("vendor"),
+        ).nodes["seed.my_package.pkg_seed"]
+        assert isinstance(node, MaterialisationNode)
+        assert node.checksum == seed_digest
+        assert node.file_path == "vendor/my_package/seeds/pkg_seed.csv"
 
     def test_construct_dag_skips_function_dependency(
         self, monkeypatch: pytest.MonkeyPatch

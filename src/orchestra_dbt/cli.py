@@ -43,7 +43,11 @@ from .state import (
     update_state,
 )
 from .state_types import StateBackendKind
-from .target_finder import find_project_dir, find_target_dir
+from .target_finder import (
+    find_packages_install_path,
+    find_project_dir,
+    find_target_dir,
+)
 
 
 def _usage_program() -> str:
@@ -213,7 +217,11 @@ def main(args: tuple[str, ...]) -> None:
         state_load_ok = False
 
     parsed_dag = construct_dag(
-        source_freshness, state, project_dir=project_dir, target_dir=target_dir
+        source_freshness,
+        state,
+        project_dir=project_dir,
+        target_dir=target_dir,
+        packages_install_path=find_packages_install_path(list(dbt_args), project_dir),
     )
 
     # Propagate freshness config to upstream nodes
