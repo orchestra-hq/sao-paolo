@@ -1,5 +1,6 @@
 import threading
 from datetime import UTC, datetime
+from pathlib import Path
 
 from ..compatibility import (
     dbt_core_import_error_message,
@@ -34,8 +35,14 @@ def get_args_for_source_freshness(
     target = find_target_in_args(list(user_args))
     if target:
         args.extend(["--target", target])
-    # Otherwise freshness resolves a different profile than the user's run.
-    for flag in ("--profiles-dir", "--profile", "--vars"):
+    # Otherwise freshness resolves a different project or profile than the user's run.
+    for flag in (
+        "--project-dir",
+        "--target-path",
+        "--profiles-dir",
+        "--profile",
+        "--vars",
+    ):
         if (value := find_flag_value(list(user_args), flag)) is not None:
             args.extend([flag, value])
     if scope_to_selection and selectors_to_run:
@@ -55,6 +62,7 @@ def _get_source_freshness_v2(
     require_explicit_source_freshness: bool,
     scope_to_selection: bool,
     selectors_to_run: list[str] | None,
+    target_dir: Path,
 ) -> SourceFreshness | None:
     """dbt 2.x has no `dbt.task.freshness` to patch, so run its own `dbt source freshness`."""
     from dbt.cli.main import dbtRunner
@@ -63,7 +71,7 @@ def _get_source_freshness_v2(
         # 2.x's sources.json omits loaded_at_*; the manifest has them.
         implicit = {
             unique_id: "source:" + ".".join(source["fqn"])
-            for unique_id, source in load_json("target/manifest.json")[
+            for unique_id, source in load_json(target_dir / "manifest.json")[
                 "sources"
             ].items()
             if not any(
@@ -92,7 +100,7 @@ def _get_source_freshness_v2(
         # sources fail that.
         if result.exception:
             raise RuntimeError(f"dbt v2 source freshness failed: {result.exception}")
-        results = load_json("target/sources.json")["results"]
+        results = load_json(target_dir / "sources.json")["results"]
         excluded: set[str] = set()
         if require_explicit_source_freshness:
             excluded = {
@@ -123,6 +131,7 @@ def get_source_freshness(
     require_explicit_source_freshness: bool = False,
     scope_to_selection: bool = False,
     selectors_to_run: list[str] | None = None,
+    target_dir: Path = Path("target"),
 ) -> SourceFreshness | None:
     log_info("Calculating source freshness")
     if is_dbt_v2():
@@ -131,6 +140,7 @@ def get_source_freshness(
             require_explicit_source_freshness,
             scope_to_selection,
             selectors_to_run,
+            target_dir,
         )
 
     try:
@@ -214,7 +224,7 @@ def get_source_freshness(
         return SourceFreshness(
             sources={
                 source["unique_id"]: source["max_loaded_at"]
-                for source in load_json("target/sources.json")["results"]
+                for source in load_json(target_dir / "sources.json")["results"]
                 if source["unique_id"] not in sources_without_explicit_freshness
             }
         )

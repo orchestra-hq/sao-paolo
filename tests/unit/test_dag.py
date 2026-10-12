@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from hashlib import sha256
 
 import pytest
 
@@ -16,6 +17,7 @@ from src.orchestra_dbt.models import (
     StateApiModel,
     StateItem,
 )
+from src.orchestra_dbt.target_finder import find_project_dir
 
 
 class TestCalculateFreshnessOnNode:
@@ -380,6 +382,60 @@ class TestConstructDag:
         assert isinstance(node, MaterialisationNode)
         assert node.freshness == Freshness.CLEAN
         assert node.reason == "Seed in same state as last run."
+
+    def test_construct_dag_reads_seed_under_project_dir(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ) -> None:
+        """`orc dbt build --project-dir proj` from the parent: the manifest's
+        `original_file_path` is project-relative, so the seed is read under `proj`."""
+        seed_content = b"id\n1\n"
+        seed_digest = sha256(seed_content).hexdigest()
+        (tmp_path / "proj" / "seeds").mkdir(parents=True)
+        (tmp_path / "proj" / "seeds" / "my_seed.csv").write_bytes(seed_content)
+        monkeypatch.chdir(tmp_path)
+
+        manifest = {
+            "metadata": {"project_name": "test_project"},
+            "nodes": {
+                "seed.test_project.my_seed": {
+                    "resource_type": "seed",
+                    "checksum": {"checksum": "abc"},
+                    "config": {},
+                    "package_name": "test_project",
+                    "original_file_path": "seeds/my_seed.csv",
+                    "relation_name": "my_seed",
+                    "depends_on": {"nodes": []},
+                },
+            },
+            "child_map": {},
+        }
+        monkeypatch.setattr(dag_module, "load_json", lambda _: manifest)
+        monkeypatch.setattr(
+            dag_module,
+            "load_orchestra_dbt_settings",
+            lambda: OrchestraDbtSettings(
+                integration_account_id="acct",
+                seed_state_orchestration=True,
+                local_run=False,
+            ),
+        )
+        state = StateApiModel(
+            state={
+                "acct.my_seed": StateItem(
+                    last_updated=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
+                    checksum=seed_digest,
+                    sources={},
+                ),
+            }
+        )
+
+        project_dir = find_project_dir(["build", "--project-dir", "proj"])
+        node = construct_dag(
+            SourceFreshness(sources={}), state, project_dir=project_dir
+        ).nodes["seed.test_project.my_seed"]
+        assert isinstance(node, MaterialisationNode)
+        assert node.checksum == seed_digest
+        assert node.freshness == Freshness.CLEAN
 
     def test_construct_dag_skips_function_dependency(
         self, monkeypatch: pytest.MonkeyPatch

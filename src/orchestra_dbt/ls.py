@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from typing import NamedTuple
 
 from .compatibility import dbt_core_import_error_message
@@ -63,19 +64,21 @@ def get_args_for_ls(user_args: tuple) -> list[str]:
     return command_args + resource_type_args + list_user_args + output_args
 
 
-def _nodes_from_fqns(fqns: list[str]) -> NodesToRun:
+def _nodes_from_fqns(fqns: list[str], target_dir: Path) -> NodesToRun:
     """dbt 2.x's `ls` doesn't yet respect the output format args, so it always
     returns fqns; map them to paths through the manifest."""
     path_by_fqn = {
         ".".join(node["fqn"]): node["original_file_path"]
-        for node in load_json("target/manifest.json")["nodes"].values()
+        for node in load_json(target_dir / "manifest.json")["nodes"].values()
         # A singular test can share a root model's fqn; ls only returned these types.
         if node["resource_type"] in RESOURCE_TYPES_TO_LS
     }
     return NodesToRun(paths=[path_by_fqn[fqn] for fqn in fqns], selectors=fqns)
 
 
-def get_nodes_to_run(args: tuple) -> NodesToRun | None:
+def get_nodes_to_run(
+    args: tuple, target_dir: Path = Path("target")
+) -> NodesToRun | None:
     try:
         from dbt.cli.main import (
             dbtRunner,
@@ -96,7 +99,7 @@ def get_nodes_to_run(args: tuple) -> NodesToRun | None:
             isinstance(item, str) for item in res.result
         ):
             if not all(item.startswith("{") for item in res.result):
-                return _nodes_from_fqns(res.result)
+                return _nodes_from_fqns(res.result, target_dir)
             # One JSON object per node, carrying the keys asked for above. A missing
             # key raises, which the handler below turns into "couldn't resolve" --
             # better than silently returning two lists that disagree.

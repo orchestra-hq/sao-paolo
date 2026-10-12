@@ -1,5 +1,6 @@
 from datetime import datetime
 from functools import lru_cache
+from pathlib import Path
 from typing import cast
 
 from .logger import log_warn
@@ -60,16 +61,18 @@ def save_state(state: StateApiModel, updated_asset_external_ids: set[str]) -> No
 
 
 @lru_cache
-def _load_run_results() -> dict:
+def _load_run_results(target_dir: Path) -> dict:
     try:
-        return load_json(path="target/run_results.json")
+        return load_json(target_dir / "run_results.json")
     except FileNotFoundError:
         return {}
 
 
-def get_last_updated_from_run_results(node_id: str) -> datetime | None:
+def get_last_updated_from_run_results(
+    node_id: str, target_dir: Path = Path("target")
+) -> datetime | None:
     try:
-        for r in _load_run_results().get("results", []):
+        for r in _load_run_results(target_dir).get("results", []):
             if r["unique_id"] == node_id and r["status"] == "success":
                 return r["timing"][-1]["completed_at"]
     except Exception as e:
@@ -78,7 +81,10 @@ def get_last_updated_from_run_results(node_id: str) -> datetime | None:
 
 
 def update_state(
-    state: StateApiModel, parsed_dag: ParsedDag, source_freshness: SourceFreshness
+    state: StateApiModel,
+    parsed_dag: ParsedDag,
+    source_freshness: SourceFreshness,
+    target_dir: Path = Path("target"),
 ) -> set[str]:
     updated_asset_external_ids: set[str] = set()
     for node_id, node in parsed_dag.nodes.items():
@@ -86,7 +92,9 @@ def update_state(
             continue
 
         materialisation_node: MaterialisationNode = cast(MaterialisationNode, node)
-        last_updated_from_run_results = get_last_updated_from_run_results(node_id)
+        last_updated_from_run_results = get_last_updated_from_run_results(
+            node_id, target_dir
+        )
         if not last_updated_from_run_results:
             continue
 
