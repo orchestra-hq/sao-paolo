@@ -13,7 +13,7 @@ _TEST_RUNNING_SUBCOMMANDS = frozenset({"build", "test"})
 
 
 def snapshot_selectors_file(
-    selectors_file: Path = Path("selectors.yml"),
+    selectors_file: Path,
 ) -> bytes | None:
     try:
         with open(selectors_file, "rb") as f:
@@ -22,9 +22,7 @@ def snapshot_selectors_file(
         return None
 
 
-def restore_selectors_file(
-    snapshot: bytes | None, selectors_file: Path = Path("selectors.yml")
-) -> None:
+def restore_selectors_file(snapshot: bytes | None, selectors_file: Path) -> None:
     if snapshot is not None:
         with open(selectors_file, "wb") as f:
             f.write(snapshot)
@@ -52,9 +50,7 @@ def _get_reused_selector_definition(existing_selector: str) -> dict[str, Any]:
     }
 
 
-def update_selectors_yaml(
-    selector_tag: str, selectors_file: Path = Path("selectors.yml")
-) -> bool:
+def update_selectors_yaml(selector_tag: str, selectors_file: Path) -> bool:
     try:
         selectors_yml = load_yaml(selectors_file)
     except FileNotFoundError:
@@ -168,9 +164,7 @@ def _command_runs_tests(cmd: list[str]) -> bool:
     return len(cmd) > 1 and cmd[1] in _TEST_RUNNING_SUBCOMMANDS
 
 
-def modify_dbt_command(
-    cmd: list[str], selectors_file: Path = Path("selectors.yml")
-) -> list[str]:
+def modify_dbt_command(cmd: list[str], selectors_file: Path) -> list[str]:
     if "--selector" in cmd:
         success_updating_selectors = False
         try:

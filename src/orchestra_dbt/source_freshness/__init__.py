@@ -128,10 +128,10 @@ def _get_source_freshness_v2(
 
 def get_source_freshness(
     user_args: tuple | list[str],
+    target_dir: Path,
     require_explicit_source_freshness: bool = False,
     scope_to_selection: bool = False,
     selectors_to_run: list[str] | None = None,
-    target_dir: Path = Path("target"),
 ) -> SourceFreshness | None:
     log_info("Calculating source freshness")
     if is_dbt_v2():

@@ -40,6 +40,8 @@ def test_e2e(monkeypatch: pytest.MonkeyPatch) -> None:
     parsed_dag = construct_dag(
         source_freshness=SourceFreshness(sources={}),
         state=StateApiModel.model_validate(json.loads(local_state)),
+        project_dir=Path("."),
+        target_dir=Path("target"),
         manifest_override="local_manifest.json",
     )
 

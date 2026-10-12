@@ -4,7 +4,7 @@ from pathlib import Path
 from .utils import load_json
 
 
-def is_warn(target_dir: Path = Path("target")) -> None:
+def is_warn(target_dir: Path) -> None:
     status = "SUCCEEDED"
 
     with suppress(Exception):

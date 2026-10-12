@@ -42,7 +42,7 @@ concurrent_selector_repro:
     monkeypatch.chdir(_REPRO_PROJECT)
     monkeypatch.setenv("DBT_PROFILES_DIR", str(tmp_path))
 
-    nodes = get_nodes_to_run(("--selector", "selector_x"))
+    nodes = get_nodes_to_run(("--selector", "selector_x"), _REPRO_PROJECT / "target")
 
     assert nodes is not None
     assert nodes.paths == ["models/model_a.sql"]

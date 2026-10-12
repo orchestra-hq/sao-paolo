@@ -248,7 +248,7 @@ class TestUpdateState:
         _load_run_results.cache_clear()
 
     @patch("src.orchestra_dbt.state.load_json")
-    def test_update_state_with_model_and_run_results(self, mock_load_json):
+    def test_update_state_with_model_and_run_results(self, mock_load_json, tmp_path):
         """Test updating state with a model node that has successful run results."""
         mock_load_json.return_value = {
             "results": [
@@ -281,7 +281,7 @@ class TestUpdateState:
         )
         source_freshness = SourceFreshness(sources={})
 
-        update_state(state, parsed_dag, source_freshness)
+        update_state(state, parsed_dag, source_freshness, tmp_path)
 
         assert "model.test_project.model_a" in state.state
         assert state.state["model.test_project.model_a"].checksum == "abc123"
@@ -291,7 +291,7 @@ class TestUpdateState:
         assert state.state["model.test_project.model_a"].sources == {}
 
     @patch("src.orchestra_dbt.state.load_json")
-    def test_update_state_with_source_parents(self, mock_load_json):
+    def test_update_state_with_source_parents(self, mock_load_json, tmp_path):
         """Test updating state with a model that has source parents."""
         mock_load_json.return_value = {
             "results": [
@@ -336,7 +336,7 @@ class TestUpdateState:
             }
         )
 
-        update_state(state, parsed_dag, source_freshness)
+        update_state(state, parsed_dag, source_freshness, tmp_path)
 
         assert "model.test_project.model_a" in state.state
         assert state.state["model.test_project.model_a"].sources == {
@@ -346,7 +346,9 @@ class TestUpdateState:
         }
 
     @patch("src.orchestra_dbt.state.load_json")
-    def test_update_state_skips_model_without_run_results(self, mock_load_json):
+    def test_update_state_skips_model_without_run_results(
+        self, mock_load_json, tmp_path
+    ):
         """Test that models without run results are skipped."""
         mock_load_json.return_value = {"results": []}
 
@@ -368,12 +370,14 @@ class TestUpdateState:
         )
         source_freshness = SourceFreshness(sources={})
 
-        update_state(state, parsed_dag, source_freshness)
+        update_state(state, parsed_dag, source_freshness, tmp_path)
 
         assert state.state == {}
 
     @patch("src.orchestra_dbt.state.load_json")
-    def test_update_state_skips_model_with_failed_status(self, mock_load_json):
+    def test_update_state_skips_model_with_failed_status(
+        self, mock_load_json, tmp_path
+    ):
         """Test that models with failed status are skipped."""
         mock_load_json.return_value = {
             "results": [
@@ -406,12 +410,12 @@ class TestUpdateState:
         )
         source_freshness = SourceFreshness(sources={})
 
-        update_state(state, parsed_dag, source_freshness)
+        update_state(state, parsed_dag, source_freshness, tmp_path)
 
         assert state.state == {}
 
     @patch("src.orchestra_dbt.state.load_json")
-    def test_update_state_skips_non_model_nodes(self, mock_load_json):
+    def test_update_state_skips_non_model_nodes(self, mock_load_json, tmp_path):
         """Test that non-model nodes (like sources) are skipped."""
         mock_load_json.return_value = {
             "results": [
@@ -435,12 +439,12 @@ class TestUpdateState:
         )
         source_freshness = SourceFreshness(sources={})
 
-        update_state(state, parsed_dag, source_freshness)
+        update_state(state, parsed_dag, source_freshness, tmp_path)
 
         assert state.state == {}
 
     @patch("src.orchestra_dbt.state.load_json")
-    def test_update_state_with_multiple_models(self, mock_load_json):
+    def test_update_state_with_multiple_models(self, mock_load_json, tmp_path):
         """Test updating state with multiple model nodes."""
         mock_load_json.return_value = {
             "results": [
@@ -491,7 +495,7 @@ class TestUpdateState:
         )
         source_freshness = SourceFreshness(sources={})
 
-        update_state(state, parsed_dag, source_freshness)
+        update_state(state, parsed_dag, source_freshness, tmp_path)
 
         assert len(state.state) == 2
         assert "model.test_project.model_a" in state.state
@@ -500,7 +504,7 @@ class TestUpdateState:
         assert state.state["model.test_project.model_b"].checksum == "def456"
 
     @patch("src.orchestra_dbt.state.load_json")
-    def test_update_state_with_multiple_source_parents(self, mock_load_json):
+    def test_update_state_with_multiple_source_parents(self, mock_load_json, tmp_path):
         """Test updating state with a model that has multiple source parents."""
         mock_load_json.return_value = {
             "results": [
@@ -553,7 +557,7 @@ class TestUpdateState:
             }
         )
 
-        update_state(state, parsed_dag, source_freshness)
+        update_state(state, parsed_dag, source_freshness, tmp_path)
 
         assert "model.test_project.model_a" in state.state
         assert len(state.state["model.test_project.model_a"].sources) == 2
@@ -567,7 +571,7 @@ class TestUpdateState:
         )
 
     @patch("src.orchestra_dbt.state.load_json")
-    def test_update_state_skips_source_not_in_freshness(self, mock_load_json):
+    def test_update_state_skips_source_not_in_freshness(self, mock_load_json, tmp_path):
         """Test that source parents not in source_freshness are skipped."""
         mock_load_json.return_value = {
             "results": [
@@ -618,7 +622,7 @@ class TestUpdateState:
             }
         )
 
-        update_state(state, parsed_dag, source_freshness)
+        update_state(state, parsed_dag, source_freshness, tmp_path)
 
         assert "model.test_project.model_a" in state.state
         # Only table1 should be included since table2 is not in source_freshness
@@ -633,7 +637,7 @@ class TestUpdateState:
         )
 
     @patch("src.orchestra_dbt.state.load_json")
-    def test_update_state_overwrites_existing_state(self, mock_load_json):
+    def test_update_state_overwrites_existing_state(self, mock_load_json, tmp_path):
         """Test that update_state overwrites existing state entries."""
         mock_load_json.return_value = {
             "results": [
@@ -675,7 +679,7 @@ class TestUpdateState:
         )
         source_freshness = SourceFreshness(sources={})
 
-        update_state(state, parsed_dag, source_freshness)
+        update_state(state, parsed_dag, source_freshness, tmp_path)
 
         assert state.state["model.test_project.model_a"].checksum == "new_checksum"
         assert state.state["model.test_project.model_a"].last_updated == datetime(
@@ -683,7 +687,7 @@ class TestUpdateState:
         )
 
     @patch("src.orchestra_dbt.state.load_json")
-    def test_update_state_skips_model_parents(self, mock_load_json):
+    def test_update_state_skips_model_parents(self, mock_load_json, tmp_path):
         """Test that model parents (not sources) are not included in sources dict."""
         mock_load_json.return_value = {
             "results": [
@@ -731,14 +735,14 @@ class TestUpdateState:
         )
         source_freshness = SourceFreshness(sources={})
 
-        update_state(state, parsed_dag, source_freshness)
+        update_state(state, parsed_dag, source_freshness, tmp_path)
 
         assert "model.test_project.model_b" in state.state
         # model_a is a parent but not a source, so it shouldn't be in sources dict
         assert state.state["model.test_project.model_b"].sources == {}
 
     @patch("src.orchestra_dbt.state.load_json")
-    def test_update_state_handles_missing_timing(self, mock_load_json):
+    def test_update_state_handles_missing_timing(self, mock_load_json, tmp_path):
         """Test that models with missing timing data are skipped."""
         mock_load_json.return_value = {
             "results": [
@@ -768,12 +772,12 @@ class TestUpdateState:
         )
         source_freshness = SourceFreshness(sources={})
 
-        update_state(state, parsed_dag, source_freshness)
+        update_state(state, parsed_dag, source_freshness, tmp_path)
 
         assert state.state == {}
 
     @patch("src.orchestra_dbt.state.load_json")
-    def test_update_state_handles_empty_timing(self, mock_load_json):
+    def test_update_state_handles_empty_timing(self, mock_load_json, tmp_path):
         """Test that models with empty timing array are skipped."""
         mock_load_json.return_value = {
             "results": [
@@ -803,7 +807,7 @@ class TestUpdateState:
         )
         source_freshness = SourceFreshness(sources={})
 
-        update_state(state, parsed_dag, source_freshness)
+        update_state(state, parsed_dag, source_freshness, tmp_path)
 
         assert state.state == {}
 

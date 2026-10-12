@@ -13,6 +13,12 @@ from src.orchestra_dbt.modify import (
     update_selectors_yaml,
 )
 
+
+@pytest.fixture
+def selectors_file(tmp_path) -> Path:
+    return tmp_path / "selectors.yml"
+
+
 _REUSED_EXCLUSION_CRITERIA = {
     "method": "tag",
     "value": ORCHESTRA_REUSED_NODE,
@@ -21,7 +27,7 @@ _REUSED_EXCLUSION_CRITERIA = {
 
 
 class TestUpdateSelectorsYaml:
-    def test_update_selectors_yaml_success(self):
+    def test_update_selectors_yaml_success(self, selectors_file):
         selector_tag = "test_selector"
         original_selectors = {
             "selectors": [
@@ -36,7 +42,7 @@ class TestUpdateSelectorsYaml:
             ),
             patch("src.orchestra_dbt.modify.save_yaml") as mock_save,
         ):
-            result = update_selectors_yaml(selector_tag)
+            result = update_selectors_yaml(selector_tag, selectors_file)
 
         assert result is True
         mock_save.assert_called_once()
@@ -70,29 +76,29 @@ class TestUpdateSelectorsYaml:
             },
         }
 
-    def test_update_selectors_yaml_file_not_found(self):
+    def test_update_selectors_yaml_file_not_found(self, selectors_file):
         with (
             patch("src.orchestra_dbt.modify.load_yaml", side_effect=FileNotFoundError),
             patch("src.orchestra_dbt.modify.log_error") as mock_log_error,
         ):
-            result = update_selectors_yaml("test_selector")
+            result = update_selectors_yaml("test_selector", selectors_file)
         assert result is False
         mock_log_error.assert_called_once_with(
             "A `--selector` was used on the command, but no `selectors.yml` file found."
         )
 
-    def test_update_selectors_yaml_no_selectors_key(self):
+    def test_update_selectors_yaml_no_selectors_key(self, selectors_file):
         with (
             patch("src.orchestra_dbt.modify.load_yaml", return_value={}),
             patch("src.orchestra_dbt.modify.log_error") as mock_log_error,
         ):
-            result = update_selectors_yaml("test_selector")
+            result = update_selectors_yaml("test_selector", selectors_file)
         assert result is False
         mock_log_error.assert_called_once_with(
             "A `--selector` was used on the command, but no valid selectors found in `selectors.yml`."
         )
 
-    def test_update_selectors_yaml_selectors_not_list(self):
+    def test_update_selectors_yaml_selectors_not_list(self, selectors_file):
         with (
             patch(
                 "src.orchestra_dbt.modify.load_yaml",
@@ -100,24 +106,24 @@ class TestUpdateSelectorsYaml:
             ),
             patch("src.orchestra_dbt.modify.log_error") as mock_log_error,
         ):
-            result = update_selectors_yaml("test_selector")
+            result = update_selectors_yaml("test_selector", selectors_file)
         assert result is False
         mock_log_error.assert_called_once_with(
             "A `--selector` was used on the command, but no valid selectors found in `selectors.yml`."
         )
 
-    def test_update_selectors_yaml_empty_selectors_list(self):
+    def test_update_selectors_yaml_empty_selectors_list(self, selectors_file):
         with (
             patch("src.orchestra_dbt.modify.load_yaml", return_value={"selectors": []}),
             patch("src.orchestra_dbt.modify.log_error") as mock_log_error,
         ):
-            result = update_selectors_yaml("test_selector")
+            result = update_selectors_yaml("test_selector", selectors_file)
         assert result is False
         mock_log_error.assert_called_once_with(
             "A `--selector` was used on the command, but no valid selectors found in `selectors.yml`."
         )
 
-    def test_update_selectors_yaml_selector_not_found(self):
+    def test_update_selectors_yaml_selector_not_found(self, selectors_file):
         original_selectors = {
             "selectors": [
                 {"name": "other_selector", "definition": {"tag": "other"}},
@@ -129,13 +135,13 @@ class TestUpdateSelectorsYaml:
             ),
             patch("src.orchestra_dbt.modify.log_error") as mock_log_error,
         ):
-            result = update_selectors_yaml("nonexistent_selector")
+            result = update_selectors_yaml("nonexistent_selector", selectors_file)
         assert result is False
         mock_log_error.assert_called_once_with(
             "Selector `nonexistent_selector` not found in `selectors.yml`."
         )
 
-    def test_update_selectors_yaml_save_error(self):
+    def test_update_selectors_yaml_save_error(self, selectors_file):
         selector_tag = "test_selector"
         original_selectors = {
             "selectors": [
@@ -153,13 +159,13 @@ class TestUpdateSelectorsYaml:
             ),
             patch("src.orchestra_dbt.modify.log_error") as mock_log_error,
         ):
-            result = update_selectors_yaml(selector_tag)
+            result = update_selectors_yaml(selector_tag, selectors_file)
         assert result is False
         mock_log_error.assert_called_once_with(
             "Error saving selectors.yml: Save failed"
         )
 
-    def test_update_selectors_yaml_preserves_other_selectors(self):
+    def test_update_selectors_yaml_preserves_other_selectors(self, selectors_file):
         selector_tag = "test_selector"
         original_selectors = {
             "selectors": [
@@ -175,7 +181,7 @@ class TestUpdateSelectorsYaml:
             ),
             patch("src.orchestra_dbt.modify.save_yaml") as mock_save,
         ):
-            result = update_selectors_yaml(selector_tag)
+            result = update_selectors_yaml(selector_tag, selectors_file)
 
         assert result is True
         saved_data = mock_save.call_args[0][1]
@@ -187,8 +193,8 @@ class TestUpdateSelectorsYaml:
 
 
 class TestModifyDbtCommand:
-    def test_modify_dbt_command_without_selector(self):
-        assert modify_dbt_command(["dbt", "run"]) == [
+    def test_modify_dbt_command_without_selector(self, selectors_file):
+        assert modify_dbt_command(["dbt", "run"], selectors_file) == [
             "dbt",
             "run",
             "--exclude",
@@ -197,9 +203,9 @@ class TestModifyDbtCommand:
 
     @pytest.mark.parametrize("subcommand", ["build", "test"])
     def test_modify_dbt_command_adds_cautious_for_test_running_commands(
-        self, subcommand
+        self, subcommand, selectors_file
     ):
-        assert modify_dbt_command(["dbt", subcommand]) == [
+        assert modify_dbt_command(["dbt", subcommand], selectors_file) == [
             "dbt",
             subcommand,
             "--exclude",
@@ -215,8 +221,10 @@ class TestModifyDbtCommand:
             ["--indirect-selection=eager"],
         ],
     )
-    def test_bare_build_respects_user_indirect_selection(self, user_args):
-        result = modify_dbt_command(["dbt", "build", *user_args])
+    def test_bare_build_respects_user_indirect_selection(
+        self, user_args, selectors_file
+    ):
+        result = modify_dbt_command(["dbt", "build", *user_args], selectors_file)
         assert result == [
             "dbt",
             "build",
@@ -228,12 +236,16 @@ class TestModifyDbtCommand:
     @pytest.mark.parametrize(
         "select_flag", ["--select", "-s", "--models", "--model", "-m"]
     )
-    def test_user_select_is_folded_into_a_generated_selector(self, select_flag):
+    def test_user_select_is_folded_into_a_generated_selector(
+        self, select_flag, selectors_file
+    ):
         with (
             patch("src.orchestra_dbt.modify.load_yaml", side_effect=FileNotFoundError),
             patch("src.orchestra_dbt.modify.save_yaml") as mock_save,
         ):
-            result = modify_dbt_command(["dbt", "build", select_flag, "my_model+"])
+            result = modify_dbt_command(
+                ["dbt", "build", select_flag, "my_model+"], selectors_file
+            )
 
         assert result[:2] == ["dbt", "build"]
         assert result[-2] == "--selector"
@@ -251,12 +263,14 @@ class TestModifyDbtCommand:
             ]
         }
 
-    def test_user_exclude_is_folded_into_a_generated_selector(self):
+    def test_user_exclude_is_folded_into_a_generated_selector(self, selectors_file):
         with (
             patch("src.orchestra_dbt.modify.load_yaml", side_effect=FileNotFoundError),
             patch("src.orchestra_dbt.modify.save_yaml") as mock_save,
         ):
-            result = modify_dbt_command(["dbt", "build", "--exclude", "other_model"])
+            result = modify_dbt_command(
+                ["dbt", "build", "--exclude", "other_model"], selectors_file
+            )
 
         assert result[-2] == "--selector"
         saved_selector = mock_save.call_args[0][1]["selectors"][-1]
@@ -267,21 +281,24 @@ class TestModifyDbtCommand:
             ]
         }
 
-    def test_generated_selector_preserves_other_flags(self):
+    def test_generated_selector_preserves_other_flags(self, selectors_file):
         with (
             patch("src.orchestra_dbt.modify.load_yaml", side_effect=FileNotFoundError),
             patch("src.orchestra_dbt.modify.save_yaml"),
         ):
             result = modify_dbt_command(
-                ["dbt", "build", "--select", "a", "b", "--threads", "4"]
+                ["dbt", "build", "--select", "a", "b", "--threads", "4"],
+                selectors_file,
             )
         assert result[:2] == ["dbt", "build"]
         assert "--threads" in result
         assert result[result.index("--threads") + 1] == "4"
         assert "--select" not in result
 
-    def test_run_with_select_does_not_generate_selector(self):
-        result = modify_dbt_command(["dbt", "run", "--select", "my_model"])
+    def test_run_with_select_does_not_generate_selector(self, selectors_file):
+        result = modify_dbt_command(
+            ["dbt", "run", "--select", "my_model"], selectors_file
+        )
         assert result == [
             "dbt",
             "run",
@@ -291,7 +308,9 @@ class TestModifyDbtCommand:
             f"tag:{ORCHESTRA_REUSED_NODE}",
         ]
 
-    def test_falls_back_to_tag_exclusion_when_selector_cannot_be_written(self):
+    def test_falls_back_to_tag_exclusion_when_selector_cannot_be_written(
+        self, selectors_file
+    ):
         with (
             patch("src.orchestra_dbt.modify.load_yaml", side_effect=FileNotFoundError),
             patch(
@@ -299,7 +318,9 @@ class TestModifyDbtCommand:
             ),
             patch("src.orchestra_dbt.modify.log_warn"),
         ):
-            result = modify_dbt_command(["dbt", "build", "--select", "a"])
+            result = modify_dbt_command(
+                ["dbt", "build", "--select", "a"], selectors_file
+            )
         assert result == [
             "dbt",
             "build",
@@ -309,20 +330,22 @@ class TestModifyDbtCommand:
             f"tag:{ORCHESTRA_REUSED_NODE}",
         ]
 
-    def test_generated_selector_handles_empty_selectors_file(self):
+    def test_generated_selector_handles_empty_selectors_file(self, selectors_file):
         # An empty selectors.yml loads as None; must not crash.
         with (
             patch("src.orchestra_dbt.modify.load_yaml", return_value=None),
             patch("src.orchestra_dbt.modify.save_yaml") as mock_save,
         ):
-            result = modify_dbt_command(["dbt", "build", "--select", "a"])
+            result = modify_dbt_command(
+                ["dbt", "build", "--select", "a"], selectors_file
+            )
         assert result[-2] == "--selector"
         saved_selector = mock_save.call_args[0][1]["selectors"][-1]
         assert saved_selector["definition"] == {
             "union": ["a", {"exclude": [_REUSED_EXCLUSION_CRITERIA]}]
         }
 
-    def test_generated_selector_preserves_existing_selectors(self):
+    def test_generated_selector_preserves_existing_selectors(self, selectors_file):
         existing = {
             "selectors": [{"name": "nightly", "definition": {"tag": "nightly"}}]
         }
@@ -330,11 +353,13 @@ class TestModifyDbtCommand:
             patch("src.orchestra_dbt.modify.load_yaml", return_value=existing),
             patch("src.orchestra_dbt.modify.save_yaml") as mock_save,
         ):
-            result = modify_dbt_command(["dbt", "build", "--select", "a"])
+            result = modify_dbt_command(
+                ["dbt", "build", "--select", "a"], selectors_file
+            )
         saved = mock_save.call_args[0][1]["selectors"]
         assert [s["name"] for s in saved] == ["nightly", result[-1]]
 
-    def test_malformed_selectors_file_falls_back_to_tag_exclusion(self):
+    def test_malformed_selectors_file_falls_back_to_tag_exclusion(self, selectors_file):
         with (
             patch(
                 "src.orchestra_dbt.modify.load_yaml", return_value={"selectors": "oops"}
@@ -343,7 +368,9 @@ class TestModifyDbtCommand:
             patch("src.orchestra_dbt.modify.log_error"),
             patch("src.orchestra_dbt.modify.log_warn"),
         ):
-            result = modify_dbt_command(["dbt", "build", "--select", "a"])
+            result = modify_dbt_command(
+                ["dbt", "build", "--select", "a"], selectors_file
+            )
         mock_save.assert_not_called()
         assert result == [
             "dbt",
@@ -355,18 +382,18 @@ class TestModifyDbtCommand:
         ]
 
     @pytest.mark.parametrize("success", [True, False])
-    def test_modify_dbt_command_with_selector_success(self, success):
+    def test_modify_dbt_command_with_selector_success(self, success, selectors_file):
         cmd = ["dbt", "run", "--selector", "test_selector"]
         with patch(
             "src.orchestra_dbt.modify.update_selectors_yaml", return_value=success
         ) as mock_update:
-            result = modify_dbt_command(cmd)
+            result = modify_dbt_command(cmd, selectors_file)
             assert result == cmd
-        mock_update.assert_called_once_with("test_selector", Path("selectors.yml"))
+        mock_update.assert_called_once_with("test_selector", selectors_file)
 
     @pytest.mark.parametrize("subcommand", ["build", "test"])
     def test_modify_dbt_command_with_selector_does_not_generate_selector(
-        self, subcommand
+        self, subcommand, selectors_file
     ):
         cmd = ["dbt", subcommand, "--selector", "test_selector"]
         with (
@@ -375,17 +402,17 @@ class TestModifyDbtCommand:
             ) as mock_update,
             patch("src.orchestra_dbt.modify.save_yaml") as mock_save_yaml,
         ):
-            result = modify_dbt_command(cmd)
+            result = modify_dbt_command(cmd, selectors_file)
 
         assert result == cmd
         assert "--exclude" not in result
         assert "--selector" in result
-        mock_update.assert_called_once_with("test_selector", Path("selectors.yml"))
+        mock_update.assert_called_once_with("test_selector", selectors_file)
         mock_save_yaml.assert_not_called()
 
-    def test_modify_dbt_command_with_selector_no_tag(self):
+    def test_modify_dbt_command_with_selector_no_tag(self, selectors_file):
         with patch("src.orchestra_dbt.modify.log_error") as mock_log_error:
-            modify_dbt_command(["dbt", "run", "--selector"])
+            modify_dbt_command(["dbt", "run", "--selector"], selectors_file)
         mock_log_error.assert_called_once_with(
             "A `--selector` was used on the command, but no selector tag provided."
         )
@@ -433,79 +460,61 @@ class TestSplitSelectionArgs:
 
 
 class TestSelectorsFileSnapshot:
-    def test_generated_selector_written_to_given_file(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        selectors_file = tmp_path / "proj" / "selectors.yml"
-        selectors_file.parent.mkdir()
+    def test_snapshot_returns_none_when_missing(self, selectors_file):
+        assert snapshot_selectors_file(selectors_file) is None
 
-        cmd = modify_dbt_command(["dbt", "build", "--select", "a"], selectors_file)
-        assert not (tmp_path / "selectors.yml").exists()
-        assert cmd[-1] in selectors_file.read_text()
+    def test_snapshot_returns_bytes_when_present(self, selectors_file):
+        selectors_file.write_text("selectors: []\n")
+        assert snapshot_selectors_file(selectors_file) == b"selectors: []\n"
 
-    def test_snapshot_returns_none_when_missing(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        assert snapshot_selectors_file() is None
-
-    def test_snapshot_returns_bytes_when_present(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        (tmp_path / "selectors.yml").write_text("selectors: []\n")
-        assert snapshot_selectors_file() == b"selectors: []\n"
-
-    def test_restore_rewrites_original_bytes(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
+    def test_restore_rewrites_original_bytes(self, selectors_file):
         original = b"selectors:\n  - name: nightly\n"
-        f = tmp_path / "selectors.yml"
+        f = selectors_file
         f.write_bytes(original)
 
-        snapshot = snapshot_selectors_file()
+        snapshot = snapshot_selectors_file(selectors_file)
         f.write_text("mutated")  # simulate orc mutating the file for a run
-        restore_selectors_file(snapshot)
+        restore_selectors_file(snapshot, selectors_file)
 
         assert f.read_bytes() == original
 
-    def test_restore_removes_file_we_created(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        snapshot = snapshot_selectors_file()  # None: did not exist
-        (tmp_path / "selectors.yml").write_text("generated")  # orc created it
-        restore_selectors_file(snapshot)
+    def test_restore_removes_file_we_created(self, selectors_file):
+        snapshot = snapshot_selectors_file(selectors_file)  # None: did not exist
+        selectors_file.write_text("generated")  # orc created it
+        restore_selectors_file(snapshot, selectors_file)
 
-        assert not (tmp_path / "selectors.yml").exists()
+        assert not selectors_file.exists()
 
-    def test_restore_is_noop_when_nothing_existed_or_created(
-        self, tmp_path, monkeypatch
-    ):
-        monkeypatch.chdir(tmp_path)
-        restore_selectors_file(None)  # must not raise
-        assert not (tmp_path / "selectors.yml").exists()
+    def test_restore_is_noop_when_nothing_existed_or_created(self, selectors_file):
+        restore_selectors_file(None, selectors_file)  # must not raise
+        assert not selectors_file.exists()
 
-    def test_round_trip_through_modify_dbt_command(self, tmp_path, monkeypatch):
+    def test_round_trip_through_modify_dbt_command(self, selectors_file):
         # End-to-end: a user selectors.yml is mutated by a generated selector,
         # then fully restored to its pre-run bytes.
-        monkeypatch.chdir(tmp_path)
         original = (
             "selectors:\n  - name: nightly\n    definition:\n      tag: nightly\n"
         )
-        f = tmp_path / "selectors.yml"
+        f = selectors_file
         f.write_text(original)
 
-        snapshot = snapshot_selectors_file()
-        result = modify_dbt_command(["dbt", "build", "--select", "a"])
+        snapshot = snapshot_selectors_file(selectors_file)
+        result = modify_dbt_command(["dbt", "build", "--select", "a"], selectors_file)
         assert result[-2] == "--selector"  # a generated selector was written
         assert "orchestra_reused_" in f.read_text()  # file was mutated
 
-        restore_selectors_file(snapshot)
+        restore_selectors_file(snapshot, selectors_file)
         assert f.read_text() == original
 
-    def test_round_trip_removes_file_created_for_run(self, tmp_path, monkeypatch):
+    def test_round_trip_removes_file_created_for_run(self, selectors_file):
         # No selectors.yml to begin with; modify_dbt_command creates one, restore
         # removes it so a local run leaves the tree clean.
-        monkeypatch.chdir(tmp_path)
-        snapshot = snapshot_selectors_file()
-        modify_dbt_command(["dbt", "build", "--select", "a"])
-        assert (tmp_path / "selectors.yml").exists()
+        snapshot = snapshot_selectors_file(selectors_file)
+        modify_dbt_command(["dbt", "build", "--select", "a"], selectors_file)
+        assert selectors_file.exists()
 
-        restore_selectors_file(snapshot)
-        assert not (tmp_path / "selectors.yml").exists()
+        restore_selectors_file(snapshot, selectors_file)
+        assert not selectors_file.exists()
 
 
 class TestBuildGeneratedSelectorDefinition:
