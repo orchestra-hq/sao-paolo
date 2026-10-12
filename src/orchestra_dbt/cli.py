@@ -63,10 +63,10 @@ def _validate_environment(settings: OrchestraDbtSettings) -> None:
     backend_cfg = resolve_state_backend_config(settings)
     match backend_cfg.kind:
         case StateBackendKind.LOCAL_FILE:
-            log_debug("State backend: local file (path configured).")
+            log_debug("State backend: local file (path configured).", settings.debug)
             return
         case StateBackendKind.S3:
-            log_debug("State backend: S3 (URI configured).")
+            log_debug("State backend: S3 (URI configured).", settings.debug)
             return
         case StateBackendKind.HTTP:
             if not get_orchestra_api_key():
@@ -76,7 +76,7 @@ def _validate_environment(settings: OrchestraDbtSettings) -> None:
                     "(ORCHESTRA_STATE_FILE or [tool.orchestra_dbt] state_file in pyproject.toml)."
                 )
                 sys.exit(1)
-            log_debug("State backend: Orchestra HTTP (API key set).")
+            log_debug("State backend: Orchestra HTTP (API key set).", settings.debug)
 
 
 def _run_dbt_passthrough(dbt_args: tuple[str, ...]) -> None:
@@ -164,12 +164,16 @@ def main(args: tuple[str, ...]) -> None:
         sys.exit(1)
 
     if not settings.use_stateful:
-        log_debug("Stateful orchestration is disabled. Running dbt command directly.")
+        log_debug(
+            "Stateful orchestration is disabled. Running dbt command directly.",
+            settings.debug,
+        )
         _run_dbt_passthrough(dbt_args)
 
     if dbt_args[1] not in ["build", "run", "test"]:
         log_debug(
-            f"dbt command '{dbt_args[1]}' not supported for stateful orchestration."
+            f"dbt command '{dbt_args[1]}' not supported for stateful orchestration.",
+            settings.debug,
         )
         _run_dbt_passthrough(dbt_args)
 
@@ -199,6 +203,7 @@ def main(args: tuple[str, ...]) -> None:
             scope_to_selection=settings.scope_source_freshness_to_selection,
             selectors_to_run=nodes_to_run.selectors if nodes_to_run else None,
             target_dir=target_dir,
+            debug=settings.debug,
         )
     except ImportError as import_error:
         log_error(dbt_core_import_error_message(import_error))
@@ -243,7 +248,9 @@ def main(args: tuple[str, ...]) -> None:
 
     # A node can be clean on paper but missing from the warehouse; force it back into the run.
     if settings.verify_relations_exist:
-        apply_relation_existence_gate(parsed_dag, paths_to_run, list(dbt_args))
+        apply_relation_existence_gate(
+            parsed_dag, paths_to_run, list(dbt_args), debug=settings.debug
+        )
 
     # Edit the DAG inline.
     calculate_nodes_to_run(parsed_dag)
@@ -264,7 +271,7 @@ def main(args: tuple[str, ...]) -> None:
     log_info(f"{len(nodes_to_reuse)}/{node_count} nodes reused.")
 
     if len(nodes_to_reuse) != 0:
-        patch_sql_files(nodes_to_reuse, project_dir=project_dir)
+        patch_sql_files(nodes_to_reuse, project_dir=project_dir, debug=settings.debug)
         patch_seed_properties(nodes_to_reuse, project_dir / "seeds" / "properties.yml")
 
         selectors_file = project_dir / "selectors.yml"

@@ -775,7 +775,7 @@ class TestFindMissingRelationsV2:
     def _run(self, monkeypatch, runner, user_args=()):
         monkeypatch.setattr("dbt.cli.main.dbtRunner", lambda: runner)
         return relation_existence._find_missing_relations_v2(
-            self._CANDIDATES, list(user_args)
+            self._CANDIDATES, list(user_args), debug=False
         )
 
     def test_reports_candidates_missing_from_the_catalog(self, monkeypatch) -> None:

@@ -2,7 +2,6 @@ from datetime import UTC, datetime
 
 import click
 
-from .config import load_orchestra_dbt_settings
 from .constants import SERVICE_NAME
 from .models import MaterialisationNode
 
@@ -15,8 +14,8 @@ def _log(msg: str, fg: str | None, error: bool = False) -> None:
     click.echo(message=click.style(text=text, fg=fg), color=True)
 
 
-def log_debug(msg) -> None:
-    if load_orchestra_dbt_settings().debug:
+def log_debug(msg, debug: bool) -> None:
+    if debug:
         _log(msg, None)
 
 

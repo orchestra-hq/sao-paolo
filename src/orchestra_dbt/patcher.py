@@ -79,7 +79,9 @@ def _get_sql_files(project_dir: Path) -> list[Path]:
 
 
 def patch_sql_files(
-    nodes_to_reuse: dict[str, MaterialisationNode], project_dir: Path = Path(".")
+    nodes_to_reuse: dict[str, MaterialisationNode],
+    project_dir: Path = Path("."),
+    debug: bool = False,
 ) -> None:
     sql_files = _get_sql_files(project_dir)
 
@@ -95,7 +97,7 @@ def patch_sql_files(
         if relative_path in file_paths_to_nodes:
             node: MaterialisationNode = file_paths_to_nodes[relative_path]
             try:
-                log_debug(f"Patching {relative_path}...")
+                log_debug(f"Patching {relative_path}...", debug)
                 patch_file(
                     file_path=file,
                     reason=node.reason,

@@ -76,7 +76,7 @@ def _list_schema(adapter: Any, database: str | None, schema: str) -> set[str] | 
 
 
 def find_missing_relations(
-    adapter: Any, manifest: Any, candidates: Collection[str]
+    adapter: Any, manifest: Any, candidates: Collection[str], debug: bool = False
 ) -> set[str]:
     """Candidates with no relation in the warehouse; a schema we can't read yields none.
 
@@ -93,7 +93,8 @@ def find_missing_relations(
         node = manifest.nodes.get(unique_id)
         if node is None:
             log_debug(
-                f"{unique_id} is not in the dbt manifest; skipping existence check."
+                f"{unique_id} is not in the dbt manifest; skipping existence check.",
+                debug,
             )
             continue
 
@@ -106,7 +107,7 @@ def find_missing_relations(
                 relation.database, relation.schema, relation.identifier
             )
         except Exception as e:
-            log_debug(f"Could not build a relation for {unique_id}: {e}")
+            log_debug(f"Could not build a relation for {unique_id}: {e}", debug)
             continue
 
         identifier = search.get("identifier")
@@ -130,7 +131,7 @@ def find_missing_relations(
 
 
 def _find_missing_relations_v2(
-    candidates: Collection[str], user_args: list[str]
+    candidates: Collection[str], user_args: list[str], debug: bool
 ) -> set[str] | None:
     """Candidates missing from dbt 2.x's catalog; None for an unsupported adapter."""
     from dbt.cli.main import dbtRunner
@@ -149,24 +150,30 @@ def _find_missing_relations_v2(
         raise RuntimeError(f"dbt parse --write-catalog failed: {result.exception}")
     adapter_type = result.result.metadata.adapter_type
     if adapter_type in _UNSUPPORTED_ADAPTERS:
-        log_debug(f"Existence checks are not enabled for the '{adapter_type}' adapter.")
+        log_debug(
+            f"Existence checks are not enabled for the '{adapter_type}' adapter.", debug
+        )
         return None
     return {
         unique_id for unique_id in candidates if unique_id not in result.catalog.nodes
     }
 
 
-def _find_missing_relations_v1(candidates: Collection[str]) -> set[str] | None:
+def _find_missing_relations_v1(
+    candidates: Collection[str], debug: bool
+) -> set[str] | None:
     """The in-process 1.x check; None for an adapter it is not enabled for."""
     adapter, manifest = _acquire_adapter()
     adapter_type: str = adapter.type()
     if adapter_type in _UNSUPPORTED_ADAPTERS:
-        log_debug(f"Existence checks are not enabled for the '{adapter_type}' adapter.")
+        log_debug(
+            f"Existence checks are not enabled for the '{adapter_type}' adapter.", debug
+        )
         return None
     try:
         with adapter.connection_named(_CONNECTION_NAME):
             adapter.clear_transaction()
-            return find_missing_relations(adapter, manifest, candidates)
+            return find_missing_relations(adapter, manifest, candidates, debug)
     finally:
         # The real dbt run is a subprocess started straight after this.
         release_connections(adapter)
@@ -176,6 +183,7 @@ def apply_relation_existence_gate(
     parsed_dag: ParsedDag,
     paths_to_run: list[str] | None,
     user_args: list[str],
+    debug: bool = False,
 ) -> None:
     """Stop reusing nodes whose warehouse relation no longer exists.
 
@@ -185,7 +193,8 @@ def apply_relation_existence_gate(
     candidates = collect_reuse_candidates(parsed_dag, paths_to_run)
     if not candidates:
         log_debug(
-            "No reusable nodes to verify; skipping the warehouse existence check."
+            "No reusable nodes to verify; skipping the warehouse existence check.",
+            debug,
         )
         return
 
@@ -193,9 +202,9 @@ def apply_relation_existence_gate(
     started_at = perf_counter()
     try:
         if v2:
-            missing = _find_missing_relations_v2(candidates, user_args)
+            missing = _find_missing_relations_v2(candidates, user_args, debug)
         else:
-            missing = _find_missing_relations_v1(candidates)
+            missing = _find_missing_relations_v1(candidates, debug)
         if missing is None:
             return
     except Exception as e:
@@ -224,4 +233,4 @@ def apply_relation_existence_gate(
             f"{len(missing)} node(s) will be rerun because their relation is missing."
         )
     else:
-        log_debug("Every reusable node still exists in the warehouse.")
+        log_debug("Every reusable node still exists in the warehouse.", debug)

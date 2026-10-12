@@ -63,6 +63,7 @@ def _get_source_freshness_v2(
     scope_to_selection: bool,
     selectors_to_run: list[str] | None,
     target_dir: Path,
+    debug: bool,
 ) -> SourceFreshness | None:
     """dbt 2.x has no `dbt.task.freshness` to patch, so run its own `dbt source freshness`."""
     from dbt.cli.main import dbtRunner
@@ -119,7 +120,7 @@ def _get_source_freshness_v2(
             for source in results
             if source["unique_id"] not in excluded
         }
-        log_debug(f"dbt freshness-checked {len(results)} source(s).")
+        log_debug(f"dbt freshness-checked {len(results)} source(s).", debug)
         return SourceFreshness(sources=sources)
     except Exception as e:
         log_warn(f"Error running dbt source freshness: {e}")
@@ -132,6 +133,7 @@ def get_source_freshness(
     scope_to_selection: bool = False,
     selectors_to_run: list[str] | None = None,
     target_dir: Path = Path("target"),
+    debug: bool = False,
 ) -> SourceFreshness | None:
     log_info("Calculating source freshness")
     if is_dbt_v2():
@@ -141,6 +143,7 @@ def get_source_freshness(
             scope_to_selection,
             selectors_to_run,
             target_dir,
+            debug,
         )
 
     try:
