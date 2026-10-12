@@ -57,6 +57,8 @@ class MaterialisationNode(Node):
     sources: dict[str, datetime]
     # Fully-rendered warehouse relation; unset for ephemeral models.
     relation_name: str | None = None
+    # Properties file as `<package>://<path from the package root>`; unset when none.
+    patch_path: str | None = None
 
 
 class Edge(BaseModel):
