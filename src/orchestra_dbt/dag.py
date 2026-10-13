@@ -3,7 +3,7 @@ from pathlib import Path
 from .asset_external_id import generate_asset_external_id
 from .build_after import parse_freshness_config
 from .checksum import calculate_checksum
-from .config import load_orchestra_dbt_settings, resolve_state_backend_config
+from .config import OrchestraDbtSettings, resolve_state_backend_config
 from .logger import log_warn
 from .models import (
     Edge,
@@ -61,6 +61,7 @@ def calculate_freshness_on_node(
 def construct_dag(
     source_freshness: SourceFreshness,
     state: StateApiModel,
+    settings: OrchestraDbtSettings,
     manifest_override: str | None = None,
     project_dir: Path = Path("."),
     target_dir: Path = Path("target"),
@@ -72,7 +73,6 @@ def construct_dag(
     edges: list[Edge] = []
 
     project_name_from_manifest = manifest["metadata"]["project_name"]
-    settings = load_orchestra_dbt_settings()
     integration_account_id = settings.integration_account_id
     state_backend_kind = resolve_state_backend_config().kind
     if not integration_account_id and state_backend_kind == StateBackendKind.HTTP:

@@ -4,7 +4,6 @@ from typing import cast
 
 import pytest
 
-import src.orchestra_dbt.dag as dag_module
 from src.orchestra_dbt.config import OrchestraDbtSettings
 from src.orchestra_dbt.dag import construct_dag
 from src.orchestra_dbt.logger import log_reused_nodes
@@ -18,7 +17,7 @@ from src.orchestra_dbt.models import (
 from src.orchestra_dbt.sao import calculate_nodes_to_run
 
 
-def test_e2e(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_e2e() -> None:
     local_state_path = Path("local_state.json")
     if not local_state_path.exists():
         pytest.skip("local_state.json not found")
@@ -28,18 +27,15 @@ def test_e2e(monkeypatch: pytest.MonkeyPatch) -> None:
     if not local_manifest_path.exists():
         pytest.skip("local_manifest.json not found")
 
-    monkeypatch.setattr(
-        dag_module,
-        "load_orchestra_dbt_settings",
-        lambda: OrchestraDbtSettings(
-            integration_account_id="TO_BE_COMPLETED",
-            local_run=False,
-        ),
+    settings = OrchestraDbtSettings(
+        integration_account_id="TO_BE_COMPLETED",
+        local_run=False,
     )
 
     parsed_dag = construct_dag(
         source_freshness=SourceFreshness(sources={}),
         state=StateApiModel.model_validate(json.loads(local_state)),
+        settings=settings,
         manifest_override="local_manifest.json",
     )
 

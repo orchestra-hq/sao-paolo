@@ -621,13 +621,7 @@ class TestEndToEndFromStateThroughTheGate:
         }
         monkeypatch.setattr(dag_module, "load_json", lambda _: manifest)
         monkeypatch.setattr(dag_module, "calculate_checksum", lambda *a, **k: "abc123")
-        monkeypatch.setattr(
-            dag_module,
-            "load_orchestra_dbt_settings",
-            lambda: OrchestraDbtSettings(
-                integration_account_id="acct", local_run=False
-            ),
-        )
+        settings = OrchestraDbtSettings(integration_account_id="acct", local_run=False)
         asset_id = (
             "acct.db.analytics.legacy_alias"  # integration_account_id.relation_name
         )
@@ -641,7 +635,7 @@ class TestEndToEndFromStateThroughTheGate:
             }
         )
 
-        dag = construct_dag(SourceFreshness(sources={}), state)
+        dag = construct_dag(SourceFreshness(sources={}), state, settings)
         node = dag.nodes["model.test_project.readable_name"]
         assert isinstance(node, MaterialisationNode)
         assert node.freshness == Freshness.CLEAN, "already in state, so reusable"
@@ -699,13 +693,7 @@ class TestEndToEndFromStateThroughTheGate:
         }
         monkeypatch.setattr(dag_module, "load_json", lambda _: manifest)
         monkeypatch.setattr(dag_module, "calculate_checksum", lambda *a, **k: "abc123")
-        monkeypatch.setattr(
-            dag_module,
-            "load_orchestra_dbt_settings",
-            lambda: OrchestraDbtSettings(
-                integration_account_id="acct", local_run=False
-            ),
-        )
+        settings = OrchestraDbtSettings(integration_account_id="acct", local_run=False)
         asset_id = "acct.db.analytics.legacy_alias"
         state = StateApiModel(
             state={
@@ -727,7 +715,7 @@ class TestEndToEndFromStateThroughTheGate:
             }
         )
 
-        dag = construct_dag(source_freshness, state)
+        dag = construct_dag(source_freshness, state, settings)
         node = dag.nodes["model.test_project.readable_name"]
         assert isinstance(node, MaterialisationNode)
         assert node.freshness == Freshness.CLEAN, "checksum still matches state"
