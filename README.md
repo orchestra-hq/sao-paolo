@@ -44,7 +44,7 @@ dbt v2 is one package with the warehouse adapters built in, so don't install `db
 pip install dbt-orchestra "dbt-oss>=2,<3"
 ```
 
-dbt v2 doesn't support every adapter that 1.x does; Postgres, for example, isn't supported. Check dbt's documentation for your warehouse.
+dbt v2 doesn't support every adapter that 1.x does; Postgres, for example, isn't supported.
 
 State-aware orchestration works on dbt v2 as it does on 1.x, with these differences:
 
@@ -267,7 +267,7 @@ When **both** are omitted, Orchestra can still run **adapter-specific** SQL to i
 | **Google BigQuery** | `bigquery` | Same as Snowflake — configure `loaded_at_*`; no Orchestra fallback. |
 | **AWS Redshift** | `redshift` | Same as Snowflake — configure `loaded_at_*`; no Orchestra fallback. |
 | **PostgreSQL** | `postgres` | Same as Snowflake — configure `loaded_at_*`; no Orchestra fallback. |
-| **DuckDB** | `duckdb` | Configure `loaded_at_*`; no Orchestra fallback. On dbt v2, models that depend on a source without `loaded_at_*` always run. |
+| **DuckDB** | `duckdb` | Configure `loaded_at_*`; no Orchestra fallback. |
 | **Other adapters** | varies | No Orchestra fallback unless listed above; use `loaded_at_*` or verify dbt's default behavior for your warehouse. |
 
 For adapters without a registered fallback, if both `loaded_at` settings are missing, Orchestra follows dbt's `FreshnessRunner` behavior (which may surface as warnings or a non-actionable result depending on dbt and the warehouse).
