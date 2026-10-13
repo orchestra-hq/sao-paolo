@@ -27,6 +27,11 @@ from src.orchestra_dbt.relation_existence import (
 from src.orchestra_dbt.sao import calculate_nodes_to_run
 
 
+@pytest.fixture(autouse=True)
+def _fresh_catalog_cache():
+    relation_existence._load_catalog_v2.cache_clear()
+
+
 class FakeRelation:
     """Stands in for a dbt BaseRelation, including the quote policy `create_from` merges."""
 
@@ -763,11 +768,16 @@ class FakeDbtV2Runner:
     warehouse holds, keyed by unique_id."""
 
     def __init__(
-        self, existing: set[str], adapter_type: str = "duckdb", exception=None
+        self,
+        existing: set[str],
+        adapter_type: str = "duckdb",
+        exception=None,
+        source_types: dict[str, str] | None = None,
     ):
         self.existing = existing
         self.adapter_type = adapter_type
         self.exception = exception
+        self.source_types = source_types or {}
         self.calls: list[list[str]] = []
 
     def invoke(self, args: list[str]) -> SimpleNamespace:
@@ -779,7 +789,15 @@ class FakeDbtV2Runner:
             result=SimpleNamespace(
                 metadata=SimpleNamespace(adapter_type=self.adapter_type)
             ),
-            catalog=SimpleNamespace(nodes={uid: object() for uid in self.existing}),
+            catalog=SimpleNamespace(
+                nodes={uid: object() for uid in self.existing},
+                sources={
+                    uid: SimpleNamespace(
+                        metadata=SimpleNamespace(materialization_type=type_)
+                    )
+                    for uid, type_ in self.source_types.items()
+                },
+            ),
         )
 
 
@@ -814,6 +832,8 @@ class TestFindMissingRelationsV2:
         ("user_args", "forwarded"),
         [
             (["--target", "prod"], ["--target", "prod"]),
+            (["--project-dir", "proj"], ["--project-dir", "proj"]),
+            (["--target-path", "out"], ["--target-path", "out"]),
             (["--profiles-dir=/p"], ["--profiles-dir", "/p"]),
             (["--profile", "other"], ["--profile", "other"]),
             (["--vars", "{x: 1}"], ["--vars", "{x: 1}"]),
@@ -858,3 +878,44 @@ class TestFindMissingRelationsV2:
         node = dag.nodes["model.p.a"]
         assert isinstance(node, MaterialisationNode)
         assert node.freshness == Freshness.DIRTY
+
+
+class TestFindViewSources:
+    def _run(self, monkeypatch, runner) -> set[str]:
+        monkeypatch.setattr("dbt.cli.main.dbtRunner", lambda: runner)
+        return relation_existence.find_view_sources(
+            ["source.p.raw.view", "source.p.raw.upper_view", "source.p.raw.table"],
+            ["dbt", "build"],
+        )
+
+    def test_finds_views_in_either_case(self, monkeypatch) -> None:
+        """Databricks reports "view", other adapters "VIEW"."""
+        runner = FakeDbtV2Runner(
+            existing=set(),
+            source_types={
+                "source.p.raw.view": "view",
+                "source.p.raw.upper_view": "VIEW",
+                "source.p.raw.table": "BASE TABLE",
+                "source.p.raw.other_view": "view",
+            },
+        )
+
+        assert self._run(monkeypatch, runner) == {
+            "source.p.raw.view",
+            "source.p.raw.upper_view",
+        }
+
+    def test_failed_catalog_returns_every_candidate(self, monkeypatch) -> None:
+        runner = FakeDbtV2Runner(existing=set(), exception="boom")
+
+        assert len(self._run(monkeypatch, runner)) == 3
+
+    def test_shares_one_catalog_fetch_with_the_existence_check(
+        self, monkeypatch
+    ) -> None:
+        runner = FakeDbtV2Runner(existing={"model.p.a"})
+
+        self._run(monkeypatch, runner)
+        relation_existence._find_missing_relations_v2(["model.p.a"], ["dbt", "build"])
+
+        assert len(runner.calls) == 1
