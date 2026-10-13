@@ -32,7 +32,7 @@ from .modify import (
 )
 from .orchestra import is_warn
 from .patcher import patch_seed_properties, patch_sql_files, revert_patching
-from .relation_existence import apply_relation_existence_gate
+from .relation_existence import apply_relation_existence_gate, apply_view_source_gate
 from .sao import Freshness, calculate_nodes_to_run
 from .source_freshness import get_source_freshness
 from .state import (
@@ -237,6 +237,8 @@ def main(args: tuple[str, ...]) -> None:
             state_load_ok=state_load_ok,
             target_dir=target_dir,
         )
+
+    apply_view_source_gate(parsed_dag, list(dbt_args), target_dir)
 
     # A node can be clean on paper but missing from the warehouse; force it back into the run.
     if settings.verify_relations_exist:

@@ -246,7 +246,7 @@ When **both** are omitted, Orchestra can still run **adapter-specific** SQL to i
 
 | Warehouse | dbt adapter type (typical) | Implicit freshness (no `loaded_at_*`) |
 | --- | --- | --- |
-| **Databricks** | `databricks` | **Supported** — dbt 1.x uses `DESCRIBE HISTORY` on the source relation; dbt v2 uses dbt's own metadata freshness. On both, a source that is a view is treated as changed, so models depending on it always run; dbt v2 runs an extra `dbt parse --write-catalog` to find the views. |
+| **Databricks** | `databricks` | **Supported** — uses `DESCRIBE HISTORY` on the source relation. |
 | **Snowflake** | `snowflake` | **Use `loaded_at_field` or `loaded_at_query`** — no Orchestra fallback; standard dbt freshness. |
 | **Microsoft Fabric** | `fabric` | Same as Snowflake — configure `loaded_at_*`; no Orchestra fallback. |
 | **Google BigQuery** | `bigquery` | Same as Snowflake — configure `loaded_at_*`; no Orchestra fallback. |
@@ -257,7 +257,7 @@ When **both** are omitted, Orchestra can still run **adapter-specific** SQL to i
 
 For adapters without a registered fallback, if both `loaded_at` settings are missing, Orchestra follows dbt's `FreshnessRunner` behavior (which may surface as warnings or a non-actionable result depending on dbt and the warehouse).
 
-Implicit freshness can be misleading for sources defined on top of **views**: warehouse metadata reports when the view was last altered, not when new data arrived in the underlying tables. To opt out of implicit freshness entirely, set `require_explicit_source_freshness = true` (or `ORCHESTRA_REQUIRE_EXPLICIT_SOURCE_FRESHNESS=true`). Sources without `loaded_at_field`/`loaded_at_query` are then excluded from state-aware orchestration and models depending on them always run; sources with an explicit config keep working as normal.
+Implicit freshness can be misleading for sources defined on top of **views**: warehouse metadata reports when the view was last altered, not when new data arrived in the underlying tables. On dbt v2, such view sources count as changed, so models depending on them always run. To opt out of implicit freshness entirely, set `require_explicit_source_freshness = true` (or `ORCHESTRA_REQUIRE_EXPLICIT_SOURCE_FRESHNESS=true`). Sources without `loaded_at_field`/`loaded_at_query` are then excluded from state-aware orchestration and models depending on them always run; sources with an explicit config keep working as normal.
 
 ### Verifying relations still exist
 

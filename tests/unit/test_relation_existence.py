@@ -1,3 +1,4 @@
+import json
 import re
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -21,10 +22,16 @@ from src.orchestra_dbt.models import (
 )
 from src.orchestra_dbt.relation_existence import (
     apply_relation_existence_gate,
+    apply_view_source_gate,
     collect_reuse_candidates,
     find_missing_relations,
 )
 from src.orchestra_dbt.sao import calculate_nodes_to_run
+
+
+@pytest.fixture(autouse=True)
+def _fresh_catalog_cache():
+    relation_existence._load_catalog_v2.cache_clear()
 
 
 class FakeRelation:
@@ -763,11 +770,16 @@ class FakeDbtV2Runner:
     warehouse holds, keyed by unique_id."""
 
     def __init__(
-        self, existing: set[str], adapter_type: str = "duckdb", exception=None
+        self,
+        existing: set[str],
+        adapter_type: str = "duckdb",
+        exception=None,
+        source_types: dict[str, str] | None = None,
     ):
         self.existing = existing
         self.adapter_type = adapter_type
         self.exception = exception
+        self.source_types = source_types or {}
         self.calls: list[list[str]] = []
 
     def invoke(self, args: list[str]) -> SimpleNamespace:
@@ -779,7 +791,15 @@ class FakeDbtV2Runner:
             result=SimpleNamespace(
                 metadata=SimpleNamespace(adapter_type=self.adapter_type)
             ),
-            catalog=SimpleNamespace(nodes={uid: object() for uid in self.existing}),
+            catalog=SimpleNamespace(
+                nodes={uid: object() for uid in self.existing},
+                sources={
+                    uid: SimpleNamespace(
+                        metadata=SimpleNamespace(materialization_type=type_)
+                    )
+                    for uid, type_ in self.source_types.items()
+                },
+            ),
         )
 
 
@@ -858,3 +878,83 @@ class TestFindMissingRelationsV2:
         node = dag.nodes["model.p.a"]
         assert isinstance(node, MaterialisationNode)
         assert node.freshness == Freshness.DIRTY
+
+
+class TestApplyViewSourceGate:
+    _AT = datetime(2026, 3, 31, tzinfo=UTC)
+
+    def _run(self, monkeypatch, tmp_path, runner, v2=True) -> ParsedDag:
+        sources = {
+            "source.p.raw.view": None,
+            "source.p.raw.table": None,
+            "source.p.raw.explicit_view": "updated_at",
+        }
+        (tmp_path / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "sources": {
+                        uid: {"config": {"loaded_at_field": f, "loaded_at_query": None}}
+                        for uid, f in sources.items()
+                    }
+                }
+            )
+        )
+        monkeypatch.setattr(relation_existence, "is_dbt_v2", lambda: v2)
+        monkeypatch.setattr("dbt.cli.main.dbtRunner", lambda: runner)
+        dag = ParsedDag(
+            nodes={uid: SourceNode(last_updated=self._AT) for uid in sources},
+            edges=[],
+        )
+        apply_view_source_gate(dag, ["dbt", "build"], tmp_path)
+        return dag
+
+    def test_view_sources_without_loaded_at_count_as_changed(
+        self, monkeypatch, tmp_path
+    ) -> None:
+        """Databricks reports "view", other adapters "VIEW"."""
+        runner = FakeDbtV2Runner(
+            existing=set(),
+            source_types={
+                "source.p.raw.view": "view",
+                "source.p.raw.table": "BASE TABLE",
+                "source.p.raw.explicit_view": "VIEW",
+            },
+        )
+
+        dag = self._run(monkeypatch, tmp_path, runner)
+
+        assert {uid: n.last_updated for uid, n in dag.nodes.items()} == {
+            "source.p.raw.view": None,
+            "source.p.raw.table": self._AT,
+            "source.p.raw.explicit_view": self._AT,
+        }
+
+    def test_failed_catalog_counts_every_implicit_source_as_changed(
+        self, monkeypatch, tmp_path
+    ) -> None:
+        runner = FakeDbtV2Runner(existing=set(), exception="boom")
+
+        dag = self._run(monkeypatch, tmp_path, runner)
+
+        assert dag.nodes["source.p.raw.table"].last_updated is None
+        assert dag.nodes["source.p.raw.explicit_view"].last_updated == self._AT
+
+    def test_does_nothing_on_dbt_1_x(self, monkeypatch, tmp_path) -> None:
+        runner = FakeDbtV2Runner(
+            existing=set(), source_types={"source.p.raw.view": "view"}
+        )
+
+        dag = self._run(monkeypatch, tmp_path, runner, v2=False)
+
+        assert runner.calls == []
+        assert dag.nodes["source.p.raw.view"].last_updated == self._AT
+
+    def test_shares_one_catalog_fetch_with_the_existence_check(
+        self, monkeypatch, tmp_path
+    ) -> None:
+        runner = FakeDbtV2Runner(existing={"model.p.a"})
+
+        self._run(monkeypatch, tmp_path, runner)
+        relation_existence._find_missing_relations_v2(["model.p.a"], ["dbt", "build"])
+
+        assert len(runner.calls) == 1

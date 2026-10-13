@@ -1,4 +1,6 @@
 from collections.abc import Collection
+from functools import cache
+from pathlib import Path
 from time import perf_counter
 from typing import Any, cast
 
@@ -6,6 +8,7 @@ from .compatibility import is_dbt_v2, release_connections
 from .logger import log_debug, log_info, log_warn
 from .models import Freshness, MaterialisationNode, NodeType, ParsedDag
 from .target_finder import find_flag_value, find_target_in_args
+from .utils import load_json
 
 # Adapters whose relation listing can't be trusted to gate reuse on. dbt-spark swallows
 # unrecognised errors and returns [], which would read as "the whole schema is gone".
@@ -129,24 +132,31 @@ def find_missing_relations(
     return missing
 
 
-def _find_missing_relations_v2(
-    candidates: Collection[str], user_args: list[str]
-) -> set[str] | None:
-    """Candidates missing from dbt 2.x's catalog; None for an unsupported adapter."""
+@cache
+def _load_catalog_v2(user_args: tuple[str, ...]) -> Any:
+    """dbt 2.x's `parse --write-catalog` result, fetched once for every check that needs it."""
     from dbt.cli.main import dbtRunner
 
     # Resolve the same profile as the user's run.
     profile_flags: list[str] = []
-    if target := find_target_in_args(user_args):
+    if target := find_target_in_args(list(user_args)):
         profile_flags += ["--target", target]
     for flag in ("--profiles-dir", "--profile", "--vars"):
-        if (value := find_flag_value(user_args, flag)) is not None:
+        if (value := find_flag_value(list(user_args), flag)) is not None:
             profile_flags += [flag, value]
 
     # Any: the type checker uses the dev install's dbt 1.x types, which lack v2's fields.
     result: Any = dbtRunner().invoke(["parse", "--write-catalog", "-q", *profile_flags])
     if result.exception:
         raise RuntimeError(f"dbt parse --write-catalog failed: {result.exception}")
+    return result
+
+
+def _find_missing_relations_v2(
+    candidates: Collection[str], user_args: list[str]
+) -> set[str] | None:
+    """Candidates missing from dbt 2.x's catalog; None for an unsupported adapter."""
+    result = _load_catalog_v2(tuple(user_args))
     adapter_type = result.result.metadata.adapter_type
     if adapter_type in _UNSUPPORTED_ADAPTERS:
         log_debug(f"Existence checks are not enabled for the '{adapter_type}' adapter.")
@@ -225,3 +235,51 @@ def apply_relation_existence_gate(
         )
     else:
         log_debug("Every reusable node still exists in the warehouse.")
+
+
+def apply_view_source_gate(
+    parsed_dag: ParsedDag, user_args: list[str], target_dir: Path
+) -> None:
+    """On dbt 2.x, treat a source as changed when its freshness came from a view's metadata.
+
+    A view's last-altered time tracks its definition, not new data in the tables under it.
+    """
+    if not is_dbt_v2():
+        return
+    implicit = {
+        unique_id
+        for unique_id, source in load_json(target_dir / "manifest.json")[
+            "sources"
+        ].items()
+        if not any(
+            source["config"][key] for key in ("loaded_at_field", "loaded_at_query")
+        )
+        and (node := parsed_dag.nodes.get(unique_id)) is not None
+        and node.last_updated is not None
+    }
+    if not implicit:
+        return
+
+    try:
+        catalog_sources = _load_catalog_v2(tuple(user_args)).catalog.sources
+        # dbt-databricks lowercases information_schema's table_type.
+        views = {
+            unique_id
+            for unique_id in implicit
+            if unique_id in catalog_sources
+            and catalog_sources[unique_id].metadata.materialization_type.lower()
+            == "view"
+        }
+    except Exception as e:
+        log_warn(
+            f"Could not tell which sources are views, so the {len(implicit)} source(s) "
+            f"with no loaded_at_field or loaded_at_query count as changed. {e}"
+        )
+        views = implicit
+
+    for unique_id in views:
+        parsed_dag.nodes[unique_id].last_updated = None
+        log_info(
+            f"{unique_id} is a view with no loaded_at_field or loaded_at_query, "
+            "so models depending on it will run."
+        )

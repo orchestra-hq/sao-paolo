@@ -372,8 +372,6 @@ class TestGetSourceFreshnessOnDbtCoreV2:
         manifest=None,
         exceptions=(None,),
         user_args=(),
-        adapter_type="snowflake",
-        catalog_result=None,
         **kwargs,
     ):
         """`manifest` defaults to every result's source having a loaded_at_field."""
@@ -382,18 +380,13 @@ class TestGetSourceFreshnessOnDbtCoreV2:
                 r["unique_id"]: "updated_at" for r in freshness_result["results"]
             }
         runner = Mock()
-        runner.invoke.side_effect = [Mock(exception=e) for e in exceptions] + (
-            [catalog_result] if catalog_result else []
-        )
+        runner.invoke.side_effect = [Mock(exception=e) for e in exceptions]
         modules = {"dbt.cli.main": Mock(dbtRunner=Mock(return_value=runner))}
 
         def fake_load_json(path):
             if path == Path("target/sources.json"):
                 return freshness_result
-            return {
-                "metadata": {"adapter_type": adapter_type},
-                "sources": {uid: _source(uid, f) for uid, f in manifest.items()},
-            }
+            return {"sources": {uid: _source(uid, f) for uid, f in manifest.items()}}
 
         with (
             patch("src.orchestra_dbt.source_freshness.is_dbt_v2", return_value=True),
@@ -407,71 +400,12 @@ class TestGetSourceFreshnessOnDbtCoreV2:
 
     def test_keeps_sources_dbt_resolved_from_metadata(self):
         """dbt 2.x still computes metadata freshness without loaded_at_*; keep those."""
-        runner, result = self._run(
+        _, result = self._run(
             {"results": [_result("source.proj.raw.metadata_only")]},
             manifest={"source.proj.raw.metadata_only": None},
         )
 
-        runner.invoke.assert_called_once()
         assert result == SourceFreshness(sources={"source.proj.raw.metadata_only": _AT})
-
-    def test_databricks_view_sources_without_loaded_at_always_run(self):
-        """A view's last_altered only moves when its definition changes."""
-        runner, result = self._run(
-            {
-                "results": [
-                    _result("source.proj.raw.view"),
-                    _result("source.proj.raw.table"),
-                    _result("source.proj.raw.explicit_view"),
-                ]
-            },
-            manifest={
-                "source.proj.raw.view": None,
-                "source.proj.raw.table": None,
-                "source.proj.raw.explicit_view": "updated_at",
-            },
-            adapter_type="databricks",
-            catalog_result=_catalog(
-                {
-                    "source.proj.raw.view": "view",
-                    "source.proj.raw.table": "managed",
-                    "source.proj.raw.explicit_view": "view",
-                }
-            ),
-            user_args=("--target", "prod"),
-        )
-
-        assert runner.invoke.call_args_list[1].args[0] == [
-            "parse",
-            "--write-catalog",
-            "-q",
-            "--target",
-            "prod",
-        ]
-        assert result == SourceFreshness(
-            sources={
-                "source.proj.raw.table": _AT,
-                "source.proj.raw.explicit_view": _AT,
-            }
-        )
-
-    def test_databricks_failed_catalog_runs_every_implicit_source(self):
-        _, result = self._run(
-            {
-                "results": [
-                    _result("source.proj.raw.implicit"),
-                    _result("source.proj.raw.explicit"),
-                ]
-            },
-            manifest={
-                "source.proj.raw.implicit": None,
-                "source.proj.raw.explicit": "updated_at",
-            },
-            adapter_type="databricks",
-            catalog_result=Mock(exception=Exception("boom")),
-        )
-
-        assert result == SourceFreshness(sources={"source.proj.raw.explicit": _AT})
 
     def test_require_explicit_source_freshness_excludes_via_manifest(self):
         """dbt 2.x omits loaded_at_* from sources.json's criteria, hence the manifest."""
@@ -560,11 +494,3 @@ def _source(unique_id: str, loaded_at_field: str | None) -> dict:
         "fqn": unique_id.split(".")[1:],
         "config": {"loaded_at_field": loaded_at_field, "loaded_at_query": None},
     }
-
-
-def _catalog(types: dict[str, str]) -> Mock:
-    sources = {
-        unique_id: Mock(metadata=Mock(materialization_type=type_))
-        for unique_id, type_ in types.items()
-    }
-    return Mock(exception=None, catalog=Mock(sources=sources))
