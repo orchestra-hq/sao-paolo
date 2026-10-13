@@ -74,7 +74,7 @@ def _load_run_results(target_dir: Path) -> dict:
 
 
 def get_last_updated_from_run_results(
-    node_id: str, target_dir: Path = Path("target")
+    node_id: str, target_dir: Path
 ) -> datetime | None:
     try:
         for r in _load_run_results(target_dir).get("results", []):
@@ -89,7 +89,7 @@ def update_state(
     state: StateApiModel,
     parsed_dag: ParsedDag,
     source_freshness: SourceFreshness,
-    target_dir: Path = Path("target"),
+    target_dir: Path,
 ) -> set[str]:
     updated_asset_external_ids: set[str] = set()
     for node_id, node in parsed_dag.nodes.items():
