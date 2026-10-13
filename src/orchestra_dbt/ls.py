@@ -76,9 +76,7 @@ def _nodes_from_fqns(fqns: list[str], target_dir: Path) -> NodesToRun:
     return NodesToRun(paths=[path_by_fqn[fqn] for fqn in fqns], selectors=fqns)
 
 
-def get_nodes_to_run(
-    args: tuple, target_dir: Path = Path("target")
-) -> NodesToRun | None:
+def get_nodes_to_run(args: tuple, target_dir: Path) -> NodesToRun | None:
     try:
         from dbt.cli.main import (
             dbtRunner,

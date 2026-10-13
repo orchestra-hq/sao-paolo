@@ -14,7 +14,7 @@ There are a few core reasons to use this project:
 
 - **Python:** 3.11, 3.12, and 3.13 only (see `requires-python` in `pyproject.toml`).
 - **dbt-core:** 1.10.x to 1.12.x when using stateful orchestration.
-- **dbt v2:** supported for stateful orchestration. CI tests dbt v2 using the
+- **dbt v2:** 2.x is supported for stateful orchestration, with some differences (see [dbt v2](#dbt-v2)). CI tests dbt v2 using the
   `dbt-oss` package.
 - **A dbt Core project:** an existing dbt Core project where you already run `dbt build` / `dbt run` / `dbt test`.
 
@@ -35,6 +35,21 @@ There are a few core reasons to use this project:
     ```
 
 You can skip `pyproject.toml` entirely: every `[tool.orchestra_dbt]` option has an environment-variable override (see [Pyproject.toml and environment variables](#pyprojecttoml-and-environment-variables)).
+
+### dbt v2
+
+dbt v2 is one package with the warehouse adapters built in, so don't install `dbt-core` or an adapter package such as `dbt-snowflake` alongside it:
+
+```bash
+pip install dbt-orchestra "dbt-oss>=2,<3"
+```
+
+dbt v2 doesn't support every adapter that 1.x does; Postgres, for example, isn't supported.
+
+State-aware orchestration works on dbt v2 as it does on 1.x, with these differences:
+
+- **Implicit source freshness** (sources with no `loaded_at_field` or `loaded_at_query`) comes from dbt v2's own metadata freshness, not Orchestra's fallbacks. The Databricks `DESCRIBE HISTORY` fallback is 1.x only. Sources that are views always count as changed, because a view's metadata only updates when its definition changes, not when the data underneath it does. If your adapter can't report metadata freshness on v2 (DuckDB, for example), those sources are left out, and models that depend on them always run.
+- **[Verifying relations still exist](#verifying-relations-still-exist)** reads dbt's catalog from `dbt parse --write-catalog`, which costs one catalog pass whenever there are nodes to verify, rather than the schema listings 1.x uses.
 
 ## Running
 
@@ -257,7 +272,7 @@ When **both** are omitted, Orchestra can still run **adapter-specific** SQL to i
 
 For adapters without a registered fallback, if both `loaded_at` settings are missing, Orchestra follows dbt's `FreshnessRunner` behavior (which may surface as warnings or a non-actionable result depending on dbt and the warehouse).
 
-Implicit freshness can be misleading for sources defined on top of **views**: warehouse metadata reports when the view was last altered, not when new data arrived in the underlying tables. On dbt v2, such view sources count as changed, so models depending on them always run. To opt out of implicit freshness entirely, set `require_explicit_source_freshness = true` (or `ORCHESTRA_REQUIRE_EXPLICIT_SOURCE_FRESHNESS=true`). Sources without `loaded_at_field`/`loaded_at_query` are then excluded from state-aware orchestration and models depending on them always run; sources with an explicit config keep working as normal.
+Implicit freshness can be misleading for sources defined on top of **views**: warehouse metadata reports when the view was last altered, not when new data arrived in the underlying tables. On dbt v2, view sources always count as changed (see [dbt v2](#dbt-v2)). To opt out of implicit freshness entirely, set `require_explicit_source_freshness = true` (or `ORCHESTRA_REQUIRE_EXPLICIT_SOURCE_FRESHNESS=true`). Sources without `loaded_at_field`/`loaded_at_query` are then excluded from state-aware orchestration and models depending on them always run; sources with an explicit config keep working as normal.
 
 ### Verifying relations still exist
 

@@ -214,7 +214,7 @@ class TestGetSourceFreshness:
             ),
         ):
             result = get_source_freshness(
-                ("--target", "prod"), selectors_to_run=["proj.a"]
+                ("--target", "prod"), _TARGET_DIR, selectors_to_run=["proj.a"]
             )
 
         mock_runner.invoke.assert_called_once_with(
@@ -250,6 +250,7 @@ class TestGetSourceFreshness:
         ):
             result = get_source_freshness(
                 ("--target", "prod"),
+                _TARGET_DIR,
                 scope_to_selection=True,
                 selectors_to_run=["proj.a"],
             )
@@ -292,7 +293,7 @@ class TestGetSourceFreshness:
                 "src.orchestra_dbt.source_freshness.load_json", return_value=stale
             ) as load_json,
         ):
-            result = get_source_freshness(())
+            result = get_source_freshness((), _TARGET_DIR)
 
         assert result is None
         load_json.assert_not_called()
@@ -316,6 +317,7 @@ class TestGetSourceFreshness:
         ):
             get_source_freshness(
                 (),
+                _TARGET_DIR,
                 scope_to_selection=True,
                 selectors_to_run=["proj.a"],
             )
@@ -364,7 +366,7 @@ class TestGetSourceFreshnessOnDbtCoreV2:
             patch.dict("sys.modules", {"dbt.task.freshness": None}),
             pytest.raises(ImportError),
         ):
-            get_source_freshness(())
+            get_source_freshness((), _TARGET_DIR)
 
     def _run(
         self,
@@ -384,7 +386,7 @@ class TestGetSourceFreshnessOnDbtCoreV2:
         modules = {"dbt.cli.main": Mock(dbtRunner=Mock(return_value=runner))}
 
         def fake_load_json(path):
-            if path == Path("target/sources.json"):
+            if path == _TARGET_DIR / "sources.json":
                 return freshness_result
             return {"sources": {uid: _source(uid, f) for uid, f in manifest.items()}}
 
@@ -396,7 +398,7 @@ class TestGetSourceFreshnessOnDbtCoreV2:
                 side_effect=fake_load_json,
             ),
         ):
-            return runner, get_source_freshness(user_args, **kwargs)
+            return runner, get_source_freshness(user_args, _TARGET_DIR, **kwargs)
 
     def test_keeps_sources_dbt_resolved_from_metadata(self):
         """dbt 2.x still computes metadata freshness without loaded_at_*; keep those."""
@@ -483,6 +485,8 @@ class TestGetSourceFreshnessOnDbtCoreV2:
 
 
 _AT = datetime(2026, 3, 31, tzinfo=UTC)
+# Never touches disk: every read below goes through a patched load_json.
+_TARGET_DIR = Path("proj/target")
 
 
 def _result(unique_id: str) -> dict:
