@@ -1,6 +1,7 @@
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from ..compatibility import (
     dbt_core_import_error_message,
@@ -31,11 +32,20 @@ def get_args_for_source_freshness(
     sibling directory can pull in that directory's sources too. That widens the
     check rather than narrowing it, so it costs time, never correctness.
     """
-    args: list[str] = ["source", "freshness", "-q"]
+    args: list[str] = ["source", "freshness", "-q", *_project_args(user_args)]
+    if scope_to_selection and selectors_to_run:
+        args.append("--select")
+        args.extend(f"+{selector}" for selector in selectors_to_run)
+    return args
+
+
+def _project_args(user_args: tuple | list[str]) -> list[str]:
+    """The user's target, project and profile flags, so a side invocation of dbt
+    resolves the same project and profile as their run."""
+    args: list[str] = []
     target = find_target_in_args(list(user_args))
     if target:
         args.extend(["--target", target])
-    # Otherwise freshness resolves a different project or profile than the user's run.
     for flag in (
         "--project-dir",
         "--target-path",
@@ -45,10 +55,26 @@ def get_args_for_source_freshness(
     ):
         if (value := find_flag_value(list(user_args), flag)) is not None:
             args.extend([flag, value])
-    if scope_to_selection and selectors_to_run:
-        args.append("--select")
-        args.extend(f"+{selector}" for selector in selectors_to_run)
     return args
+
+
+def _find_view_sources(
+    runner: Any, user_args: tuple | list[str], candidates: set[str]
+) -> set[str]:
+    """The `candidates` whose relation is a view, per dbt 2.x's catalog."""
+    # Any: the type checker uses the dev install's dbt 1.x types, which lack v2's fields.
+    result: Any = runner.invoke(
+        ["parse", "--write-catalog", "-q", *_project_args(user_args)]
+    )
+    if result.exception:
+        raise RuntimeError(f"dbt parse --write-catalog failed: {result.exception}")
+    # Databricks lowercases the type ("view"), other adapters don't ("VIEW").
+    return {
+        unique_id
+        for unique_id, source in result.catalog.sources.items()
+        if unique_id in candidates
+        and source.metadata.materialization_type.lower() == "view"
+    }
 
 
 def should_exclude_source(
@@ -69,11 +95,10 @@ def _get_source_freshness_v2(
 
     try:
         # 2.x's sources.json omits loaded_at_*; the manifest has them.
+        manifest = load_json(target_dir / "manifest.json")
         implicit = {
             unique_id: "source:" + ".".join(source["fqn"])
-            for unique_id, source in load_json(target_dir / "manifest.json")[
-                "sources"
-            ].items()
+            for unique_id, source in manifest["sources"].items()
             if not any(
                 source["config"][key] for key in ("loaded_at_field", "loaded_at_query")
             )
@@ -113,6 +138,20 @@ def _get_source_freshness_v2(
                     f"{len(excluded)} source(s) have no explicit freshness config (loaded_at_field "
                     "or loaded_at_query) and are excluded from state-aware orchestration; "
                     "models depending on them will always run."
+                )
+        elif implicit and manifest["metadata"]["adapter_type"] == "databricks":
+            # A view's metadata freshness only moves when its definition changes, not
+            # when the tables under it get new data. 1.x treats these as changed.
+            try:
+                excluded = _find_view_sources(runner, user_args, set(implicit))
+            except Exception as e:
+                log_warn(f"Could not tell which sources are views ({e}).")
+                excluded = set(implicit)
+            if excluded:
+                log_warn(
+                    f"{len(excluded)} Databricks source(s) without loaded_at_field or "
+                    "loaded_at_query are views or could not be checked; models "
+                    "depending on them will always run."
                 )
         sources = {
             source["unique_id"]: source["max_loaded_at"]

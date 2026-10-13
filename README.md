@@ -246,7 +246,7 @@ When **both** are omitted, Orchestra can still run **adapter-specific** SQL to i
 
 | Warehouse | dbt adapter type (typical) | Implicit freshness (no `loaded_at_*`) |
 | --- | --- | --- |
-| **Databricks** | `databricks` | **Supported** — uses `DESCRIBE HISTORY` on the source relation. |
+| **Databricks** | `databricks` | **Supported** — uses `DESCRIBE HISTORY` on the source relation. A source that is a view is treated as changed, so models depending on it always run; on dbt v2 this takes an extra `dbt parse --write-catalog` to find the views. |
 | **Snowflake** | `snowflake` | **Use `loaded_at_field` or `loaded_at_query`** — no Orchestra fallback; standard dbt freshness. |
 | **Microsoft Fabric** | `fabric` | Same as Snowflake — configure `loaded_at_*`; no Orchestra fallback. |
 | **Google BigQuery** | `bigquery` | Same as Snowflake — configure `loaded_at_*`; no Orchestra fallback. |
