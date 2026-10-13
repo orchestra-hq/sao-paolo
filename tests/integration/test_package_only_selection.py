@@ -108,7 +108,7 @@ def test_ls_reports_package_relative_paths_that_do_not_exist_at_the_root(
 ) -> None:
     """The premise of the bug: the reported path is real to dbt but is not a real
     file relative to the project root, because the package owns it."""
-    nodes = get_nodes_to_run(())
+    nodes = get_nodes_to_run((), _REPRO_PROJECT / "target")
 
     assert nodes is not None
     assert nodes.paths == [_MODEL_PATH]
@@ -134,7 +134,7 @@ def test_path_selection_finds_nothing_but_fqn_selection_finds_the_source(
 def test_scoped_freshness_args_resolve_to_the_source(package_only_project) -> None:
     """End to end: what get_args_for_source_freshness builds for this project has to
     actually select the source when handed back to dbt."""
-    nodes = get_nodes_to_run(())
+    nodes = get_nodes_to_run((), _REPRO_PROJECT / "target")
     assert nodes is not None
 
     args = get_args_for_source_freshness(
@@ -164,7 +164,7 @@ def test_json_paths_are_identical_to_the_previous_path_output(
     legacy = package_only_project().invoke(legacy_args)
     assert legacy.success, f"dbt ls failed: {legacy.exception}"
 
-    nodes = get_nodes_to_run(())
+    nodes = get_nodes_to_run((), _REPRO_PROJECT / "target")
 
     assert nodes is not None
     assert nodes.paths == list(legacy.result)

@@ -6,6 +6,7 @@ coverage of this lives in tests/integration/test_package_only_selection.py.
 """
 
 import json
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 from src.orchestra_dbt.ls import get_nodes_to_run
@@ -15,24 +16,22 @@ def _line(path: str, fqn: list[str]) -> str:
     return json.dumps({"original_file_path": path, "fqn": fqn})
 
 
-def _nodes_from(lines: list[str], manifest: dict | None = None):
+def _nodes_from(lines: list[str], target_dir: Path):
     runner = Mock()
     runner.invoke.return_value = Mock(success=True, exception=None, result=lines)
     with patch.dict(
         "sys.modules", {"dbt.cli.main": Mock(dbtRunner=Mock(return_value=runner))}
     ):
-        if manifest is None:
-            return get_nodes_to_run(())
-        with patch("src.orchestra_dbt.ls.load_json", return_value=manifest):
-            return get_nodes_to_run(())
+        return get_nodes_to_run((), target_dir)
 
 
-def test_splits_each_node_into_a_path_and_an_fqn_selector():
+def test_splits_each_node_into_a_path_and_an_fqn_selector(tmp_path):
     nodes = _nodes_from(
         [
             _line("models/a.sql", ["proj", "a"]),
             _line("seeds/b.csv", ["proj", "nested", "b"]),
-        ]
+        ],
+        tmp_path,
     )
 
     assert nodes is not None
@@ -40,11 +39,12 @@ def test_splits_each_node_into_a_path_and_an_fqn_selector():
     assert nodes.selectors == ["proj.a", "proj.nested.b"]
 
 
-def test_package_owned_node_keeps_its_package_qualified_fqn():
+def test_package_owned_node_keeps_its_package_qualified_fqn(tmp_path):
     """The path is relative to the owning package, so it doesn't resolve against the
     project root -- the fqn is what makes this node selectable."""
     nodes = _nodes_from(
-        [_line("models/staging/stg_thing.sql", ["a_package", "staging", "stg_thing"])]
+        [_line("models/staging/stg_thing.sql", ["a_package", "staging", "stg_thing"])],
+        tmp_path,
     )
 
     assert nodes is not None
@@ -52,12 +52,12 @@ def test_package_owned_node_keeps_its_package_qualified_fqn():
     assert nodes.selectors == ["a_package.staging.stg_thing"]
 
 
-def test_malformed_output_degrades_rather_than_returning_mismatched_lists():
-    assert _nodes_from([json.dumps({"fqn": ["proj", "no_path"]})]) is None
+def test_malformed_output_degrades_rather_than_returning_mismatched_lists(tmp_path):
+    assert _nodes_from([json.dumps({"fqn": ["proj", "no_path"]})], tmp_path) is None
 
 
-def test_no_nodes_gives_empty_lists_not_none():
-    nodes = _nodes_from([])
+def test_no_nodes_gives_empty_lists_not_none(tmp_path):
+    nodes = _nodes_from([], tmp_path)
 
     assert nodes is not None
     assert nodes.paths == []
@@ -86,23 +86,16 @@ _MANIFEST = {
 }
 
 
-def test_dbt_2_fqns_resolve_to_paths_through_the_manifest():
+def test_dbt_2_fqns_resolve_to_paths_through_the_manifest(tmp_path):
     """dbt 2.x returns fqns whatever --output says."""
-    nodes = _nodes_from(["proj.staging.stg_events", "proj.raw_events"], _MANIFEST)
+    (tmp_path / "manifest.json").write_text(json.dumps(_MANIFEST))
+    nodes = _nodes_from(["proj.staging.stg_events", "proj.raw_events"], tmp_path)
 
     assert nodes is not None
     assert nodes.paths == ["models/staging/stg_events.sql", "seeds/raw_events.csv"]
     assert nodes.selectors == ["proj.staging.stg_events", "proj.raw_events"]
 
 
-def test_dbt_2_unreadable_manifest_degrades_to_none():
+def test_dbt_2_unreadable_manifest_degrades_to_none(tmp_path):
     """None, not []: cli treats [] as "no filter"."""
-    runner = Mock()
-    runner.invoke.return_value = Mock(success=True, exception=None, result=["proj.a"])
-    with (
-        patch.dict(
-            "sys.modules", {"dbt.cli.main": Mock(dbtRunner=Mock(return_value=runner))}
-        ),
-        patch("src.orchestra_dbt.ls.load_json", side_effect=FileNotFoundError),
-    ):
-        assert get_nodes_to_run(()) is None
+    assert _nodes_from(["proj.a"], tmp_path) is None

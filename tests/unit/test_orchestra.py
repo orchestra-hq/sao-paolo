@@ -4,29 +4,29 @@ from src.orchestra_dbt.orchestra import is_warn
 
 
 class TestIsWarn:
-    def test_file_not_found(self, capsys):
+    def test_file_not_found(self, capsys, tmp_path):
         with (
             patch("src.orchestra_dbt.orchestra.load_json") as mock_load_json,
         ):
             mock_load_json.side_effect = FileNotFoundError("File not found")
-            is_warn()
+            is_warn(tmp_path)
             assert capsys.readouterr().out.strip() == "SUCCEEDED"
 
-    def test_file_malformed(self, capsys):
+    def test_file_malformed(self, capsys, tmp_path):
         with (
             patch("src.orchestra_dbt.orchestra.load_json") as mock_load_json,
         ):
             mock_load_json.side_effect = ValueError("Invalid JSON")
-            is_warn()
+            is_warn(tmp_path)
             assert capsys.readouterr().out.strip() == "SUCCEEDED"
 
-    def test_no_results_empty_array(self, capsys):
+    def test_no_results_empty_array(self, capsys, tmp_path):
         with patch("src.orchestra_dbt.orchestra.load_json") as mock_load_json:
             mock_load_json.return_value = {"results": []}
-            is_warn()
+            is_warn(tmp_path)
             assert capsys.readouterr().out.strip() == "SUCCEEDED"
 
-    def test_one_warning(self, capsys):
+    def test_one_warning(self, capsys, tmp_path):
         with patch("src.orchestra_dbt.orchestra.load_json") as mock_load_json:
             mock_load_json.return_value = {
                 "results": [
@@ -35,10 +35,10 @@ class TestIsWarn:
                     {"status": "success"},
                 ]
             }
-            is_warn()
+            is_warn(tmp_path)
             assert capsys.readouterr().out.strip() == "WARNING"
 
-    def test_no_warnings(self, capsys):
+    def test_no_warnings(self, capsys, tmp_path):
         with patch("src.orchestra_dbt.orchestra.load_json") as mock_load_json:
             mock_load_json.return_value = {
                 "results": [
@@ -47,5 +47,5 @@ class TestIsWarn:
                     {"status": "error"},
                 ]
             }
-            is_warn()
+            is_warn(tmp_path)
             assert capsys.readouterr().out.strip() == "SUCCEEDED"
