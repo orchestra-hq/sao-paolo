@@ -374,6 +374,7 @@ class TestGetSourceFreshnessOnDbtCoreV2:
         manifest=None,
         exceptions=(None,),
         user_args=(),
+        views=(),
         **kwargs,
     ):
         """`manifest` defaults to every result's source having a loaded_at_field."""
@@ -397,6 +398,10 @@ class TestGetSourceFreshnessOnDbtCoreV2:
                 "src.orchestra_dbt.source_freshness.load_json",
                 side_effect=fake_load_json,
             ),
+            patch(
+                "src.orchestra_dbt.source_freshness.find_view_sources",
+                side_effect=lambda candidates, _: set(candidates) & set(views),
+            ),
         ):
             return runner, get_source_freshness(user_args, _TARGET_DIR, **kwargs)
 
@@ -408,6 +413,31 @@ class TestGetSourceFreshnessOnDbtCoreV2:
         )
 
         assert result == SourceFreshness(sources={"source.proj.raw.metadata_only": _AT})
+
+    def test_excludes_view_sources_without_loaded_at(self):
+        """A view's last_altered only moves when its definition changes."""
+        _, result = self._run(
+            {
+                "results": [
+                    _result("source.proj.raw.view"),
+                    _result("source.proj.raw.table"),
+                    _result("source.proj.raw.explicit_view"),
+                ]
+            },
+            manifest={
+                "source.proj.raw.view": None,
+                "source.proj.raw.table": None,
+                "source.proj.raw.explicit_view": "updated_at",
+            },
+            views=("source.proj.raw.view", "source.proj.raw.explicit_view"),
+        )
+
+        assert result == SourceFreshness(
+            sources={
+                "source.proj.raw.table": _AT,
+                "source.proj.raw.explicit_view": _AT,
+            }
+        )
 
     def test_require_explicit_source_freshness_excludes_via_manifest(self):
         """dbt 2.x omits loaded_at_* from sources.json's criteria, hence the manifest."""

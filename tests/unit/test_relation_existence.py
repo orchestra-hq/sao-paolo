@@ -1,4 +1,3 @@
-import json
 import re
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -22,7 +21,6 @@ from src.orchestra_dbt.models import (
 )
 from src.orchestra_dbt.relation_existence import (
     apply_relation_existence_gate,
-    apply_view_source_gate,
     collect_reuse_candidates,
     find_missing_relations,
 )
@@ -880,81 +878,42 @@ class TestFindMissingRelationsV2:
         assert node.freshness == Freshness.DIRTY
 
 
-class TestApplyViewSourceGate:
-    _AT = datetime(2026, 3, 31, tzinfo=UTC)
-
-    def _run(self, monkeypatch, tmp_path, runner, v2=True) -> ParsedDag:
-        sources = {
-            "source.p.raw.view": None,
-            "source.p.raw.table": None,
-            "source.p.raw.explicit_view": "updated_at",
-        }
-        (tmp_path / "manifest.json").write_text(
-            json.dumps(
-                {
-                    "sources": {
-                        uid: {"config": {"loaded_at_field": f, "loaded_at_query": None}}
-                        for uid, f in sources.items()
-                    }
-                }
-            )
-        )
-        monkeypatch.setattr(relation_existence, "is_dbt_v2", lambda: v2)
+class TestFindViewSources:
+    def _run(self, monkeypatch, runner) -> set[str]:
         monkeypatch.setattr("dbt.cli.main.dbtRunner", lambda: runner)
-        dag = ParsedDag(
-            nodes={uid: SourceNode(last_updated=self._AT) for uid in sources},
-            edges=[],
+        return relation_existence.find_view_sources(
+            ["source.p.raw.view", "source.p.raw.upper_view", "source.p.raw.table"],
+            ["dbt", "build"],
         )
-        apply_view_source_gate(dag, ["dbt", "build"], tmp_path)
-        return dag
 
-    def test_view_sources_without_loaded_at_count_as_changed(
-        self, monkeypatch, tmp_path
-    ) -> None:
+    def test_finds_views_in_either_case(self, monkeypatch) -> None:
         """Databricks reports "view", other adapters "VIEW"."""
         runner = FakeDbtV2Runner(
             existing=set(),
             source_types={
                 "source.p.raw.view": "view",
+                "source.p.raw.upper_view": "VIEW",
                 "source.p.raw.table": "BASE TABLE",
-                "source.p.raw.explicit_view": "VIEW",
+                "source.p.raw.other_view": "view",
             },
         )
 
-        dag = self._run(monkeypatch, tmp_path, runner)
-
-        assert {uid: n.last_updated for uid, n in dag.nodes.items()} == {
-            "source.p.raw.view": None,
-            "source.p.raw.table": self._AT,
-            "source.p.raw.explicit_view": self._AT,
+        assert self._run(monkeypatch, runner) == {
+            "source.p.raw.view",
+            "source.p.raw.upper_view",
         }
 
-    def test_failed_catalog_counts_every_implicit_source_as_changed(
-        self, monkeypatch, tmp_path
-    ) -> None:
+    def test_failed_catalog_returns_every_candidate(self, monkeypatch) -> None:
         runner = FakeDbtV2Runner(existing=set(), exception="boom")
 
-        dag = self._run(monkeypatch, tmp_path, runner)
-
-        assert dag.nodes["source.p.raw.table"].last_updated is None
-        assert dag.nodes["source.p.raw.explicit_view"].last_updated == self._AT
-
-    def test_does_nothing_on_dbt_1_x(self, monkeypatch, tmp_path) -> None:
-        runner = FakeDbtV2Runner(
-            existing=set(), source_types={"source.p.raw.view": "view"}
-        )
-
-        dag = self._run(monkeypatch, tmp_path, runner, v2=False)
-
-        assert runner.calls == []
-        assert dag.nodes["source.p.raw.view"].last_updated == self._AT
+        assert len(self._run(monkeypatch, runner)) == 3
 
     def test_shares_one_catalog_fetch_with_the_existence_check(
-        self, monkeypatch, tmp_path
+        self, monkeypatch
     ) -> None:
         runner = FakeDbtV2Runner(existing={"model.p.a"})
 
-        self._run(monkeypatch, tmp_path, runner)
+        self._run(monkeypatch, runner)
         relation_existence._find_missing_relations_v2(["model.p.a"], ["dbt", "build"])
 
         assert len(runner.calls) == 1

@@ -9,6 +9,7 @@ from ..compatibility import (
 )
 from ..logger import log_debug, log_error, log_info, log_warn
 from ..models import SourceFreshness
+from ..relation_existence import find_view_sources
 from ..target_finder import find_flag_value, find_target_in_args
 from ..utils import load_json
 from .fallbacks.registry import FALLBACK_BY_ADAPTER_TYPE, loaded_at_fields_unset
@@ -101,18 +102,23 @@ def _get_source_freshness_v2(
         if result.exception:
             raise RuntimeError(f"dbt v2 source freshness failed: {result.exception}")
         results = load_json(target_dir / "sources.json")["results"]
-        excluded: set[str] = set()
+        excluded = {
+            source["unique_id"] for source in results if source["unique_id"] in implicit
+        }
         if require_explicit_source_freshness:
-            excluded = {
-                source["unique_id"]
-                for source in results
-                if source["unique_id"] in implicit
-            }
             if excluded:
                 log_warn(
                     f"{len(excluded)} source(s) have no explicit freshness config (loaded_at_field "
                     "or loaded_at_query) and are excluded from state-aware orchestration; "
                     "models depending on them will always run."
+                )
+        elif excluded:
+            # A view's last_altered tracks its definition, not new data under it.
+            excluded = find_view_sources(excluded, list(user_args))
+            if excluded:
+                log_warn(
+                    f"{len(excluded)} source(s) are views with no loaded_at_field or "
+                    "loaded_at_query; models depending on them will always run."
                 )
         sources = {
             source["unique_id"]: source["max_loaded_at"]
