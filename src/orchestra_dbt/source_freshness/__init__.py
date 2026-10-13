@@ -40,8 +40,7 @@ def get_args_for_source_freshness(
 
 
 def _project_args(user_args: tuple | list[str]) -> list[str]:
-    """The user's target, project and profile flags, so a side invocation of dbt
-    resolves the same project and profile as their run."""
+    """Flags that make a side invocation of dbt resolve the user's project and profile."""
     args: list[str] = []
     target = find_target_in_args(list(user_args))
     if target:
@@ -68,7 +67,7 @@ def _find_view_sources(
     )
     if result.exception:
         raise RuntimeError(f"dbt parse --write-catalog failed: {result.exception}")
-    # Databricks lowercases the type ("view"), other adapters don't ("VIEW").
+    # dbt-databricks lowercases information_schema's table_type.
     return {
         unique_id
         for unique_id, source in result.catalog.sources.items()
@@ -140,18 +139,20 @@ def _get_source_freshness_v2(
                     "models depending on them will always run."
                 )
         elif implicit and manifest["metadata"]["adapter_type"] == "databricks":
-            # A view's metadata freshness only moves when its definition changes, not
-            # when the tables under it get new data. 1.x treats these as changed.
+            # A view's last_altered tracks its definition, not new data under it.
             try:
                 excluded = _find_view_sources(runner, user_args, set(implicit))
+                if excluded:
+                    log_warn(
+                        f"{len(excluded)} source(s) are views with no loaded_at_field or "
+                        "loaded_at_query; models depending on them will always run."
+                    )
             except Exception as e:
-                log_warn(f"Could not tell which sources are views ({e}).")
                 excluded = set(implicit)
-            if excluded:
                 log_warn(
-                    f"{len(excluded)} Databricks source(s) without loaded_at_field or "
-                    "loaded_at_query are views or could not be checked; models "
-                    "depending on them will always run."
+                    f"Could not tell which sources are views ({e}); models depending on "
+                    f"the {len(excluded)} source(s) with no loaded_at_field or "
+                    "loaded_at_query will always run."
                 )
         sources = {
             source["unique_id"]: source["max_loaded_at"]
