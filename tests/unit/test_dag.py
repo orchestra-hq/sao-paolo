@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 from hashlib import sha256
+from pathlib import Path
 
 import pytest
 
@@ -17,6 +18,11 @@ from src.orchestra_dbt.models import (
     StateApiModel,
     StateItem,
 )
+
+# Model checksums of the `raw_code` in `sample_manifest`.
+MODEL_A_CHECKSUM = sha256(b"select 'a'").hexdigest()
+MODEL_B_CHECKSUM = sha256(b"select 'b'").hexdigest()
+MODEL_C_CHECKSUM = sha256(b"select 'c'").hexdigest()
 
 
 class TestCalculateFreshnessOnNode:
@@ -194,7 +200,7 @@ class TestConstructDag:
             state={
                 "integration_account_id.model.test_project.model_a": StateItem(
                     last_updated=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
-                    checksum="def456",
+                    checksum=MODEL_A_CHECKSUM,
                     sources={
                         "source.test_db.test_schema.test_table": datetime(
                             2024, 1, 3, 12, 0, 0, tzinfo=UTC
@@ -215,7 +221,11 @@ class TestConstructDag:
         )
 
         assert construct_dag(
-            source_freshness, state, project_dir=tmp_path, target_dir=tmp_path
+            source_freshness,
+            state,
+            project_dir=tmp_path,
+            target_dir=tmp_path,
+            packages_install_path=Path("dbt_packages"),
         ) == ParsedDag(
             nodes={
                 "source.test_db.test_schema.test_table": SourceNode(
@@ -225,7 +235,7 @@ class TestConstructDag:
                     asset_external_id="integration_account_id.model.test_project.model_a",
                     freshness=Freshness.CLEAN,
                     last_updated=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
-                    checksum="def456",
+                    checksum=MODEL_A_CHECKSUM,
                     dbt_path="models/model_a.sql",
                     file_path="models/model_a.sql",
                     sources={
@@ -239,7 +249,7 @@ class TestConstructDag:
                 "model.test_project_2.model_b": MaterialisationNode(
                     asset_external_id="integration_account_id.model.test_project_2.model_b",
                     freshness=Freshness.DIRTY,
-                    checksum="ghi789",
+                    checksum=MODEL_B_CHECKSUM,
                     dbt_path="models/model_b.sql",
                     file_path="dbt_packages/test_project_2/models/model_b.sql",
                     reason="Model not previously seen in state.",
@@ -250,7 +260,7 @@ class TestConstructDag:
                     asset_external_id="integration_account_id.model.test_project.model_c",
                     freshness=Freshness.DIRTY,
                     last_updated=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
-                    checksum="456",
+                    checksum=MODEL_C_CHECKSUM,
                     dbt_path="models/model_c.sql",
                     file_path="models/model_c.sql",
                     reason="Checksum changed since last run.",
@@ -297,7 +307,11 @@ class TestConstructDag:
         )
 
         dag = construct_dag(
-            source_freshness, state, project_dir=tmp_path, target_dir=tmp_path
+            source_freshness,
+            state,
+            project_dir=tmp_path,
+            target_dir=tmp_path,
+            packages_install_path=Path("dbt_packages"),
         )
 
         assert "model.test_project.model_a" in dag.nodes
@@ -314,6 +328,7 @@ class TestConstructDag:
                 "seed.test_project.my_seed": {
                     "resource_type": "seed",
                     "checksum": {"checksum": "abc"},
+                    "raw_code": "",
                     "config": {},
                     "package_name": "test_project",
                     "original_file_path": "seeds/my_seed.csv",
@@ -339,6 +354,7 @@ class TestConstructDag:
             StateApiModel(state={}),
             project_dir=tmp_path,
             target_dir=tmp_path,
+            packages_install_path=Path("dbt_packages"),
         )
         node = dag.nodes["seed.test_project.my_seed"]
         assert isinstance(node, MaterialisationNode)
@@ -354,6 +370,7 @@ class TestConstructDag:
                 "seed.test_project.my_seed": {
                     "resource_type": "seed",
                     "checksum": {"checksum": "abc"},
+                    "raw_code": "",
                     "config": {},
                     "package_name": "test_project",
                     "original_file_path": "seeds/my_seed.csv",
@@ -390,6 +407,7 @@ class TestConstructDag:
             state,
             project_dir=tmp_path,
             target_dir=tmp_path,
+            packages_install_path=Path("dbt_packages"),
         )
         node = dag.nodes["seed.test_project.my_seed"]
         assert isinstance(node, MaterialisationNode)
@@ -413,6 +431,7 @@ class TestConstructDag:
                 "seed.test_project.my_seed": {
                     "resource_type": "seed",
                     "checksum": {"checksum": "abc"},
+                    "raw_code": "",
                     "config": {},
                     "package_name": "test_project",
                     "original_file_path": "seeds/my_seed.csv",
@@ -447,10 +466,60 @@ class TestConstructDag:
             state,
             project_dir=project_dir,
             target_dir=project_dir / "target",
+            packages_install_path=Path("dbt_packages"),
         ).nodes["seed.test_project.my_seed"]
         assert isinstance(node, MaterialisationNode)
         assert node.checksum == seed_digest
         assert node.freshness == Freshness.CLEAN
+
+    def test_construct_dag_reads_package_seed_under_packages_install_path(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ) -> None:
+        """A package installed under a custom `packages-install-path` is read from
+        there, and its `file_path` points there so patching can match it."""
+        seed_content = b"id\n1\n"
+        seed_digest = sha256(seed_content).hexdigest()
+        seed_dir = tmp_path / "vendor" / "my_package" / "seeds"
+        seed_dir.mkdir(parents=True)
+        (seed_dir / "pkg_seed.csv").write_bytes(seed_content)
+
+        manifest = {
+            "metadata": {"project_name": "test_project"},
+            "nodes": {
+                "seed.my_package.pkg_seed": {
+                    "resource_type": "seed",
+                    "checksum": {"checksum": "abc"},
+                    "raw_code": "",
+                    "config": {},
+                    "package_name": "my_package",
+                    "original_file_path": "seeds/pkg_seed.csv",
+                    "relation_name": "pkg_seed",
+                    "depends_on": {"nodes": []},
+                },
+            },
+            "child_map": {},
+        }
+        monkeypatch.setattr(dag_module, "load_json", lambda _: manifest)
+        monkeypatch.setattr(
+            dag_module,
+            "load_orchestra_dbt_settings",
+            lambda: OrchestraDbtSettings(
+                integration_account_id="acct",
+                seed_state_orchestration=True,
+                local_run=False,
+            ),
+        )
+
+        node = construct_dag(
+            SourceFreshness(sources={}),
+            StateApiModel(state={}),
+            project_dir=tmp_path,
+            target_dir=tmp_path,
+            packages_install_path=Path("vendor"),
+        ).nodes["seed.my_package.pkg_seed"]
+        assert isinstance(node, MaterialisationNode)
+        assert node.checksum == seed_digest
+        assert node.file_path == "vendor/my_package/seeds/pkg_seed.csv"
 
     def test_construct_dag_skips_function_dependency(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path
@@ -461,6 +530,7 @@ class TestConstructDag:
                 "model.test_project.my_model": {
                     "resource_type": "model",
                     "checksum": {"checksum": "abc123"},
+                    "raw_code": "",
                     "config": {},
                     "package_name": "test_project",
                     "original_file_path": "models/my_model.sql",
@@ -493,6 +563,7 @@ class TestConstructDag:
             StateApiModel(state={}),
             project_dir=tmp_path,
             target_dir=tmp_path,
+            packages_install_path=Path("dbt_packages"),
         )
 
         edge_froms = [e.from_ for e in dag.edges]

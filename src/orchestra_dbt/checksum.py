@@ -7,8 +7,11 @@ from .utils import load_seed_bytes
 
 
 def calculate_checksum(
-    resource_type: str, node_checksum: str, file_path: str
+    resource_type: str, node_checksum: str, file_path: str, raw_code: str
 ) -> str | None:
+    if resource_type == "model":
+        # dbt 1.x's formula: 2.x hashes differently, which would rebuild every model.
+        return sha256(raw_code.strip().encode()).hexdigest()
     if resource_type != "seed":
         return node_checksum
 

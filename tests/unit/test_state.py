@@ -36,14 +36,13 @@ def no_retry_waits(monkeypatch: pytest.MonkeyPatch):
 
 
 class TestLoadState:
-    @patch("src.orchestra_dbt.state_filters.get_integration_account_id")
     @pytest.mark.parametrize(
         "integration_account_id, expected_state_len",
         [(None, 3), ("a", 1), ("b", 1)],
     )
     def test_load_state_success(
         self,
-        mock_get_integration_account_id,
+        monkeypatch: pytest.MonkeyPatch,
         httpx_mock: HTTPXMock,
         integration_account_id: str | None,
         expected_state_len: int,
@@ -81,7 +80,13 @@ class TestLoadState:
             },
         )
 
-        mock_get_integration_account_id.return_value = integration_account_id
+        monkeypatch.setenv("ORCHESTRA_LOCAL_RUN", "false")
+        if integration_account_id:
+            monkeypatch.setenv(
+                "ORCHESTRA_INTEGRATION_ACCOUNT_ID", integration_account_id
+            )
+        else:
+            monkeypatch.delenv("ORCHESTRA_INTEGRATION_ACCOUNT_ID", raising=False)
         loaded_state = load_state()
         assert len(loaded_state.state) == expected_state_len
         assert next(iter(loaded_state.state.values())) == StateItem(
@@ -974,6 +979,60 @@ class TestSaveStateMerge:
         save_state(state=_ONE_NODE_STATE, updated_asset_external_ids=set())
 
         assert p.read_text(encoding="utf-8") == original
+
+
+class TestIntegrationAccountFilter:
+    def _use_state_file(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path, keys: list[str]
+    ):
+        p = tmp_path / "st.json"
+        p.write_text(
+            StateApiModel(
+                state={
+                    k: StateItem(
+                        last_updated=datetime(2024, 1, 1, tzinfo=UTC),
+                        checksum="old",
+                        sources={},
+                    )
+                    for k in keys
+                }
+            ).model_dump_json(),
+            encoding="utf-8",
+        )
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(p))
+        monkeypatch.setenv("ORCHESTRA_INTEGRATION_ACCOUNT_ID", "acct-a")
+        return p
+
+    def test_local_run_with_account_id_keeps_node_id_entries(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        self._use_state_file(monkeypatch, tmp_path, ["model.a", "model.b"])
+        monkeypatch.setenv("ORCHESTRA_LOCAL_RUN", "true")
+
+        assert set(load_state().state) == {"model.a", "model.b"}
+
+    def test_save_keeps_other_accounts_entries_in_shared_file(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        p = self._use_state_file(
+            monkeypatch, tmp_path, ["acct-a.model.a", "acct-b.model.b"]
+        )
+        monkeypatch.setenv("ORCHESTRA_LOCAL_RUN", "false")
+
+        state = load_state()
+        assert set(state.state) == {"acct-a.model.a"}
+        state.state["acct-a.model.a"] = StateItem(
+            last_updated=datetime(2024, 1, 2, tzinfo=UTC),
+            checksum="new",
+            sources={},
+        )
+        save_state(state, updated_asset_external_ids={"acct-a.model.a"})
+
+        stored = StateApiModel.model_validate_json(p.read_text(encoding="utf-8"))
+        assert stored.state["acct-a.model.a"].checksum == "new"
+        assert stored.state["acct-b.model.b"].checksum == "old"
 
 
 class TestLoadStateS3:

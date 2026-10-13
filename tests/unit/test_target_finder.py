@@ -2,8 +2,10 @@ from pathlib import Path
 
 import pytest
 
+import src.orchestra_dbt.target_finder as target_finder_module
 from src.orchestra_dbt.target_finder import (
     find_flag_value,
+    find_packages_install_path,
     find_target_dir,
     find_target_in_args,
 )
@@ -143,3 +145,41 @@ class TestFindTargetDir:
 
     def test_absolute_target_path_ignores_the_project(self):
         assert find_target_dir(["--target-path", "/abs"], Path("proj")) == Path("/abs")
+
+
+class TestFindPackagesInstallPath:
+    @pytest.fixture(autouse=True)
+    def _no_packages_install_path_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("DBT_PACKAGES_INSTALL_PATH", raising=False)
+        monkeypatch.delenv("DBT_ENGINE_PACKAGES_INSTALL_PATH", raising=False)
+
+    def test_defaults_to_dbt_packages(self, tmp_path: Path) -> None:
+        (tmp_path / "dbt_project.yml").write_text("name: proj\n")
+        assert find_packages_install_path([], tmp_path) == Path("dbt_packages")
+
+    def test_reads_dbt_project_yml(self, tmp_path: Path) -> None:
+        (tmp_path / "dbt_project.yml").write_text("packages-install-path: vendor\n")
+        assert find_packages_install_path([], tmp_path) == Path("vendor")
+
+    def test_v2_flag_beats_engine_env_beats_plain_env_beats_project(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setattr(target_finder_module, "is_dbt_v2", lambda: True)
+        (tmp_path / "dbt_project.yml").write_text("packages-install-path: vendor\n")
+        monkeypatch.setenv("DBT_PACKAGES_INSTALL_PATH", "plain")
+        assert find_packages_install_path([], tmp_path) == Path("plain")
+        monkeypatch.setenv("DBT_ENGINE_PACKAGES_INSTALL_PATH", "engine")
+        assert find_packages_install_path([], tmp_path) == Path("engine")
+        assert find_packages_install_path(
+            ["--packages-install-path", "flag"], tmp_path
+        ) == Path("flag")
+
+    def test_v1_ignores_flag_and_env(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setattr(target_finder_module, "is_dbt_v2", lambda: False)
+        (tmp_path / "dbt_project.yml").write_text("packages-install-path: vendor\n")
+        monkeypatch.setenv("DBT_PACKAGES_INSTALL_PATH", "plain")
+        assert find_packages_install_path(
+            ["--packages-install-path", "flag"], tmp_path
+        ) == Path("vendor")

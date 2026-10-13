@@ -1,5 +1,6 @@
 import re
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -604,6 +605,7 @@ class TestEndToEndFromStateThroughTheGate:
                 "model.test_project.readable_name": {
                     "resource_type": "model",
                     "checksum": {"checksum": "abc123"},
+                    "raw_code": "",
                     "config": {},
                     "package_name": "test_project",
                     "original_file_path": "models/readable_name.sql",
@@ -640,6 +642,7 @@ class TestEndToEndFromStateThroughTheGate:
             state,
             project_dir=tmp_path,
             target_dir=tmp_path,
+            packages_install_path=Path("dbt_packages"),
         )
         node = dag.nodes["model.test_project.readable_name"]
         assert isinstance(node, MaterialisationNode)
@@ -684,6 +687,7 @@ class TestEndToEndFromStateThroughTheGate:
                 "model.test_project.readable_name": {
                     "resource_type": "model",
                     "checksum": {"checksum": "abc123"},
+                    "raw_code": "",
                     "config": {},
                     "package_name": "test_project",
                     "original_file_path": "models/readable_name.sql",
@@ -726,7 +730,11 @@ class TestEndToEndFromStateThroughTheGate:
         )
 
         dag = construct_dag(
-            source_freshness, state, project_dir=tmp_path, target_dir=tmp_path
+            source_freshness,
+            state,
+            project_dir=tmp_path,
+            target_dir=tmp_path,
+            packages_install_path=Path("dbt_packages"),
         )
         node = dag.nodes["model.test_project.readable_name"]
         assert isinstance(node, MaterialisationNode)

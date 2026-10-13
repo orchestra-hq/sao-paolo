@@ -63,6 +63,7 @@ def construct_dag(
     state: StateApiModel,
     project_dir: Path,
     target_dir: Path,
+    packages_install_path: Path,
     manifest_override: str | None = None,
 ) -> ParsedDag:
     manifest = load_json(manifest_override or target_dir / "manifest.json")
@@ -105,7 +106,9 @@ def construct_dag(
                 )
                 depends_on_nodes = node.get("depends_on", {}).get("nodes", [])
                 if from_external_package:
-                    file_path = f"dbt_packages/{node['package_name']}/{dbt_path}"
+                    file_path = str(
+                        packages_install_path / node["package_name"] / dbt_path
+                    )
                 else:
                     file_path = dbt_path
 
@@ -114,6 +117,7 @@ def construct_dag(
                     resource_type,
                     node_checksum=str(node["checksum"]["checksum"]),
                     file_path=str(project_dir / file_path),
+                    raw_code=str(node["raw_code"]),
                 )
                 if not checksum:
                     track_state = False
@@ -151,6 +155,7 @@ def construct_dag(
                         else None
                     ),
                     relation_name=relation_name,
+                    patch_path=node.get("patch_path"),
                 )
 
                 for dep in depends_on_nodes:

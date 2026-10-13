@@ -42,6 +42,7 @@ def test_e2e(monkeypatch: pytest.MonkeyPatch) -> None:
         state=StateApiModel.model_validate(json.loads(local_state)),
         project_dir=Path("."),
         target_dir=Path("target"),
+        packages_install_path=Path("dbt_packages"),
         manifest_override="local_manifest.json",
     )
 

@@ -9,7 +9,6 @@ from ..config import get_orchestra_api_key, load_orchestra_dbt_settings
 from ..logger import log_error, log_info, log_warn
 from ..models import StateApiModel
 from ..state_errors import StateLoadError
-from ..state_filters import apply_integration_account_filter
 from .logging import log_state_loaded, log_state_saved
 
 _SAVE_ATTEMPTS = 3
@@ -49,7 +48,6 @@ class HttpStateBackend:
 
         try:
             state = StateApiModel.model_validate(response.json())
-            apply_integration_account_filter(state)
             log_state_loaded("http", state)
             return state
         except (ValidationError, ValueError) as e:

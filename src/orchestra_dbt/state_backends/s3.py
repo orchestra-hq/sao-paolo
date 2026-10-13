@@ -7,7 +7,6 @@ from pydantic import ValidationError
 from ..logger import log_info
 from ..models import StateApiModel
 from ..state_errors import StateLoadError, StateSaveError
-from ..state_filters import apply_integration_account_filter
 from .logging import log_state_loaded, log_state_saved
 
 
@@ -48,7 +47,6 @@ class S3StateBackend:
                 f"State object at s3://{bucket}/{key} failed validation: {e}"
             ) from e
 
-        apply_integration_account_filter(state)
         log_state_loaded("s3", state)
         return state
 

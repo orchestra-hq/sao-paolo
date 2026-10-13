@@ -27,8 +27,8 @@ from .models import (
 )
 from .modify import (
     modify_dbt_command,
-    restore_selectors_file,
-    snapshot_selectors_file,
+    restore_file,
+    snapshot_file,
 )
 from .orchestra import is_warn
 from .patcher import patch_seed_properties, patch_sql_files, revert_patching
@@ -43,7 +43,11 @@ from .state import (
     update_state,
 )
 from .state_types import StateBackendKind
-from .target_finder import find_project_dir, find_target_dir
+from .target_finder import (
+    find_packages_install_path,
+    find_project_dir,
+    find_target_dir,
+)
 
 
 def _usage_program() -> str:
@@ -213,7 +217,11 @@ def main(args: tuple[str, ...]) -> None:
         state_load_ok = False
 
     parsed_dag = construct_dag(
-        source_freshness, state, project_dir=project_dir, target_dir=target_dir
+        source_freshness,
+        state,
+        project_dir=project_dir,
+        target_dir=target_dir,
+        packages_install_path=find_packages_install_path(list(dbt_args), project_dir),
     )
 
     # Propagate freshness config to upstream nodes
@@ -254,10 +262,10 @@ def main(args: tuple[str, ...]) -> None:
 
     if len(nodes_to_reuse) != 0:
         patch_sql_files(nodes_to_reuse, project_dir=project_dir)
-        patch_seed_properties(nodes_to_reuse, project_dir / "seeds" / "properties.yml")
+        seed_properties_snapshots = patch_seed_properties(nodes_to_reuse, project_dir)
 
         selectors_file = project_dir / "selectors.yml"
-        selectors_snapshot = snapshot_selectors_file(selectors_file)
+        selectors_snapshot = snapshot_file(selectors_file)
         result = subprocess.run(
             modify_dbt_command(cmd=list(dbt_args), selectors_file=selectors_file),
             check=False,
@@ -270,7 +278,9 @@ def main(args: tuple[str, ...]) -> None:
                 ],
                 project_dir=project_dir,
             )
-            restore_selectors_file(selectors_snapshot, selectors_file)
+            restore_file(selectors_snapshot, selectors_file)
+            for path, snapshot in seed_properties_snapshots.items():
+                restore_file(snapshot, path)
     else:
         result = subprocess.run(list(dbt_args), check=False)
 

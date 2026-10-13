@@ -8,8 +8,8 @@ from src.orchestra_dbt.modify import (
     _build_generated_selector_definition,
     _split_selection_args,
     modify_dbt_command,
-    restore_selectors_file,
-    snapshot_selectors_file,
+    restore_file,
+    snapshot_file,
     update_selectors_yaml,
 )
 
@@ -461,32 +461,32 @@ class TestSplitSelectionArgs:
 
 class TestSelectorsFileSnapshot:
     def test_snapshot_returns_none_when_missing(self, selectors_file):
-        assert snapshot_selectors_file(selectors_file) is None
+        assert snapshot_file(selectors_file) is None
 
     def test_snapshot_returns_bytes_when_present(self, selectors_file):
         selectors_file.write_text("selectors: []\n")
-        assert snapshot_selectors_file(selectors_file) == b"selectors: []\n"
+        assert snapshot_file(selectors_file) == b"selectors: []\n"
 
     def test_restore_rewrites_original_bytes(self, selectors_file):
         original = b"selectors:\n  - name: nightly\n"
         f = selectors_file
         f.write_bytes(original)
 
-        snapshot = snapshot_selectors_file(selectors_file)
+        snapshot = snapshot_file(selectors_file)
         f.write_text("mutated")  # simulate orc mutating the file for a run
-        restore_selectors_file(snapshot, selectors_file)
+        restore_file(snapshot, selectors_file)
 
         assert f.read_bytes() == original
 
     def test_restore_removes_file_we_created(self, selectors_file):
-        snapshot = snapshot_selectors_file(selectors_file)  # None: did not exist
+        snapshot = snapshot_file(selectors_file)  # None: did not exist
         selectors_file.write_text("generated")  # orc created it
-        restore_selectors_file(snapshot, selectors_file)
+        restore_file(snapshot, selectors_file)
 
         assert not selectors_file.exists()
 
     def test_restore_is_noop_when_nothing_existed_or_created(self, selectors_file):
-        restore_selectors_file(None, selectors_file)  # must not raise
+        restore_file(None, selectors_file)  # must not raise
         assert not selectors_file.exists()
 
     def test_round_trip_through_modify_dbt_command(self, selectors_file):
@@ -498,22 +498,22 @@ class TestSelectorsFileSnapshot:
         f = selectors_file
         f.write_text(original)
 
-        snapshot = snapshot_selectors_file(selectors_file)
+        snapshot = snapshot_file(selectors_file)
         result = modify_dbt_command(["dbt", "build", "--select", "a"], selectors_file)
         assert result[-2] == "--selector"  # a generated selector was written
         assert "orchestra_reused_" in f.read_text()  # file was mutated
 
-        restore_selectors_file(snapshot, selectors_file)
+        restore_file(snapshot, selectors_file)
         assert f.read_text() == original
 
     def test_round_trip_removes_file_created_for_run(self, selectors_file):
         # No selectors.yml to begin with; modify_dbt_command creates one, restore
         # removes it so a local run leaves the tree clean.
-        snapshot = snapshot_selectors_file(selectors_file)
+        snapshot = snapshot_file(selectors_file)
         modify_dbt_command(["dbt", "build", "--select", "a"], selectors_file)
         assert selectors_file.exists()
 
-        restore_selectors_file(snapshot, selectors_file)
+        restore_file(snapshot, selectors_file)
         assert not selectors_file.exists()
 
 
