@@ -832,6 +832,8 @@ class TestFindMissingRelationsV2:
         ("user_args", "forwarded"),
         [
             (["--target", "prod"], ["--target", "prod"]),
+            (["--project-dir", "proj"], ["--project-dir", "proj"]),
+            (["--target-path", "out"], ["--target-path", "out"]),
             (["--profiles-dir=/p"], ["--profiles-dir", "/p"]),
             (["--profile", "other"], ["--profile", "other"]),
             (["--vars", "{x: 1}"], ["--vars", "{x: 1}"]),

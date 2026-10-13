@@ -135,11 +135,17 @@ def _load_catalog_v2(user_args: tuple[str, ...]) -> Any:
     """dbt 2.x's `parse --write-catalog` result, fetched once for every check that needs it."""
     from dbt.cli.main import dbtRunner
 
-    # Resolve the same profile as the user's run.
+    # Resolve the same project and profile as the user's run.
     profile_flags: list[str] = []
     if target := find_target_in_args(list(user_args)):
         profile_flags += ["--target", target]
-    for flag in ("--profiles-dir", "--profile", "--vars"):
+    for flag in (
+        "--project-dir",
+        "--target-path",
+        "--profiles-dir",
+        "--profile",
+        "--vars",
+    ):
         if (value := find_flag_value(list(user_args), flag)) is not None:
             profile_flags += [flag, value]
 
