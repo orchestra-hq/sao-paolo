@@ -1,5 +1,6 @@
 import re
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -592,7 +593,7 @@ class TestAcquireAdapter:
 
 class TestEndToEndFromStateThroughTheGate:
     def test_aliased_model_already_in_state_is_rebuilt_when_its_relation_is_dropped(
-        self, monkeypatch
+        self, monkeypatch, tmp_path
     ) -> None:
         """Full chain: a real manifest with an `alias:`-configured model, a state
         file that matches its checksum (so `construct_dag` marks it CLEAN, i.e. a
@@ -636,7 +637,13 @@ class TestEndToEndFromStateThroughTheGate:
             }
         )
 
-        dag = construct_dag(SourceFreshness(sources={}), state)
+        dag = construct_dag(
+            SourceFreshness(sources={}),
+            state,
+            project_dir=tmp_path,
+            target_dir=tmp_path,
+            packages_install_path=Path("dbt_packages"),
+        )
         node = dag.nodes["model.test_project.readable_name"]
         assert isinstance(node, MaterialisationNode)
         assert node.freshness == Freshness.CLEAN, "already in state, so reusable"
@@ -667,7 +674,7 @@ class TestEndToEndFromStateThroughTheGate:
         assert "deleted hence rerun" in node.reason
 
     def test_stale_source_does_not_change_the_outcome_or_overwrite_the_reason(
-        self, monkeypatch
+        self, monkeypatch, tmp_path
     ) -> None:
         """Same scenario, plus an upstream source that has new data since last run --
         a second, independent reason to rebuild. The gate's DIRTY must survive the
@@ -722,7 +729,13 @@ class TestEndToEndFromStateThroughTheGate:
             }
         )
 
-        dag = construct_dag(source_freshness, state)
+        dag = construct_dag(
+            source_freshness,
+            state,
+            project_dir=tmp_path,
+            target_dir=tmp_path,
+            packages_install_path=Path("dbt_packages"),
+        )
         node = dag.nodes["model.test_project.readable_name"]
         assert isinstance(node, MaterialisationNode)
         assert node.freshness == Freshness.CLEAN, "checksum still matches state"

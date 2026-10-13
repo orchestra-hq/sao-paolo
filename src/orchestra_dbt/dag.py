@@ -61,10 +61,10 @@ def calculate_freshness_on_node(
 def construct_dag(
     source_freshness: SourceFreshness,
     state: StateApiModel,
+    project_dir: Path,
+    target_dir: Path,
+    packages_install_path: Path,
     manifest_override: str | None = None,
-    project_dir: Path = Path("."),
-    target_dir: Path = Path("target"),
-    packages_install_path: Path = Path("dbt_packages"),
 ) -> ParsedDag:
     manifest = load_json(manifest_override or target_dir / "manifest.json")
 

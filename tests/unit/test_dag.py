@@ -18,7 +18,6 @@ from src.orchestra_dbt.models import (
     StateApiModel,
     StateItem,
 )
-from src.orchestra_dbt.target_finder import find_project_dir
 
 # Model checksums of the `raw_code` in `sample_manifest`.
 MODEL_A_CHECKSUM = sha256(b"select 'a'").hexdigest()
@@ -178,7 +177,7 @@ class TestCalculateFreshnessOnNode:
 
 class TestConstructDag:
     def test_construct_dag_with_sources(
-        self, monkeypatch: pytest.MonkeyPatch, sample_manifest: dict
+        self, monkeypatch: pytest.MonkeyPatch, sample_manifest: dict, tmp_path
     ) -> None:
         monkeypatch.setattr(dag_module, "load_json", lambda _: sample_manifest)
         monkeypatch.setattr(
@@ -221,7 +220,13 @@ class TestConstructDag:
             }
         )
 
-        assert construct_dag(source_freshness, state) == ParsedDag(
+        assert construct_dag(
+            source_freshness,
+            state,
+            project_dir=tmp_path,
+            target_dir=tmp_path,
+            packages_install_path=Path("dbt_packages"),
+        ) == ParsedDag(
             nodes={
                 "source.test_db.test_schema.test_table": SourceNode(
                     last_updated=datetime(2024, 1, 3, 12, 0, 0, tzinfo=UTC),
@@ -276,7 +281,7 @@ class TestConstructDag:
         )
 
     def test_construct_dag_dirty_model(
-        self, monkeypatch: pytest.MonkeyPatch, sample_manifest: dict
+        self, monkeypatch: pytest.MonkeyPatch, sample_manifest: dict, tmp_path
     ) -> None:
         monkeypatch.setattr(dag_module, "load_json", lambda _: sample_manifest)
 
@@ -301,7 +306,13 @@ class TestConstructDag:
             }
         )
 
-        dag = construct_dag(source_freshness, state)
+        dag = construct_dag(
+            source_freshness,
+            state,
+            project_dir=tmp_path,
+            target_dir=tmp_path,
+            packages_install_path=Path("dbt_packages"),
+        )
 
         assert "model.test_project.model_a" in dag.nodes
         # Model should be DIRTY since checksum doesn't match
@@ -309,7 +320,7 @@ class TestConstructDag:
         assert dag.nodes["model.test_project.model_a"].freshness == Freshness.DIRTY
 
     def test_construct_dag_seed_state_disabled(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
     ) -> None:
         manifest = {
             "metadata": {"project_name": "test_project"},
@@ -338,14 +349,20 @@ class TestConstructDag:
             ),
         )
 
-        dag = construct_dag(SourceFreshness(sources={}), StateApiModel(state={}))
+        dag = construct_dag(
+            SourceFreshness(sources={}),
+            StateApiModel(state={}),
+            project_dir=tmp_path,
+            target_dir=tmp_path,
+            packages_install_path=Path("dbt_packages"),
+        )
         node = dag.nodes["seed.test_project.my_seed"]
         assert isinstance(node, MaterialisationNode)
         assert node.freshness == Freshness.DIRTY
         assert node.reason == "State orchestration for seeds currently disabled."
 
     def test_construct_dag_seed_state_enabled(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
     ) -> None:
         manifest = {
             "metadata": {"project_name": "test_project"},
@@ -385,7 +402,13 @@ class TestConstructDag:
             }
         )
 
-        dag = construct_dag(SourceFreshness(sources={}), state)
+        dag = construct_dag(
+            SourceFreshness(sources={}),
+            state,
+            project_dir=tmp_path,
+            target_dir=tmp_path,
+            packages_install_path=Path("dbt_packages"),
+        )
         node = dag.nodes["seed.test_project.my_seed"]
         assert isinstance(node, MaterialisationNode)
         assert node.freshness == Freshness.CLEAN
@@ -398,9 +421,9 @@ class TestConstructDag:
         `original_file_path` is project-relative, so the seed is read under `proj`."""
         seed_content = b"id\n1\n"
         seed_digest = sha256(seed_content).hexdigest()
-        (tmp_path / "proj" / "seeds").mkdir(parents=True)
-        (tmp_path / "proj" / "seeds" / "my_seed.csv").write_bytes(seed_content)
-        monkeypatch.chdir(tmp_path)
+        project_dir = tmp_path / "proj"
+        (project_dir / "seeds").mkdir(parents=True)
+        (project_dir / "seeds" / "my_seed.csv").write_bytes(seed_content)
 
         manifest = {
             "metadata": {"project_name": "test_project"},
@@ -438,9 +461,12 @@ class TestConstructDag:
             }
         )
 
-        project_dir = find_project_dir(["build", "--project-dir", "proj"])
         node = construct_dag(
-            SourceFreshness(sources={}), state, project_dir=project_dir
+            SourceFreshness(sources={}),
+            state,
+            project_dir=project_dir,
+            target_dir=project_dir / "target",
+            packages_install_path=Path("dbt_packages"),
         ).nodes["seed.test_project.my_seed"]
         assert isinstance(node, MaterialisationNode)
         assert node.checksum == seed_digest
@@ -488,6 +514,7 @@ class TestConstructDag:
             SourceFreshness(sources={}),
             StateApiModel(state={}),
             project_dir=tmp_path,
+            target_dir=tmp_path,
             packages_install_path=Path("vendor"),
         ).nodes["seed.my_package.pkg_seed"]
         assert isinstance(node, MaterialisationNode)
@@ -495,7 +522,7 @@ class TestConstructDag:
         assert node.file_path == "vendor/my_package/seeds/pkg_seed.csv"
 
     def test_construct_dag_skips_function_dependency(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
     ) -> None:
         manifest = {
             "metadata": {"project_name": "test_project"},
@@ -531,7 +558,13 @@ class TestConstructDag:
             ),
         )
 
-        dag = construct_dag(SourceFreshness(sources={}), StateApiModel(state={}))
+        dag = construct_dag(
+            SourceFreshness(sources={}),
+            StateApiModel(state={}),
+            project_dir=tmp_path,
+            target_dir=tmp_path,
+            packages_install_path=Path("dbt_packages"),
+        )
 
         edge_froms = [e.from_ for e in dag.edges]
         assert "source.test_db.raw.events" in edge_froms
