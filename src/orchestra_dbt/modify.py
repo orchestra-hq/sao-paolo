@@ -48,9 +48,7 @@ def _get_reused_selector_definition(existing_selector: str) -> dict[str, Any]:
     }
 
 
-def update_selectors_yaml(
-    selector_tag: str, selectors_file: Path = Path("selectors.yml")
-) -> bool:
+def update_selectors_yaml(selector_tag: str, selectors_file: Path) -> bool:
     try:
         selectors_yml = load_yaml(selectors_file)
     except FileNotFoundError:
@@ -164,9 +162,7 @@ def _command_runs_tests(cmd: list[str]) -> bool:
     return len(cmd) > 1 and cmd[1] in _TEST_RUNNING_SUBCOMMANDS
 
 
-def modify_dbt_command(
-    cmd: list[str], selectors_file: Path = Path("selectors.yml")
-) -> list[str]:
+def modify_dbt_command(cmd: list[str], selectors_file: Path) -> list[str]:
     if "--selector" in cmd:
         success_updating_selectors = False
         try:
