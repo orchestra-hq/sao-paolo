@@ -30,6 +30,7 @@ models:
           - accepted_values:
               arguments:
                 values: [999]
+                quote: false
               config:
                 severity: warn
 
