@@ -219,6 +219,7 @@ def main(args: tuple[str, ...]) -> None:
     parsed_dag = construct_dag(
         source_freshness,
         state,
+        settings,
         project_dir=project_dir,
         target_dir=target_dir,
         packages_install_path=find_packages_install_path(list(dbt_args), project_dir),
