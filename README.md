@@ -1,4 +1,14 @@
-# dbt-orchestra
+<p align="center">
+<img alt="Banner" src="assets/banner.png" width="1200">
+</p>
+
+<h1 align="center">
+dbt-orchestra ~ São Paolo
+</h1>
+
+<p align="center">
+<img alt="SAO Demo" src="assets/sao.gif" width="750">
+</p>
 
 ## Introduction
 
