@@ -1,5 +1,6 @@
 <p align="center">
-<img alt="Banner" src="assets/banner.png" width="1200">
+<!-- <img alt="Banner" src="assets/banner.png" width="1200"> -->
+<img alt="Banner" src="https://github.com/user-attachments/assets/e72b58e2-2d28-4bcd-bdf4-8c03026dbeca" width="1200">
 </p>
 
 <h1 align="center">
@@ -7,7 +8,8 @@ dbt-orchestra ~ São Paolo
 </h1>
 
 <p align="center">
-<img alt="SAO Demo" src="assets/sao.gif" width="750">
+<!-- <img alt="SAO Demo" src="assets/sao.gif" width="750"> -->
+<img alt="SAO Demo" src="https://github.com/user-attachments/assets/71c51ef7-865e-473f-9c47-920b58e8dbdf" width="750">
 </p>
 
 ## Introduction
