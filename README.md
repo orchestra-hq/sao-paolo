@@ -4,7 +4,7 @@
 </p>
 
 <h1 align="center">
-dbt-orchestra ~ São Paolo
+dbt-orchestra ~ São Paulo
 </h1>
 
 <p align="center">
