@@ -16,16 +16,15 @@ dbt-orchestra ~ São Paolo
 
 There are a few core reasons to use this project:
 
-- Easier Scheduling: Orchestra SAO (State Aware Orchestration) means you don’t need to manually tag models, you just need to say when the models should be updated and Orchestra handles the dependencies.
-- Save cost: Orchestra SAO detects when there is new data and only updates models and their downstream deps if there is new data, saving money and reducing time.
-- Works out of the box: no need to upgrade dbt versions to take advantage of Orchestra SAO
+- **Easier Scheduling**: Orchestra SAO (State Aware Orchestration) means you don’t need to manually tag models, you just need to say when the models should be updated and Orchestra handles the dependencies.
+- **Cost Reduction**: Orchestra SAO detects when there is new data and only updates models and their downstream deps if there is new data, saving money and reducing time.
+- **Works out of the box**: no need to upgrade dbt versions to take advantage of Orchestra SAO
 
 ## Compatibility and prerequisites
 
 - **Python:** 3.11, 3.12, and 3.13 only (see `requires-python` in `pyproject.toml`).
 - **dbt-core:** 1.10.x to 1.12.x when using stateful orchestration.
-- **dbt v2:** 2.x is supported for stateful orchestration, with some differences (see [dbt v2](#dbt-v2)). CI tests dbt v2 using the
-  `dbt-oss` package.
+- **dbt v2:** 2.x is supported for stateful orchestration, with some differences (see [dbt v2](#dbt-v2)).
 - **A dbt Core project:** an existing dbt Core project where you already run `dbt build` / `dbt run` / `dbt test`.
 
 ## Installing
