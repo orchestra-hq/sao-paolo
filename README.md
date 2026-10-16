@@ -240,7 +240,7 @@ When stateful orchestration is enabled, the CLI loads and saves [dbt Core state]
 
 ### Pyproject.toml and environment variables
 
-Each `[tool.orchestra_dbt]` key can be set in TOML, or omitted and supplied only via the matching variable. **If an environment variable is set, it overrides** the value from `pyproject.toml`; otherwise the TOML value is used, then the built-in default. The CLI discovers `pyproject.toml` by walking upward from the current working directory. `ORCHESTRA_API_KEY` has no TOML equivalent; it selects the Orchestra HTTP backend when set.
+Each `[tool.orchestra_dbt]` key can be set in TOML, or omitted and supplied only via the matching variable. **If an environment variable is set, it overrides** the value from `pyproject.toml`; otherwise the TOML value is used, then the built-in default. The CLI reads `[tool.orchestra_dbt]` from the nearest `pyproject.toml` that has that section, walking upward from the dbt project directory (`--project-dir` or `DBT_PROJECT_DIR`), then from the current working directory if none is found. `ORCHESTRA_API_KEY` has no TOML equivalent; it selects the Orchestra HTTP backend when set.
 
 | `pyproject.toml` key | Environment variable |
 | --- | --- |
@@ -262,7 +262,7 @@ For boolean settings, if the environment variable is **set**, the merged value i
 | `state_file` | string (optional) | — | Local JSON path, `s3://bucket/key`, `gs://bucket/key`, or `abfss://container@account.dfs.core.windows.net/key` for state (see [backend table](#state-backends) above). |
 | `use_stateful` | bool | `false` | Turn on stateful orchestration for supported dbt commands. |
 | `local_run` | bool | `true` | After reuse, revert patched files (typical for local iteration). |
-| `debug` | bool | `false` | Verbose logging. |
+| `debug` | bool | `false` | Verbose logging. Read from the working directory's `pyproject.toml` (or `ORCHESTRA_DBT_DEBUG`), not the dbt project's. |
 | `seed_state_orchestration` | bool | `false` | When `true`, seed nodes can be reused from state like models; when `false`, seeds are always treated as dirty for reuse. This feature should be considered experimental and may change in the future. |
 | `require_explicit_source_freshness` | bool | `false` | When `true`, sources without an explicit `loaded_at_field` or `loaded_at_query` are excluded from state-aware orchestration: no implicit/fallback freshness is inferred for them, and models depending on them always run. Use this when implicit freshness is unreliable (for example, sources defined on top of views, where warehouse metadata reflects the view rather than the underlying data). |
 | `verify_relations_exist` | bool | `false` | Opt in to confirming a node's table/view is actually in the warehouse before skipping it (see [Verifying relations still exist](#verifying-relations-still-exist)). Off by default, so existing behaviour is unchanged until you enable it. |

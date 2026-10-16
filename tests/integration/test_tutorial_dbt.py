@@ -149,8 +149,8 @@ def test_warm_state_reuses_nodes_with_project_dir(tmp_path: Path) -> None:
     state_file = tmp_path / "dbt_state.json"
     state_file.write_text(json.dumps({"state": {}}), encoding="utf-8")
     env = _tutorial_env(state_file)
-    # The tutorial enables this in its own pyproject.toml, which is only found from the cwd.
-    env["ORCHESTRA_USE_STATEFUL"] = "true"
+    # Stateful mode must come from the project's own pyproject.toml, not the environment.
+    env.pop("ORCHESTRA_USE_STATEFUL", None)
     args = ("--project-dir", "proj")
 
     assert _run_build(env, "cold run", cwd=tmp_path, extra_args=args).returncode == 0
