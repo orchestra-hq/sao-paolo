@@ -1,4 +1,21 @@
-# dbt-orchestra
+<p align="center">
+<img alt="Banner" src="assets/banner.png" width="1200">
+</p>
+
+<h1 align="center">
+dbt-orchestra ~ São Paolo
+</h1>
+
+<p align="center">
+<img alt="PyPI" src="https://img.shields.io/pypi/v/dbt-orchestra?label=pypi&labelColor=0D1431&color=3754BF">
+<img alt="License" src="https://img.shields.io/github/license/orchestra-hq/sao-paolo?label=license&labelColor=0D1431&color=3754BF">
+<img alt="state aware" src="https://img.shields.io/badge/state-aware-AFA3FA?labelColor=0D1431">
+<img alt="built by Orchestra" src="https://img.shields.io/badge/built%20by-Orchestra-3E68FE?labelColor=0D1431">
+</p>
+
+<p align="center">
+<img alt="SAO Demo" src="assets/sao.gif" width="750">
+</p>
 
 ## Introduction
 
@@ -6,16 +23,15 @@
 
 There are a few core reasons to use this project:
 
-- Easier Scheduling: Orchestra SAO (State Aware Orchestration) means you don’t need to manually tag models, you just need to say when the models should be updated and Orchestra handles the dependencies.
-- Save cost: Orchestra SAO detects when there is new data and only updates models and their downstream deps if there is new data, saving money and reducing time.
-- Works out of the box: no need to upgrade dbt versions to take advantage of Orchestra SAO
+- **Easier Scheduling**: Orchestra SAO (State Aware Orchestration) means you don’t need to manually tag models, you just need to say when the models should be updated and Orchestra handles the dependencies.
+- **Cost Reduction**: Orchestra SAO detects when there is new data and only updates models and their downstream deps if there is new data, saving money and reducing time.
+- **Works out of the box**: no need to upgrade dbt versions to take advantage of Orchestra SAO
 
 ## Compatibility and prerequisites
 
 - **Python:** 3.11, 3.12, and 3.13 only (see `requires-python` in `pyproject.toml`).
 - **dbt-core:** 1.10.x to 1.12.x when using stateful orchestration.
-- **dbt v2:** 2.x is supported for stateful orchestration, with some differences (see [dbt v2](#dbt-v2)). CI tests dbt v2 using the
-  `dbt-oss` package.
+- **dbt v2:** 2.x is supported for stateful orchestration, with some differences (see [dbt v2](#dbt-v2)).
 - **A dbt Core project:** an existing dbt Core project where you already run `dbt build` / `dbt run` / `dbt test`.
 
 ## Installing
@@ -86,9 +102,11 @@ state_file = ".orchestra/dbt_state.json"
 orc dbt run
 ```
 
+Add `.orchestra/` (or your chosen path) to `.gitignore` if the file should not be committed.
+
 ### Orchestra Cloud (managed)
 
-Managing your dbt Core state in Orchestra requires an Orchestra API key. When `ORCHESTRA_API_KEY` is set, `dbt-orchestra` selects this backend, and ignores file-related settings. Put non-secret defaults in `pyproject.toml` and only export the API key:
+Managing your dbt Core state in Orchestra requires an Orchestra API key. When `ORCHESTRA_API_KEY` is set, `dbt-orchestra` selects this backend over any file-based one (see [backend priority](#resolving-multiple-backend-state-configurations)). Put non-secret defaults in `pyproject.toml` and only export the API key:
 
 ```toml
 [tool.orchestra_dbt]
@@ -105,6 +123,17 @@ If you want to run state-aware dbt Core code without managing state files and th
 ### S3 backend
 
 To store your dbt Core state in S3, install the optional dependency (`pip install 'dbt-orchestra[s3]'` or `uv sync --extra s3`). Credentials and region follow the usual [AWS SDK resolution](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html) (environment variables, shared config, IAM role, etc.). If the object does not exist yet, load starts with an empty state and save creates the object. The state file parameter expects a `s3://bucket/key` URI.
+
+```toml
+[tool.orchestra_dbt]
+use_stateful = true
+state_file = "s3://my-bucket/dbt_state.json"
+```
+
+```bash
+aws sso login   # once, for local dev (or any other AWS credential source)
+orc dbt run
+```
 
 ### GCS backend
 
@@ -209,13 +238,9 @@ When stateful orchestration is enabled, the CLI loads and saves [dbt Core state]
 
 **Do not put secrets in `pyproject.toml`.** Use environment variables (or your platform's secret store) for `ORCHESTRA_API_KEY`.
 
-### Configuration precedence
-
-For non-secret options, **if an environment variable is set, it overrides** values from `[tool.orchestra_dbt]`; otherwise the value from `pyproject.toml` is used, then the built-in default. The CLI discovers `pyproject.toml` by walking upward from the current working directory. `[tool.orchestra_dbt]` is read from that file when present.
-
 ### Pyproject.toml and environment variables
 
-Each `[tool.orchestra_dbt]` key can be set in TOML, or omitted and supplied only via the matching variable. When both are present, the environment variable wins (see [Configuration precedence](#configuration-precedence) above). `ORCHESTRA_API_KEY` has no TOML equivalent; it selects the Orchestra HTTP backend when set.
+Each `[tool.orchestra_dbt]` key can be set in TOML, or omitted and supplied only via the matching variable. **If an environment variable is set, it overrides** the value from `pyproject.toml`; otherwise the TOML value is used, then the built-in default. The CLI discovers `pyproject.toml` by walking upward from the current working directory. `ORCHESTRA_API_KEY` has no TOML equivalent; it selects the Orchestra HTTP backend when set.
 
 | `pyproject.toml` key | Environment variable |
 | --- | --- |
@@ -251,8 +276,6 @@ For boolean settings, if the environment variable is **set**, the merged value i
 | 2 | `ORCHESTRA_STATE_FILE` | Path to a JSON file, or `s3://bucket/key`, `gs://bucket/key`, or `abfss://container@account.dfs.core.windows.net/key`. Relative file paths are resolved from the current working directory. Used only when `ORCHESTRA_API_KEY` is unset. |
 | 3 | `[tool.orchestra_dbt]` / `state_file` in `pyproject.toml` | Path to a JSON file, or `s3://bucket/key`, `gs://bucket/key`, or `abfss://container@account.dfs.core.windows.net/key`. Relative file paths are resolved from the directory that contains the **discovered** `pyproject.toml`; absolute paths are used as-is. Used only when `ORCHESTRA_API_KEY` is unset and `ORCHESTRA_STATE_FILE` is unset. |
 
-If an effective local path, S3, GCS, or ABS URI is configured (rows 2 or 3), that backend is used and an API key is not required for state. If `ORCHESTRA_API_KEY` is set (row 1), the **HTTP backend** is used regardless of file settings.
-
 ### Warehouse adapters and implicit source freshness
 
 Stateful reuse uses `dbt source freshness` results. When a source defines **`loaded_at_field`** or **`loaded_at_query`**, dbt's normal freshness logic runs on every adapter Orchestra supports through dbt Core.
@@ -285,18 +308,6 @@ The lookup is delegated to the dbt adapter's own relation listing, so it works o
 **Cost.** Usually no extra queries — the preceding `dbt source freshness` run already lists every schema and this reads that cache, falling back to one listing per distinct `(database, schema)` when cold. Nothing scales with model count, and there are no queries at all on a first run, with `--full-refresh`, or when nothing is reusable. An unreadable schema logs a warning and leaves its reuse decisions alone rather than forcing a rebuild.
 
 **Off by default** while it beds in — enable with `verify_relations_exist = true` or `ORCHESTRA_VERIFY_RELATIONS_EXIST=true`.
-
-### Example snippet
-
-Example optional snippet in `pyproject.toml`:
-
-```toml
-[tool.orchestra_dbt]
-use_stateful = true
-state_file = ".orchestra/dbt_state.json"
-```
-
-Add `.orchestra/` (or your chosen path) to `.gitignore` if the file should not be committed.
 
 ## Development and contributing
 
