@@ -3,6 +3,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import cast
 
+from .config import OrchestraDbtSettings
 from .logger import log_warn
 from .state_backends import resolved_state_backend
 from .state_backends.base import StateBackend
@@ -29,13 +30,17 @@ from .models import (
 from .utils import load_json
 
 
-def load_state() -> StateApiModel:
-    state = resolved_state_backend().load()
-    apply_integration_account_filter(state)
+def load_state(settings: OrchestraDbtSettings) -> StateApiModel:
+    state = resolved_state_backend(settings).load()
+    apply_integration_account_filter(state, settings)
     return state
 
 
-def save_state(state: StateApiModel, updated_asset_external_ids: set[str]) -> None:
+def save_state(
+    state: StateApiModel,
+    updated_asset_external_ids: set[str],
+    settings: OrchestraDbtSettings,
+) -> None:
     """Save only this run's updated nodes, leaving every other stored node as it is.
 
     The HTTP backend upserts each node it is sent, so it is sent only the updates.
@@ -51,7 +56,7 @@ def save_state(state: StateApiModel, updated_asset_external_ids: set[str]) -> No
     }
     if not updates:
         return
-    backend: StateBackend = resolved_state_backend()
+    backend: StateBackend = resolved_state_backend(settings)
     if isinstance(backend, HttpStateBackend):
         backend.save(StateApiModel(state=updates))
         return

@@ -8,7 +8,6 @@ from .project_discovery import (
     find_pyproject_directory,
     read_orchestra_dbt_tool_config,
 )
-from .state_types import StateBackendConfig
 
 
 class OrchestraDbtSettings(BaseModel):
@@ -24,6 +23,8 @@ class OrchestraDbtSettings(BaseModel):
     require_explicit_source_freshness: bool = False
     verify_relations_exist: bool = False
     scope_source_freshness_to_selection: bool = False
+    # Where the settings were read from; a relative state_file resolves against it.
+    pyproject_dir: Path | None = None
 
     @field_validator("orchestra_env", mode="before")
     @classmethod
@@ -101,19 +102,12 @@ def _merge_env_overrides(settings: OrchestraDbtSettings) -> OrchestraDbtSettings
 
 
 def load_orchestra_dbt_settings(cwd: Path | None = None) -> OrchestraDbtSettings:
-    base = cwd or Path.cwd()
-    project_dir = find_pyproject_directory(base)
+    pyproject_dir = find_pyproject_directory(cwd or Path.cwd())
     raw: dict = {}
-    if project_dir is not None:
-        raw = read_orchestra_dbt_tool_config(project_dir)
+    if pyproject_dir is not None:
+        raw = read_orchestra_dbt_tool_config(pyproject_dir)
     try:
-        settings = OrchestraDbtSettings.model_validate(raw)
-        return _merge_env_overrides(settings)
+        settings = _merge_env_overrides(OrchestraDbtSettings.model_validate(raw))
     except ValidationError as exc:
         raise ValueError(f"Invalid [tool.orchestra_dbt] configuration: {exc}") from exc
-
-
-def resolve_state_backend_config(cwd: Path | None = None) -> StateBackendConfig:
-    from .state_backends.factory import resolve_state_backend_config as _resolve
-
-    return _resolve(cwd)
+    return settings.model_copy(update={"pyproject_dir": pyproject_dir})

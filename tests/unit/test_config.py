@@ -6,9 +6,9 @@ from src.orchestra_dbt.config import (
     get_orchestra_api_key,
     get_orchestra_state_file_env_override,
     load_orchestra_dbt_settings,
-    resolve_state_backend_config,
 )
 from src.orchestra_dbt.project_discovery import find_pyproject_directory
+from src.orchestra_dbt.state_backends import resolve_state_backend_config
 from src.orchestra_dbt.state_types import StateBackendKind
 
 
@@ -28,6 +28,10 @@ def test_get_orchestra_state_file_env_override(
     assert get_orchestra_state_file_env_override() is None
     monkeypatch.setenv("ORCHESTRA_STATE_FILE", " /tmp/state.json ")
     assert get_orchestra_state_file_env_override() == "/tmp/state.json"
+
+
+def _backend():
+    return resolve_state_backend_config(load_orchestra_dbt_settings())
 
 
 def _clear_orchestra_settings_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -56,7 +60,7 @@ def test_state_file_path_env_overrides_pyproject(
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
     monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(other))
-    assert resolve_state_backend_config().local_path == other.resolve()
+    assert _backend().local_path == other.resolve()
 
 
 def test_state_file_path_env_relative_to_cwd(
@@ -66,10 +70,7 @@ def test_state_file_path_env_relative_to_cwd(
     monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
     monkeypatch.delenv("ORCHESTRA_STATE_FILE", raising=False)
     monkeypatch.setenv("ORCHESTRA_STATE_FILE", "rel/state.json")
-    assert (
-        resolve_state_backend_config().local_path
-        == (tmp_path / "rel" / "state.json").resolve()
-    )
+    assert _backend().local_path == (tmp_path / "rel" / "state.json").resolve()
 
 
 def test_find_pyproject_directory_walks_up(
@@ -90,7 +91,7 @@ def test_state_file_path_none_without_config(
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
     monkeypatch.delenv("ORCHESTRA_STATE_FILE", raising=False)
-    assert resolve_state_backend_config().local_path is None
+    assert _backend().local_path is None
 
 
 def test_resolve_state_backend_config_s3_from_env(
@@ -99,7 +100,7 @@ def test_resolve_state_backend_config_s3_from_env(
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
     monkeypatch.setenv("ORCHESTRA_STATE_FILE", "s3://my-bucket/prefix/state.json")
-    cfg = resolve_state_backend_config()
+    cfg = _backend()
     assert cfg.kind == StateBackendKind.S3
     assert cfg.s3_bucket == "my-bucket"
     assert cfg.s3_key == "prefix/state.json"
@@ -115,7 +116,7 @@ def test_resolve_state_backend_config_s3_from_pyproject(
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
     monkeypatch.delenv("ORCHESTRA_STATE_FILE", raising=False)
-    cfg = resolve_state_backend_config()
+    cfg = _backend()
     assert cfg.kind == StateBackendKind.S3
     assert cfg.s3_bucket == "b"
     assert cfg.s3_key == "k/state.json"
@@ -132,7 +133,7 @@ def test_state_file_path_api_key_prefers_http_over_env_and_pyproject(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("ORCHESTRA_API_KEY", "secret")
     monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(other))
-    assert resolve_state_backend_config().local_path is None
+    assert _backend().local_path is None
 
 
 def test_load_orchestra_dbt_settings_defaults(

@@ -9,6 +9,7 @@ from cloud_storage_mocker import patch as gcs_patch
 from moto import mock_aws
 from pytest_httpx import HTTPXMock
 
+from src.orchestra_dbt.config import OrchestraDbtSettings
 from src.orchestra_dbt.models import (
     Edge,
     Freshness,
@@ -29,6 +30,8 @@ from src.orchestra_dbt.state import (
     update_state,
 )
 
+_SETTINGS = OrchestraDbtSettings(orchestra_env="dev")
+
 
 @pytest.fixture(autouse=True)
 def no_retry_waits(monkeypatch: pytest.MonkeyPatch):
@@ -42,7 +45,6 @@ class TestLoadState:
     )
     def test_load_state_success(
         self,
-        monkeypatch: pytest.MonkeyPatch,
         httpx_mock: HTTPXMock,
         integration_account_id: str | None,
         expected_state_len: int,
@@ -80,14 +82,13 @@ class TestLoadState:
             },
         )
 
-        monkeypatch.setenv("ORCHESTRA_LOCAL_RUN", "false")
-        if integration_account_id:
-            monkeypatch.setenv(
-                "ORCHESTRA_INTEGRATION_ACCOUNT_ID", integration_account_id
+        loaded_state = load_state(
+            OrchestraDbtSettings(
+                orchestra_env="dev",
+                local_run=False,
+                integration_account_id=integration_account_id,
             )
-        else:
-            monkeypatch.delenv("ORCHESTRA_INTEGRATION_ACCOUNT_ID", raising=False)
-        loaded_state = load_state()
+        )
         assert len(loaded_state.state) == expected_state_len
         assert next(iter(loaded_state.state.values())) == StateItem(
             last_updated=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
@@ -107,7 +108,7 @@ class TestLoadState:
             status_code=400,
         )
         with pytest.raises(StateLoadError):
-            load_state()
+            load_state(_SETTINGS)
 
     def test_load_state_validation_error(self, httpx_mock: HTTPXMock):
         httpx_mock.add_response(
@@ -119,7 +120,7 @@ class TestLoadState:
             json={"invalid": "data"},
         )
         with pytest.raises(StateLoadError):
-            load_state()
+            load_state(_SETTINGS)
 
     def test_load_state_request_error(self, httpx_mock: HTTPXMock):
         httpx_mock.add_exception(
@@ -132,7 +133,7 @@ class TestLoadState:
             },
         )
         with pytest.raises(StateLoadError):
-            load_state()
+            load_state(_SETTINGS)
 
 
 _ONE_NODE_STATE = StateApiModel(
@@ -204,6 +205,7 @@ class TestSaveState:
                     }
                 ),
                 updated_asset_external_ids={"model.test", "model.new"},
+                settings=_SETTINGS,
             )
             is None
         )
@@ -221,7 +223,11 @@ class TestSaveState:
             is_reusable=True,
         )
         assert (
-            save_state(state=_ONE_NODE_STATE, updated_asset_external_ids={"model.test"})
+            save_state(
+                state=_ONE_NODE_STATE,
+                updated_asset_external_ids={"model.test"},
+                settings=_SETTINGS,
+            )
             is None
         )
 
@@ -237,12 +243,18 @@ class TestSaveState:
             is_reusable=True,
         )
         assert (
-            save_state(state=_ONE_NODE_STATE, updated_asset_external_ids={"model.test"})
+            save_state(
+                state=_ONE_NODE_STATE,
+                updated_asset_external_ids={"model.test"},
+                settings=_SETTINGS,
+            )
             is None
         )
 
     def test_save_state_without_updates_makes_no_request(self, httpx_mock: HTTPXMock):
-        save_state(state=_ONE_NODE_STATE, updated_asset_external_ids=set())
+        save_state(
+            state=_ONE_NODE_STATE, updated_asset_external_ids=set(), settings=_SETTINGS
+        )
         assert httpx_mock.get_requests() == []
 
 
@@ -824,7 +836,7 @@ class TestLoadStateFile:
         monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(tmp_path / "missing.json"))
 
         with pytest.raises(StateLoadError, match="State file not found"):
-            load_state()
+            load_state(_SETTINGS)
 
     def test_load_state_file_empty_state(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path
@@ -835,7 +847,7 @@ class TestLoadStateFile:
         monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
         monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(p))
 
-        assert load_state() == StateApiModel(state={})
+        assert load_state(_SETTINGS) == StateApiModel(state={})
 
     def test_load_state_file_invalid_json(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path
@@ -847,7 +859,7 @@ class TestLoadStateFile:
         monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(p))
 
         with pytest.raises(StateLoadError, match="not valid JSON"):
-            load_state()
+            load_state(_SETTINGS)
 
 
 class TestSaveStateFile:
@@ -868,8 +880,8 @@ class TestSaveStateFile:
                 )
             }
         )
-        save_state(state, updated_asset_external_ids={"model.test"})
-        loaded = load_state()
+        save_state(state, updated_asset_external_ids={"model.test"}, settings=_SETTINGS)
+        loaded = load_state(_SETTINGS)
         assert loaded.state["model.test"].checksum == "123"
 
 
@@ -918,6 +930,7 @@ class TestSaveStateMerge:
                 }
             ),
             updated_asset_external_ids={"model.a", "model.b"},
+            settings=_SETTINGS,
         )
 
         # This run only executed model_a, so it only updates model.a.
@@ -926,9 +939,11 @@ class TestSaveStateMerge:
             checksum="a-this-run",
             sources={},
         )
-        save_state(state=in_memory, updated_asset_external_ids={"model.a"})
+        save_state(
+            state=in_memory, updated_asset_external_ids={"model.a"}, settings=_SETTINGS
+        )
 
-        merged = load_state()
+        merged = load_state(_SETTINGS)
         # Our model_a update wins for the key we ran...
         assert merged.state["model.a"].checksum == "a-this-run"
         # ...and the concurrently-written model_b is preserved, not reverted.
@@ -961,7 +976,9 @@ class TestSaveStateMerge:
             }
         )
         with pytest.raises(StateSaveError):
-            save_state(state=state, updated_asset_external_ids={"model.a"})
+            save_state(
+                state=state, updated_asset_external_ids={"model.a"}, settings=_SETTINGS
+            )
 
         # The unreadable state file is left exactly as it was, not overwritten.
         assert p.read_text(encoding="utf-8") == original
@@ -976,7 +993,9 @@ class TestSaveStateMerge:
         monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
         monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(p))
 
-        save_state(state=_ONE_NODE_STATE, updated_asset_external_ids=set())
+        save_state(
+            state=_ONE_NODE_STATE, updated_asset_external_ids=set(), settings=_SETTINGS
+        )
 
         assert p.read_text(encoding="utf-8") == original
 
@@ -1002,16 +1021,15 @@ class TestIntegrationAccountFilter:
         monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
         monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(p))
-        monkeypatch.setenv("ORCHESTRA_INTEGRATION_ACCOUNT_ID", "acct-a")
         return p
 
     def test_local_run_with_account_id_keeps_node_id_entries(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path
     ):
         self._use_state_file(monkeypatch, tmp_path, ["model.a", "model.b"])
-        monkeypatch.setenv("ORCHESTRA_LOCAL_RUN", "true")
+        settings = OrchestraDbtSettings(integration_account_id="acct-a", local_run=True)
 
-        assert set(load_state().state) == {"model.a", "model.b"}
+        assert set(load_state(settings).state) == {"model.a", "model.b"}
 
     def test_save_keeps_other_accounts_entries_in_shared_file(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path
@@ -1019,16 +1037,20 @@ class TestIntegrationAccountFilter:
         p = self._use_state_file(
             monkeypatch, tmp_path, ["acct-a.model.a", "acct-b.model.b"]
         )
-        monkeypatch.setenv("ORCHESTRA_LOCAL_RUN", "false")
+        settings = OrchestraDbtSettings(
+            integration_account_id="acct-a", local_run=False
+        )
 
-        state = load_state()
+        state = load_state(settings)
         assert set(state.state) == {"acct-a.model.a"}
         state.state["acct-a.model.a"] = StateItem(
             last_updated=datetime(2024, 1, 2, tzinfo=UTC),
             checksum="new",
             sources={},
         )
-        save_state(state, updated_asset_external_ids={"acct-a.model.a"})
+        save_state(
+            state, updated_asset_external_ids={"acct-a.model.a"}, settings=settings
+        )
 
         stored = StateApiModel.model_validate_json(p.read_text(encoding="utf-8"))
         assert stored.state["acct-a.model.a"].checksum == "new"
@@ -1046,7 +1068,7 @@ class TestLoadStateS3:
         monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
         monkeypatch.setenv("ORCHESTRA_STATE_FILE", "s3://test-bucket/prefix/state.json")
 
-        assert load_state() == StateApiModel(state={})
+        assert load_state(_SETTINGS) == StateApiModel(state={})
 
     @mock_aws
     def test_load_state_s3_success(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
@@ -1061,7 +1083,7 @@ class TestLoadStateS3:
         monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
         monkeypatch.setenv("ORCHESTRA_STATE_FILE", "s3://test-bucket-s3/k.json")
 
-        loaded = load_state()
+        loaded = load_state(_SETTINGS)
         assert "model.x" in loaded.state
         assert loaded.state["model.x"].checksum == "c"
 
@@ -1086,6 +1108,7 @@ class TestSaveStateS3:
                 }
             ),
             updated_asset_external_ids={"m"},
+            settings=_SETTINGS,
         )
 
         obj = conn.get_object(Bucket="bucket", Key="dir/f.json")
@@ -1113,7 +1136,7 @@ class TestLoadStateGCS:
             ),
             patch.object(MockClient, "get_bucket", return_value=None, create=True),
         ):
-            assert load_state() == StateApiModel(state={})
+            assert load_state(_SETTINGS) == StateApiModel(state={})
 
     def test_load_state_gcs_success(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
         bucket_dir = tmp_path / "gcs"
@@ -1130,7 +1153,7 @@ class TestLoadStateGCS:
         with gcs_patch(
             mounts=[Mount("test-bucket", bucket_dir, readable=True, writable=True)]
         ):
-            loaded = load_state()
+            loaded = load_state(_SETTINGS)
 
         assert "model.x" in loaded.state
         assert loaded.state["model.x"].checksum == "c"
@@ -1151,7 +1174,7 @@ class TestLoadStateGCS:
             ),
             pytest.raises(StateLoadError),
         ):
-            load_state()
+            load_state(_SETTINGS)
 
 
 class TestSaveStateGCS:
@@ -1182,6 +1205,7 @@ class TestSaveStateGCS:
                     }
                 ),
                 updated_asset_external_ids={"m"},
+                settings=_SETTINGS,
             )
 
         body = (bucket_dir / "dir" / "f.json").read_text()
@@ -1203,7 +1227,11 @@ class TestSaveStateGCS:
             ),
             pytest.raises(StateSaveError),
         ):
-            save_state(_ONE_NODE_STATE, updated_asset_external_ids={"model.test"})
+            save_state(
+                _ONE_NODE_STATE,
+                updated_asset_external_ids={"model.test"},
+                settings=_SETTINGS,
+            )
 
 
 class TestAzureStateBackend:
