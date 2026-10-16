@@ -8,6 +8,10 @@ dbt-orchestra ~ São Paolo
 </h1>
 
 <p align="center">
+<img alt="state aware" src="https://img.shields.io/badge/state-aware-3754BF?labelColor=black&style=flat">
+</p>
+
+<p align="center">
 <!-- <img alt="SAO Demo" src="assets/sao.gif" width="750"> -->
 <img alt="SAO Demo" src="https://github.com/user-attachments/assets/71c51ef7-865e-473f-9c47-920b58e8dbdf" width="750">
 </p>
