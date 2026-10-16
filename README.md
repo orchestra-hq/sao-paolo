@@ -13,10 +13,6 @@ dbt-orchestra ~ São Paolo
 <img alt="built by Orchestra" src="https://img.shields.io/badge/built%20by-Orchestra-3E68FE?labelColor=0D1431">
 </p>
 
-<p align="center">
-<img alt="SAO Demo" src="assets/sao.gif" width="750">
-</p>
-
 ## Introduction
 
 `dbt-orchestra` wraps dbt Core commands, using previous run state to reduce unnecessary work. It is designed to be added to an existing dbt Core project, not used as a standalone dbt repository.
@@ -26,6 +22,10 @@ There are a few core reasons to use this project:
 - **Easier Scheduling**: Orchestra SAO (State Aware Orchestration) means you don’t need to manually tag models, you just need to say when the models should be updated and Orchestra handles the dependencies.
 - **Cost Reduction**: Orchestra SAO detects when there is new data and only updates models and their downstream deps if there is new data, saving money and reducing time.
 - **Works out of the box**: no need to upgrade dbt versions to take advantage of Orchestra SAO
+
+<p align="center">
+<img alt="SAO Demo" src="assets/sao.gif" width="750">
+</p>
 
 ## Compatibility and prerequisites
 
