@@ -9,9 +9,6 @@ dbt-orchestra ~ São Paolo
 
 <p align="center">
 <img alt="PyPI" src="https://img.shields.io/pypi/v/dbt-orchestra?label=pypi&labelColor=0D1431&color=3754BF">
-<img alt="License" src="https://img.shields.io/github/license/orchestra-hq/sao-paolo?label=license&labelColor=0D1431&color=3754BF">
-</p>
-
 <p align="center">
 <img alt="state aware" src="https://img.shields.io/badge/state-aware-AFA3FA?labelColor=0D1431">
 <img alt="built by Orchestra" src="https://img.shields.io/badge/built%20by-Orchestra-3E68FE?labelColor=0D1431">
