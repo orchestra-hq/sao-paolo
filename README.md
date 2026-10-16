@@ -8,7 +8,16 @@ dbt-orchestra ~ São Paolo
 </h1>
 
 <p align="center">
-<img alt="state aware" src="https://img.shields.io/badge/state-aware-3754BF?labelColor=black&style=flat">
+<img alt="PyPI" src="https://img.shields.io/pypi/v/dbt-orchestra?label=pypi&labelColor=0D1431&color=3754BF">
+<img alt="Python" src="https://img.shields.io/pypi/pyversions/dbt-orchestra?label=python&labelColor=0D1431&color=3754BF">
+<img alt="dbt-core" src="https://img.shields.io/badge/dbt--core-1.10%20%E2%80%93%201.12%20%C2%B7%20v2-3754BF?labelColor=0D1431">
+<img alt="License" src="https://img.shields.io/github/license/orchestra-hq/sao-paolo?label=license&labelColor=0D1431&color=3754BF">
+</p>
+
+<p align="center">
+<img alt="state aware" src="https://img.shields.io/badge/state-aware-AFA3FA?labelColor=0D1431">
+<img alt="rebuilds only when needed" src="https://img.shields.io/badge/rebuilds-only%20when%20needed-50B5FE?labelColor=0D1431">
+<img alt="built by Orchestra" src="https://img.shields.io/badge/built%20by-Orchestra-3E68FE?labelColor=0D1431">
 </p>
 
 <p align="center">
