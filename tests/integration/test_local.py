@@ -36,6 +36,9 @@ def test_e2e() -> None:
         source_freshness=SourceFreshness(sources={}),
         state=StateApiModel.model_validate(json.loads(local_state)),
         settings=settings,
+        project_dir=Path("."),
+        target_dir=Path("target"),
+        packages_install_path=Path("dbt_packages"),
         manifest_override="local_manifest.json",
     )
 

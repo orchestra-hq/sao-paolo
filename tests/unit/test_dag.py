@@ -178,7 +178,7 @@ class TestCalculateFreshnessOnNode:
 
 class TestConstructDag:
     def test_construct_dag_with_sources(
-        self, monkeypatch: pytest.MonkeyPatch, sample_manifest: dict
+        self, monkeypatch: pytest.MonkeyPatch, sample_manifest: dict, dag_paths
     ) -> None:
         monkeypatch.setattr(dag_module, "load_json", lambda _: sample_manifest)
         settings = OrchestraDbtSettings(
@@ -217,7 +217,9 @@ class TestConstructDag:
             }
         )
 
-        assert construct_dag(source_freshness, state, settings) == ParsedDag(
+        assert construct_dag(
+            source_freshness, state, settings, **dag_paths
+        ) == ParsedDag(
             nodes={
                 "source.test_db.test_schema.test_table": SourceNode(
                     last_updated=datetime(2024, 1, 3, 12, 0, 0, tzinfo=UTC),
@@ -272,7 +274,7 @@ class TestConstructDag:
         )
 
     def test_construct_dag_dirty_model(
-        self, monkeypatch: pytest.MonkeyPatch, sample_manifest: dict
+        self, monkeypatch: pytest.MonkeyPatch, sample_manifest: dict, dag_paths
     ) -> None:
         monkeypatch.setattr(dag_module, "load_json", lambda _: sample_manifest)
 
@@ -297,7 +299,9 @@ class TestConstructDag:
             }
         )
 
-        dag = construct_dag(source_freshness, state, OrchestraDbtSettings())
+        dag = construct_dag(
+            source_freshness, state, OrchestraDbtSettings(), **dag_paths
+        )
 
         assert "model.test_project.model_a" in dag.nodes
         # Model should be DIRTY since checksum doesn't match
@@ -305,7 +309,7 @@ class TestConstructDag:
         assert dag.nodes["model.test_project.model_a"].freshness == Freshness.DIRTY
 
     def test_construct_dag_seed_state_disabled(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, dag_paths
     ) -> None:
         manifest = {
             "metadata": {"project_name": "test_project"},
@@ -331,7 +335,7 @@ class TestConstructDag:
         )
 
         dag = construct_dag(
-            SourceFreshness(sources={}), StateApiModel(state={}), settings
+            SourceFreshness(sources={}), StateApiModel(state={}), settings, **dag_paths
         )
         node = dag.nodes["seed.test_project.my_seed"]
         assert isinstance(node, MaterialisationNode)
@@ -339,7 +343,7 @@ class TestConstructDag:
         assert node.reason == "State orchestration for seeds currently disabled."
 
     def test_construct_dag_seed_state_enabled(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, dag_paths
     ) -> None:
         manifest = {
             "metadata": {"project_name": "test_project"},
@@ -375,7 +379,7 @@ class TestConstructDag:
             }
         )
 
-        dag = construct_dag(SourceFreshness(sources={}), state, settings)
+        dag = construct_dag(SourceFreshness(sources={}), state, settings, **dag_paths)
         node = dag.nodes["seed.test_project.my_seed"]
         assert isinstance(node, MaterialisationNode)
         assert node.freshness == Freshness.CLEAN
@@ -426,7 +430,12 @@ class TestConstructDag:
 
         project_dir = find_project_dir(["build", "--project-dir", "proj"])
         node = construct_dag(
-            SourceFreshness(sources={}), state, settings, project_dir=project_dir
+            SourceFreshness(sources={}),
+            state,
+            settings,
+            project_dir=project_dir,
+            target_dir=project_dir / "target",
+            packages_install_path=Path("dbt_packages"),
         ).nodes["seed.test_project.my_seed"]
         assert isinstance(node, MaterialisationNode)
         assert node.checksum == seed_digest
@@ -471,6 +480,7 @@ class TestConstructDag:
             StateApiModel(state={}),
             settings,
             project_dir=tmp_path,
+            target_dir=tmp_path / "target",
             packages_install_path=Path("vendor"),
         ).nodes["seed.my_package.pkg_seed"]
         assert isinstance(node, MaterialisationNode)
@@ -478,7 +488,7 @@ class TestConstructDag:
         assert node.file_path == "vendor/my_package/seeds/pkg_seed.csv"
 
     def test_construct_dag_skips_function_dependency(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, dag_paths
     ) -> None:
         manifest = {
             "metadata": {"project_name": "test_project"},
@@ -511,7 +521,7 @@ class TestConstructDag:
         )
 
         dag = construct_dag(
-            SourceFreshness(sources={}), StateApiModel(state={}), settings
+            SourceFreshness(sources={}), StateApiModel(state={}), settings, **dag_paths
         )
 
         edge_froms = [e.from_ for e in dag.edges]
