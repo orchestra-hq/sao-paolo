@@ -56,9 +56,9 @@ def stub_run(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     return calls
 
 
-def _run() -> None:
+def _run(*args: str) -> None:
     """Invoke the CLI, surfacing anything CliRunner would otherwise swallow."""
-    result = CliRunner().invoke(cli.main, ["dbt", "build"])
+    result = CliRunner().invoke(cli.main, list(args) or ["dbt", "build"])
     if result.exception is not None and not isinstance(result.exception, SystemExit):
         raise AssertionError(
             f"cli.main blew up: {result.exception!r}"
@@ -70,6 +70,36 @@ def test_gate_runs_before_the_dependency_sweep(stub_run: list[str]) -> None:
     _run()
 
     assert stub_run == ["gate", "sweep"]
+
+
+def test_stateful_run_when_a_global_flag_precedes_the_subcommand(
+    stub_run: list[str],
+) -> None:
+    _run("dbt", "--target", "prod", "build")
+
+    assert stub_run == ["gate", "sweep"]
+
+
+@pytest.mark.parametrize(
+    ("args", "expected"),
+    [
+        (("dbt", "build", "-s", "x"), ("dbt", "build", "-s", "x")),
+        (("dbt", "--debug", "build"), ("dbt", "build", "--debug")),
+        (
+            ("dbt", "--target", "prod", "build", "-s", "x"),
+            ("dbt", "build", "--target", "prod", "-s", "x"),
+        ),
+        (("dbt", "--target=prod", "run"), ("dbt", "run", "--target=prod")),
+        (("dbt", "-t", "prod", "test"), ("dbt", "test", "-t", "prod")),
+        (
+            ("dbt", "--log-level", "debug", "build"),
+            ("dbt", "build", "--log-level", "debug"),
+        ),
+        (("dbt", "--target", "prod"), ("dbt", "--target", "prod")),
+    ],
+)
+def test_subcommand_first(args: tuple[str, ...], expected: tuple[str, ...]) -> None:
+    assert cli._subcommand_first(args) == expected
 
 
 def test_gate_is_skipped_when_the_setting_is_disabled(

@@ -50,6 +50,34 @@ from .target_finder import (
     find_target_dir,
 )
 
+# ponytail: dbt-core 1.12 list; a flag missing here makes dbt run as a passthrough.
+_DBT_GLOBAL_VALUE_FLAGS = frozenset(
+    {
+        "--defer-state",
+        "--deprecated-defer",
+        "--deprecated-favor-state",
+        "--deprecated-state",
+        "--indirect-selection",
+        "--log-file-max-bytes",
+        "--log-format",
+        "--log-format-file",
+        "--log-level",
+        "--log-level-file",
+        "--log-path",
+        "--maximum-seed-size-mib",
+        "--partial-parse-file-path",
+        "--printer-width",
+        "--profile",
+        "--record-timing-info",
+        "--state",
+        "--target",
+        "--v2-parser",
+        "--warn-error-options",
+        "-r",
+        "-t",
+    }
+)
+
 
 def _usage_program() -> str:
     return Path(sys.argv[0]).name if sys.argv else "orc"
@@ -81,6 +109,17 @@ def _validate_environment(settings: OrchestraDbtSettings) -> None:
                 )
                 sys.exit(1)
             log_debug("State backend: Orchestra HTTP (API key set).")
+
+
+def _subcommand_first(dbt_args: tuple[str, ...]) -> tuple[str, ...]:
+    """Move the subcommand to just after `dbt`, since dbt also takes global flags before it."""
+    remaining = iter(enumerate(dbt_args[1:], start=1))
+    for index, arg in remaining:
+        if arg in _DBT_GLOBAL_VALUE_FLAGS:
+            next(remaining, None)
+        elif not arg.startswith("-"):
+            return (dbt_args[0], arg, *dbt_args[1:index], *dbt_args[index + 1 :])
+    return dbt_args
 
 
 def _run_dbt_passthrough(dbt_args: tuple[str, ...]) -> None:
@@ -141,7 +180,7 @@ def main(args: tuple[str, ...]) -> None:
         )
         sys.exit(1)
 
-    dbt_args: tuple[str, ...] = tuple(args)
+    dbt_args = _subcommand_first(tuple(args))
     project_dir = find_project_dir(list(dbt_args))
     target_dir = find_target_dir(list(dbt_args), project_dir)
 
