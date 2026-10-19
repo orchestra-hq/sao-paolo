@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 
@@ -8,6 +10,15 @@ def mock_env_vars(monkeypatch):
     monkeypatch.setenv("ORCHESTRA_API_KEY", "test-api-key")
     monkeypatch.setenv("ORCHESTRA_ENV", "dev")
     yield
+
+
+@pytest.fixture
+def dag_paths(tmp_path):
+    return {
+        "project_dir": tmp_path,
+        "target_dir": tmp_path / "target",
+        "packages_install_path": Path("dbt_packages"),
+    }
 
 
 @pytest.fixture

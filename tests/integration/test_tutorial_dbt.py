@@ -165,6 +165,11 @@ def test_warm_state_reuses_nodes_with_project_dir(tmp_path: Path) -> None:
     assert "model.sao_tutorial.stg_events" not in ran
     assert not (tmp_path / "target").exists()
     assert not (tmp_path / "selectors.yml").exists()
+    # Patched model files are reverted in the project, not looked for in the cwd.
+    stg_events = Path("models/staging/stg_events.sql")
+    assert (project_dir / stg_events).read_text() == (
+        _TUTORIAL_DBT / stg_events
+    ).read_text()
 
 
 @requires_postgres

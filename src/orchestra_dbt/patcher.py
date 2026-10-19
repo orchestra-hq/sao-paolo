@@ -80,7 +80,7 @@ def _get_sql_files(project_dir: Path) -> list[Path]:
 
 
 def patch_sql_files(
-    nodes_to_reuse: dict[str, MaterialisationNode], project_dir: Path = Path(".")
+    nodes_to_reuse: dict[str, MaterialisationNode], project_dir: Path
 ) -> None:
     sql_files = _get_sql_files(project_dir)
 
@@ -107,9 +107,7 @@ def patch_sql_files(
                 log_warn(f"Failed to add tag to {file}: {e}")
 
 
-def revert_patching(
-    file_paths_to_revert: list[str], project_dir: Path = Path(".")
-) -> None:
+def revert_patching(file_paths_to_revert: list[str], project_dir: Path) -> None:
     sql_files = _get_sql_files(project_dir)
 
     for file in sql_files:
