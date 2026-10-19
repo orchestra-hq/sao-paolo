@@ -11,10 +11,19 @@ sources:
           freshness:
             warn_after: { count: 24, period: hour }
           loaded_at_field: event_at
-          # The seed data is long past warn_after, so this source is always stale. The
-          # channel routes its live freshness alert.
+          tags: [raw, freshness_test]
+          # The seed data is long past warn_after, so this source is always stale. These
+          # are the alert keys Orchestra reads off a node's meta: channel routes the
+          # alert, owner is shown on it, team_owner is a Slack user or group ID to tag,
+          # and each subscriber is also emailed. Left unset, team_owner and subscribers
+          # tag and email no one.
           meta:
             channel: "{{ env_var('TUTORIAL_ALERT_CHANNEL', '#dbt-alerts-test') }}"
+            owner: "{{ env_var('TUTORIAL_ALERT_OWNER', 'data-platform') }}"
+            team_owner:
+              - "{{ env_var('TUTORIAL_ALERT_TEAM_OWNER', '') }}"
+            subscribers:
+              - "{{ env_var('TUTORIAL_ALERT_SUBSCRIBER', '') }}"
       - name: raw_events_freshness_disabled
         identifier: raw_events
         description: "Same physical table as raw_events, but with freshness checking explicitly disabled to exercise Orchestra's `config.freshness: null` handling."
