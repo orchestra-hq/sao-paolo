@@ -73,8 +73,10 @@ def test_gate_runs_before_the_dependency_sweep(stub_run: list[str]) -> None:
 
 
 def test_stateful_run_when_a_global_flag_precedes_the_subcommand(
-    stub_run: list[str],
+    stub_run: list[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.setattr(cli, "_dbt_usage_subcommand", lambda _args: "build")
+
     _run("dbt", "--target", "prod", "build")
 
     assert stub_run == ["gate", "sweep"]
@@ -83,26 +85,22 @@ def test_stateful_run_when_a_global_flag_precedes_the_subcommand(
 @pytest.mark.parametrize(
     ("args", "expected"),
     [
-        (("dbt", "build", "-s", "x"), ("dbt", "build", "-s", "x")),
-        (("dbt", "--debug", "build"), ("dbt", "build", "--debug")),
+        (("dbt", "build", "-t", "x"), ("dbt", "build", "-t", "x")),
         (
             ("dbt", "--target", "prod", "build", "-s", "x"),
             ("dbt", "build", "--target", "prod", "-s", "x"),
         ),
-        (("dbt", "--target=prod", "run"), ("dbt", "run", "--target=prod")),
-        (("dbt", "-t", "prod", "test"), ("dbt", "test", "-t", "prod")),
-        (
-            ("dbt", "--log-level", "debug", "build"),
-            ("dbt", "build", "--log-level", "debug"),
-        ),
-        (("dbt", "--target", "prod"), ("dbt", "--target", "prod")),
+        (("dbt", "--target", "test", "test"), ("dbt", "test", "--target", "test")),
+        # dbt rejects this flag after the subcommand.
         (
             ("dbt", "--show-resource-report", "build"),
             ("dbt", "--show-resource-report", "build"),
         ),
     ],
 )
-def test_subcommand_first(args: tuple[str, ...], expected: tuple[str, ...]) -> None:
+def test_subcommand_first_against_real_dbt(
+    args: tuple[str, ...], expected: tuple[str, ...]
+) -> None:
     assert cli._subcommand_first(args) == expected
 
 

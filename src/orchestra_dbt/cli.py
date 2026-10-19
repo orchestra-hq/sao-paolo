@@ -1,3 +1,4 @@
+import re
 import subprocess
 import sys
 from importlib.metadata import version
@@ -50,38 +51,6 @@ from .target_finder import (
     find_target_dir,
 )
 
-# ponytail: dbt-core 1.12 list; a flag missing here makes dbt run as a passthrough.
-_DBT_GLOBAL_VALUE_FLAGS = frozenset(
-    {
-        "--defer-state",
-        "--deprecated-defer",
-        "--deprecated-favor-state",
-        "--deprecated-state",
-        "--indirect-selection",
-        "--log-file-max-bytes",
-        "--log-format",
-        "--log-format-file",
-        "--log-level",
-        "--log-level-file",
-        "--log-path",
-        "--maximum-seed-size-mib",
-        "--partial-parse-file-path",
-        "--printer-width",
-        "--profile",
-        "--record-timing-info",
-        "--state",
-        "--target",
-        "--v2-parser",
-        "--warn-error-options",
-        "-r",
-        "-t",
-    }
-)
-# Subcommands reject these, so args holding one before the subcommand can't be reordered.
-_DBT_TOP_LEVEL_ONLY_FLAGS = frozenset(
-    {"--show-resource-report", "--no-show-resource-report"}
-)
-
 
 def _usage_program() -> str:
     return Path(sys.argv[0]).name if sys.argv else "orc"
@@ -115,16 +84,30 @@ def _validate_environment(settings: OrchestraDbtSettings) -> None:
             log_debug("State backend: Orchestra HTTP (API key set).")
 
 
+def _dbt_usage_subcommand(dbt_args: tuple[str, ...]) -> str | None:
+    """The subcommand dbt itself parses from these args, read off its --help usage line."""
+    try:
+        result = subprocess.run(
+            [*dbt_args, "--help"], capture_output=True, text=True, check=False
+        )
+    except FileNotFoundError:
+        return None
+    match = re.search(r"^Usage: dbt (\S+)", result.stdout, re.MULTILINE)
+    return match[1] if result.returncode == 0 and match else None
+
+
 def _subcommand_first(dbt_args: tuple[str, ...]) -> tuple[str, ...]:
     """Move the subcommand to just after `dbt`, since dbt also takes global flags before it."""
-    remaining = iter(enumerate(dbt_args[1:], start=1))
-    for index, arg in remaining:
-        if arg in _DBT_TOP_LEVEL_ONLY_FLAGS:
-            return dbt_args
-        if arg in _DBT_GLOBAL_VALUE_FLAGS:
-            next(remaining, None)
-        elif not arg.startswith("-"):
-            return (dbt_args[0], arg, *dbt_args[1:index], *dbt_args[index + 1 :])
+    if len(dbt_args) < 2 or not dbt_args[1].startswith("-"):
+        return dbt_args
+    subcommand = _dbt_usage_subcommand(dbt_args)
+    for index, arg in enumerate(dbt_args):
+        if arg != subcommand:
+            continue
+        reordered = (dbt_args[0], arg, *dbt_args[1:index], *dbt_args[index + 1 :])
+        # Some global flags are rejected after the subcommand, so dbt must accept the result.
+        if _dbt_usage_subcommand(reordered) == subcommand:
+            return reordered
     return dbt_args
 
 
