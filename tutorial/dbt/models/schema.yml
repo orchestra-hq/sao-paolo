@@ -11,6 +11,10 @@ sources:
           freshness:
             warn_after: { count: 24, period: hour }
           loaded_at_field: event_at
+          # The seed data is long past warn_after, so this source is always stale. The
+          # channel routes its live freshness alert.
+          meta:
+            channel: "{{ env_var('TUTORIAL_ALERT_CHANNEL', '#dbt-alerts-test') }}"
       - name: raw_events_freshness_disabled
         identifier: raw_events
         description: "Same physical table as raw_events, but with freshness checking explicitly disabled to exercise Orchestra's `config.freshness: null` handling."
