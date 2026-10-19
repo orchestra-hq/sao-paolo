@@ -96,6 +96,10 @@ def test_stateful_run_when_a_global_flag_precedes_the_subcommand(
             ("dbt", "build", "--log-level", "debug"),
         ),
         (("dbt", "--target", "prod"), ("dbt", "--target", "prod")),
+        (
+            ("dbt", "--show-resource-report", "build"),
+            ("dbt", "--show-resource-report", "build"),
+        ),
     ],
 )
 def test_subcommand_first(args: tuple[str, ...], expected: tuple[str, ...]) -> None:

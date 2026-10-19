@@ -77,6 +77,10 @@ _DBT_GLOBAL_VALUE_FLAGS = frozenset(
         "-t",
     }
 )
+# Subcommands reject these, so args holding one before the subcommand can't be reordered.
+_DBT_TOP_LEVEL_ONLY_FLAGS = frozenset(
+    {"--show-resource-report", "--no-show-resource-report"}
+)
 
 
 def _usage_program() -> str:
@@ -115,6 +119,8 @@ def _subcommand_first(dbt_args: tuple[str, ...]) -> tuple[str, ...]:
     """Move the subcommand to just after `dbt`, since dbt also takes global flags before it."""
     remaining = iter(enumerate(dbt_args[1:], start=1))
     for index, arg in remaining:
+        if arg in _DBT_TOP_LEVEL_ONLY_FLAGS:
+            return dbt_args
         if arg in _DBT_GLOBAL_VALUE_FLAGS:
             next(remaining, None)
         elif not arg.startswith("-"):
