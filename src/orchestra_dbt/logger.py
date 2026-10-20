@@ -1,5 +1,8 @@
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from time import perf_counter
 
 import click
 
@@ -32,6 +35,13 @@ def log_warn(msg) -> None:
 
 def log_error(msg) -> None:
     _log(msg, "red", error=True)
+
+
+@contextmanager
+def log_timed(label: str) -> Iterator[None]:
+    started_at = perf_counter()
+    yield
+    log_info(f"{label} took {perf_counter() - started_at:.2f}s.")
 
 
 def log_reused_nodes(nodes_to_reuse: dict[str, MaterialisationNode]) -> None:

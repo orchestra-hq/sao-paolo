@@ -16,7 +16,14 @@ from .config import (
 from .constants import SERVICE_NAME
 from .dag import construct_dag
 from .full_refresh_finder import is_full_refresh_requested
-from .logger import log_debug, log_error, log_info, log_reused_nodes, log_warn
+from .logger import (
+    log_debug,
+    log_error,
+    log_info,
+    log_reused_nodes,
+    log_timed,
+    log_warn,
+)
 from .ls import get_nodes_to_run
 from .models import (
     MaterialisationNode,
@@ -109,11 +116,12 @@ def _complete_run(
         target_dir=target_dir,
     )
     try:
-        save_state(
-            state=state,
-            updated_asset_external_ids=updated_asset_external_ids,
-            settings=settings,
-        )
+        with log_timed("State save"):
+            save_state(
+                state=state,
+                updated_asset_external_ids=updated_asset_external_ids,
+                settings=settings,
+            )
     except StateSaveError as e:
         # A save failure is only fatal if we had good state to begin with. If the
         # initial load already failed, we never had reliable state to protect, so
@@ -181,7 +189,8 @@ def main(args: tuple[str, ...]) -> None:
     _validate_environment(settings)
 
     try:
-        nodes_to_run = get_nodes_to_run(dbt_args[2:], target_dir)
+        with log_timed("Selection resolution"):
+            nodes_to_run = get_nodes_to_run(dbt_args[2:], target_dir)
     except ImportError as import_error:
         log_error(dbt_core_import_error_message(import_error))
         sys.exit(1)
@@ -195,15 +204,16 @@ def main(args: tuple[str, ...]) -> None:
         )
 
     try:
-        source_freshness: SourceFreshness | None = get_source_freshness(
-            # find_target_in_args just scans for --target/-t; the leading "dbt
-            # <subcommand>" tokens are harmless noise to it, so no need to slice.
-            user_args=dbt_args,
-            require_explicit_source_freshness=settings.require_explicit_source_freshness,
-            scope_to_selection=settings.scope_source_freshness_to_selection,
-            selectors_to_run=nodes_to_run.selectors if nodes_to_run else None,
-            target_dir=target_dir,
-        )
+        with log_timed("Source freshness"):
+            source_freshness: SourceFreshness | None = get_source_freshness(
+                # find_target_in_args just scans for --target/-t; the leading "dbt
+                # <subcommand>" tokens are harmless noise to it, so no need to slice.
+                user_args=dbt_args,
+                require_explicit_source_freshness=settings.require_explicit_source_freshness,
+                scope_to_selection=settings.scope_source_freshness_to_selection,
+                selectors_to_run=nodes_to_run.selectors if nodes_to_run else None,
+                target_dir=target_dir,
+            )
     except ImportError as import_error:
         log_error(dbt_core_import_error_message(import_error))
         sys.exit(1)
@@ -212,7 +222,8 @@ def main(args: tuple[str, ...]) -> None:
     log_info(f"Collected {len(source_freshness.sources)} source(s) information.")
 
     try:
-        state = load_state(settings)
+        with log_timed("State load"):
+            state = load_state(settings)
         state_load_ok = True
     except StateLoadError as e:
         log_warn(
@@ -222,17 +233,20 @@ def main(args: tuple[str, ...]) -> None:
         state = StateApiModel(state={})
         state_load_ok = False
 
-    parsed_dag = construct_dag(
-        source_freshness,
-        state,
-        settings,
-        project_dir=project_dir,
-        target_dir=target_dir,
-        packages_install_path=find_packages_install_path(list(dbt_args), project_dir),
-    )
+    with log_timed("DAG build"):
+        parsed_dag = construct_dag(
+            source_freshness,
+            state,
+            settings,
+            project_dir=project_dir,
+            target_dir=target_dir,
+            packages_install_path=find_packages_install_path(
+                list(dbt_args), project_dir
+            ),
+        )
 
-    # Propagate freshness config to upstream nodes
-    propagate_freshness_config(parsed_dag)
+        # Propagate freshness config to upstream nodes
+        propagate_freshness_config(parsed_dag)
 
     if is_full_refresh_requested(list(dbt_args)):
         log_info("Full refresh detected. Stateful orchestration disabled.")
@@ -251,7 +265,8 @@ def main(args: tuple[str, ...]) -> None:
         apply_relation_existence_gate(parsed_dag, paths_to_run, list(dbt_args))
 
     # Edit the DAG inline.
-    calculate_nodes_to_run(parsed_dag)
+    with log_timed("Node freshness evaluation"):
+        calculate_nodes_to_run(parsed_dag)
 
     nodes_to_reuse: dict[str, MaterialisationNode] = {}
     node_count = 0
@@ -269,8 +284,11 @@ def main(args: tuple[str, ...]) -> None:
     log_info(f"{len(nodes_to_reuse)}/{node_count} nodes reused.")
 
     if len(nodes_to_reuse) != 0:
-        patch_sql_files(nodes_to_reuse, project_dir=project_dir)
-        seed_properties_snapshots = patch_seed_properties(nodes_to_reuse, project_dir)
+        with log_timed("Patching reused nodes"):
+            patch_sql_files(nodes_to_reuse, project_dir=project_dir)
+            seed_properties_snapshots = patch_seed_properties(
+                nodes_to_reuse, project_dir
+            )
 
         selectors_file = project_dir / "selectors.yml"
         selectors_snapshot = snapshot_file(selectors_file)
