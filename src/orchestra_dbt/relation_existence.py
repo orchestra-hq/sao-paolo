@@ -1,10 +1,9 @@
 from collections.abc import Collection
 from functools import cache
-from time import perf_counter
 from typing import Any, cast
 
 from .compatibility import is_dbt_v2, release_connections
-from .logger import log_debug, log_info, log_warn
+from .logger import log_debug, log_info, log_timed, log_warn
 from .models import Freshness, MaterialisationNode, NodeType, ParsedDag
 from .target_finder import find_flag_value, find_target_in_args
 
@@ -204,25 +203,22 @@ def apply_relation_existence_gate(
         return
 
     v2 = is_dbt_v2()
-    started_at = perf_counter()
-    try:
-        if v2:
-            missing = _find_missing_relations_v2(candidates, user_args)
-        else:
-            missing = _find_missing_relations_v1(candidates)
-        if missing is None:
-            return
-    except Exception as e:
-        log_warn(
-            f"Warehouse existence check failed; reuse decisions are unchanged. {e}"
-        )
-        return
-
     method = "dbt v2 catalog" if v2 else "dbt 1.x adapter"
-    log_info(
-        f"Warehouse existence check ({method}) for {len(candidates)} node(s) took "
-        f"{perf_counter() - started_at:.2f}s."
-    )
+    with log_timed(
+        f"Warehouse existence check ({method}) for {len(candidates)} node(s)"
+    ):
+        try:
+            if v2:
+                missing = _find_missing_relations_v2(candidates, user_args)
+            else:
+                missing = _find_missing_relations_v1(candidates)
+        except Exception as e:
+            log_warn(
+                f"Warehouse existence check failed; reuse decisions are unchanged. {e}"
+            )
+            return
+    if missing is None:
+        return
 
     for unique_id in missing:
         node = candidates[unique_id]

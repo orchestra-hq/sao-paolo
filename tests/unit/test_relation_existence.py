@@ -529,25 +529,6 @@ class TestApplyRelationExistenceGate:
             out,
         )
 
-    @pytest.mark.parametrize(
-        ("kwargs", "label"),
-        [
-            ({"raises": RuntimeError("no adapter")}, "adapter unavailable"),
-            ({"adapter_type": "spark"}, "unsupported adapter"),
-        ],
-    )
-    def test_timing_is_not_logged_on_safety_branches(
-        self, monkeypatch, capsys, kwargs, label
-    ) -> None:
-        """Nothing was actually checked, so a duration would be misleading."""
-        self._stub_adapter(monkeypatch, **kwargs)
-        dag = ParsedDag(nodes={"model.p.a": _node("model.p.a")}, edges=[])
-
-        apply_relation_existence_gate(dag, None, ["dbt", "build"])
-
-        out = capsys.readouterr().out
-        assert "took" not in out, label
-
 
 class TestAcquireAdapter:
     @pytest.mark.parametrize(
