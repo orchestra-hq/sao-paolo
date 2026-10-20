@@ -1,6 +1,8 @@
 from datetime import UTC, datetime
 
-from src.orchestra_dbt.logger import log_reused_nodes
+import pytest
+
+from src.orchestra_dbt.logger import log_reused_nodes, log_timed
 from src.orchestra_dbt.models import (
     Freshness,
     FreshnessConfig,
@@ -42,3 +44,10 @@ class TestLogReusedNodes:
             "1 of 2 REUSED node_1 - reason_1 (last updated: 2026-01-01 00:00:00+00:00)",
             "2 of 2 REUSED node_2 - Brand new node (last updated: none)",
         ]
+
+
+class TestLogTimed:
+    def test_logs_duration_when_phase_raises(self, capsys):
+        with pytest.raises(RuntimeError), log_timed("State load"):
+            raise RuntimeError("load failed")
+        assert "State load took " in capsys.readouterr().out

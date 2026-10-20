@@ -40,8 +40,10 @@ def log_error(msg) -> None:
 @contextmanager
 def log_timed(label: str) -> Iterator[None]:
     started_at = perf_counter()
-    yield
-    log_info(f"{label} took {perf_counter() - started_at:.2f}s.")
+    try:
+        yield
+    finally:
+        log_info(f"{label} took {perf_counter() - started_at:.2f}s.")
 
 
 def log_reused_nodes(nodes_to_reuse: dict[str, MaterialisationNode]) -> None:
