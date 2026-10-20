@@ -116,12 +116,11 @@ def _complete_run(
         target_dir=target_dir,
     )
     try:
-        with log_timed("State save"):
-            save_state(
-                state=state,
-                updated_asset_external_ids=updated_asset_external_ids,
-                settings=settings,
-            )
+        save_state(
+            state=state,
+            updated_asset_external_ids=updated_asset_external_ids,
+            settings=settings,
+        )
     except StateSaveError as e:
         # A save failure is only fatal if we had good state to begin with. If the
         # initial load already failed, we never had reliable state to protect, so
@@ -222,8 +221,7 @@ def main(args: tuple[str, ...]) -> None:
     log_info(f"Collected {len(source_freshness.sources)} source(s) information.")
 
     try:
-        with log_timed("State load"):
-            state = load_state(settings)
+        state = load_state(settings)
         state_load_ok = True
     except StateLoadError as e:
         log_warn(

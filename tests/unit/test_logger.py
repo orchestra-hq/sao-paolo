@@ -48,6 +48,6 @@ class TestLogReusedNodes:
 
 class TestLogTimed:
     def test_logs_duration_when_phase_raises(self, capsys):
-        with pytest.raises(RuntimeError), log_timed("State load"):
-            raise RuntimeError("load failed")
-        assert "State load took " in capsys.readouterr().out
+        with pytest.raises(RuntimeError), log_timed("Source freshness"):
+            raise RuntimeError("freshness failed")
+        assert "Source freshness took " in capsys.readouterr().out
