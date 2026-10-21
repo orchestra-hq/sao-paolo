@@ -5,6 +5,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from ..logger import log_info
 from ..models import StateApiModel
 from ..state_errors import StateLoadError, StateSaveError
 from .logging import log_state_loaded, log_state_saved
@@ -17,7 +18,8 @@ class LocalFileStateBackend:
     def load(self) -> StateApiModel:
         path = self._path
         if not path.is_file():
-            raise StateLoadError(f"State file not found: {path}")
+            log_info(f"No state file at {path}; starting with empty state.")
+            return StateApiModel(state={})
 
         try:
             raw = path.read_text(encoding="utf-8")
