@@ -36,13 +36,16 @@ def get_args_for_source_freshness(
     target = find_target_in_args(list(user_args))
     if target:
         args.extend(["--target", target])
-    # Otherwise freshness resolves a different project or profile than the user's run.
+    # Otherwise freshness resolves a different project, profile or thread count than
+    # the user's run.
     for flag in (
         "--project-dir",
         "--target-path",
         "--profiles-dir",
         "--profile",
         "--vars",
+        "--threads",
+        "--packages-install-path",
     ):
         if (value := find_flag_value(list(user_args), flag)) is not None:
             args.extend([flag, value])

@@ -70,6 +70,21 @@ class TestGetArgsForSourceFreshness:
             "{schema: x}",
         ]
 
+    def test_forwards_threads(self):
+        assert get_args_for_source_freshness(("dbt", "build", "--threads=8")) == [
+            "source",
+            "freshness",
+            "-q",
+            "--threads",
+            "8",
+        ]
+
+    def test_forwards_packages_install_path(self):
+        """Only dbt 2.x takes it, so only a 2.x user can have passed it."""
+        assert get_args_for_source_freshness(
+            ("dbt", "build", "--packages-install-path", "pkgs")
+        ) == ["source", "freshness", "-q", "--packages-install-path", "pkgs"]
+
     def test_forwards_empty_flag_value_unchanged(self):
         """Freshness must see what the user's run sees, even an empty value."""
         assert get_args_for_source_freshness(("dbt", "build", "--profiles-dir=")) == [
