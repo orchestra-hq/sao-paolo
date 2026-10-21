@@ -1,7 +1,7 @@
 name: concurrent_selector_repro
 config-version: 2
 
-profile: tutorial
+profile: concurrent_selector_repro
 
 # A -> B, where A is fed by a source. Deliberately NO `freshness.build_after`
 # on any model: the bug being reproduced only affects nodes without an SLA,

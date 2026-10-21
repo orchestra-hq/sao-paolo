@@ -11,20 +11,35 @@ import pytest
 
 from src.orchestra_dbt.ls import get_nodes_to_run
 from src.orchestra_dbt.source_freshness import get_args_for_source_freshness
-from tests.integration import TUTORIAL_PROFILES_DIR, requires_warehouse
+from tests.integration import parse_only_output
 
 _REPRO_PROJECT = (
     Path(__file__).resolve().parents[2] / "tutorial" / "concurrent-selector-repro"
 )
 
 
-@requires_warehouse
 def test_bare_model_name_selector_resolves_and_scopes_to_its_source(
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    output = parse_only_output()
+    if output is None:
+        pytest.skip("needs any one dbt adapter installed (to register, not connect)")
+
     # selector_x in this project's selectors.yml: {method: fqn, value: model_a}.
+    # No live connection needed -- dbt ls only has to render the profile.
+    # dbt reads DBT_TARGET too, so the output is named after it.
+    target = os.environ.get("DBT_TARGET", "dev")
+    (tmp_path / "profiles.yml").write_text(
+        f"""
+concurrent_selector_repro:
+  target: {target}
+  outputs:
+    {target}:{output}      schema: csr_selector_test
+      threads: 1
+"""
+    )
     monkeypatch.chdir(_REPRO_PROJECT)
-    monkeypatch.setenv("DBT_PROFILES_DIR", str(TUTORIAL_PROFILES_DIR))
+    monkeypatch.setenv("DBT_PROFILES_DIR", str(tmp_path))
 
     nodes = get_nodes_to_run(("--selector", "selector_x"), _REPRO_PROJECT / "target")
 
@@ -37,8 +52,7 @@ def test_bare_model_name_selector_resolves_and_scopes_to_its_source(
         "source",
         "freshness",
         "-q",
-        # Forwarded from the environment, which picks the tutorial profile's target.
-        *(["--target", os.environ["DBT_TARGET"]] if "DBT_TARGET" in os.environ else []),
+        *(["--target", target] if "DBT_TARGET" in os.environ else []),
         "--select",
         "+concurrent_selector_repro.model_a",
     ]

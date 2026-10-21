@@ -2,10 +2,27 @@ import os
 import subprocess
 from pathlib import Path
 
-from tests.integration import TUTORIAL_PROFILES_DIR, requires_warehouse
+import pytest
+
+from src.orchestra_dbt.compatibility import is_dbt_v2
 
 _REPRO_PROJECT = (
     Path(__file__).resolve().parents[2] / "tutorial" / "concurrent-selector-repro"
+)
+
+
+def _postgres_ci_configured() -> bool:
+    return bool(
+        os.environ.get("PGHOST")
+        and os.environ.get("PGDATABASE")
+        and os.environ.get("CI") == "true"
+    )
+
+
+# The duckdb target needs no service, so it also covers dbt 2.x, which rejects postgres.
+requires_warehouse = pytest.mark.skipif(
+    not (_postgres_ci_configured() or os.environ.get("DBT_TARGET") == "duckdb"),
+    reason="Set PGHOST, PGDATABASE and CI=true, or DBT_TARGET=duckdb, to run.",
 )
 
 
@@ -16,12 +33,36 @@ def _csr_env(tmp_path: Path, schema: str) -> dict[str, str]:
     env.pop("ORCHESTRA_API_KEY", None)
     env["ORCHESTRA_STATE_FILE"] = str(tmp_path / "dbt_state.json")
     (tmp_path / "dbt_state.json").write_text('{"state": {}}', encoding="utf-8")
-    env.setdefault("PGPORT", "5432")
-    env.setdefault("PGUSER", "postgres")
-    env.setdefault("PGPASSWORD", "postgres")
-    env["DBT_SCHEMA"] = schema
-    env["DUCKDB_PATH"] = str(tmp_path / "csr.duckdb")
-    env["DBT_PROFILES_DIR"] = str(TUTORIAL_PROFILES_DIR)
+    # dbt reads DBT_TARGET too, so the output is named after it.
+    target = env.get("DBT_TARGET", "dev")
+    if target == "duckdb":
+        output = f"""
+      type: duckdb
+      path: {tmp_path / "csr.duckdb"}
+"""
+    else:
+        env.setdefault("PGPORT", "5432")
+        env.setdefault("PGUSER", "postgres")
+        env.setdefault("PGPASSWORD", "postgres")
+        output = f"""
+      type: postgres
+      host: {env["PGHOST"]}
+      port: {env["PGPORT"]}
+      user: {env["PGUSER"]}
+      password: {env["PGPASSWORD"]}
+      dbname: {env["PGDATABASE"]}
+"""
+    (tmp_path / "profiles.yml").write_text(
+        f"""
+concurrent_selector_repro:
+  target: {target}
+  outputs:
+    {target}:{output}      schema: {schema}
+      threads: 1
+""",
+        encoding="utf-8",
+    )
+    env["DBT_PROFILES_DIR"] = str(tmp_path)
     return env
 
 
@@ -41,6 +82,22 @@ def _run(
     return result
 
 
+# raw_page_views has no loaded_at_field. dbt 2.x can't compute metadata freshness on
+# duckdb, so there orc drops it and retries, and that retry is how checking it shows.
+_NO_METADATA_FRESHNESS = is_dbt_v2() and os.environ.get("DBT_TARGET") == "duckdb"
+_RETRIED = "Retrying without the 1 source(s) that have no loaded_at_field"
+
+
+def _checked_both_sources(stdout: str) -> bool:
+    if _NO_METADATA_FRESHNESS:
+        return _RETRIED in stdout and "Collected 1 source(s) information." in stdout
+    return "Collected 2 source(s) information." in stdout
+
+
+def _checked_only_raw_events(stdout: str) -> bool:
+    return "Collected 1 source(s) information." in stdout and _RETRIED not in stdout
+
+
 @requires_warehouse
 def test_scoping_only_checks_the_source_a_direct_model_selector_actually_uses(
     tmp_path: Path,
@@ -56,12 +113,12 @@ def test_scoping_only_checks_the_source_a_direct_model_selector_actually_uses(
         ["orc", "dbt", "build", "--selector", "selector_x"], env, "unscoped"
     )
     assert unscoped.returncode == 0
-    assert "Collected 2 source(s) information." in unscoped.stdout
+    assert _checked_both_sources(unscoped.stdout)
 
     env["ORCHESTRA_SCOPE_SOURCE_FRESHNESS_TO_SELECTION"] = "true"
     scoped = _run(["orc", "dbt", "build", "--selector", "selector_x"], env, "scoped")
     assert scoped.returncode == 0
-    assert "Collected 1 source(s) information." in scoped.stdout
+    assert _checked_only_raw_events(scoped.stdout)
 
 
 @requires_warehouse
@@ -79,7 +136,7 @@ def test_scoping_with_a_descendant_expanding_selector_still_finds_one_source(
     env["ORCHESTRA_SCOPE_SOURCE_FRESHNESS_TO_SELECTION"] = "true"
     scoped = _run(["orc", "dbt", "build", "--selector", "selector_y"], env, "scoped")
     assert scoped.returncode == 0
-    assert "Collected 1 source(s) information." in scoped.stdout
+    assert _checked_only_raw_events(scoped.stdout)
 
 
 @requires_warehouse
@@ -97,4 +154,4 @@ def test_scoping_with_a_union_selector_picks_up_both_sources(
     env["ORCHESTRA_SCOPE_SOURCE_FRESHNESS_TO_SELECTION"] = "true"
     scoped = _run(["orc", "dbt", "build", "--selector", "selector_z"], env, "scoped")
     assert scoped.returncode == 0
-    assert "Collected 2 source(s) information." in scoped.stdout
+    assert _checked_both_sources(scoped.stdout)

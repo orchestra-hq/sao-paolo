@@ -15,25 +15,39 @@ import pytest
 from src.orchestra_dbt.compatibility import is_dbt_v2
 from src.orchestra_dbt.ls import get_args_for_ls, get_nodes_to_run
 from src.orchestra_dbt.source_freshness import get_args_for_source_freshness
-from tests.integration import TUTORIAL_PROFILES_DIR, requires_warehouse
+from tests.integration import parse_only_output
 
 _REPRO_PROJECT = Path(__file__).resolve().parents[2] / "tutorial" / "package-only-repro"
 
-pytestmark = requires_warehouse
-
 _MODEL_PATH = "models/staging/stg_orders.sql"
 _MODEL_FQN = "analytics_pkg.staging.stg_orders"
-# dbt 2.x's ls ignores `--output name` and prints a selector instead.
+# dbt 2.x's dbtRunner returns ls results as selectors whatever `--output` says
+# (its printed output does honour it).
 _SOURCE = "source:analytics_pkg.raw.raw_orders" if is_dbt_v2() else "raw.raw_orders"
 
 
 @pytest.fixture
-def package_only_project(monkeypatch: pytest.MonkeyPatch):
+def package_only_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Install the vendored package and point dbt at a profile it can render."""
+    output = parse_only_output()
+    if output is None:
+        pytest.skip("needs any one dbt adapter installed (to register, not connect)")
+
     from dbt.cli.main import dbtRunner
 
+    # dbt reads DBT_TARGET too, so the output is named after it.
+    target = os.environ.get("DBT_TARGET", "dev")
+    (tmp_path / "profiles.yml").write_text(
+        f"""
+package_only_root:
+  target: {target}
+  outputs:
+    {target}:{output}      schema: package_only_repro
+      threads: 1
+"""
+    )
     monkeypatch.chdir(_REPRO_PROJECT)
-    monkeypatch.setenv("DBT_PROFILES_DIR", str(TUTORIAL_PROFILES_DIR))
+    monkeypatch.setenv("DBT_PROFILES_DIR", str(tmp_path))
 
     deps = dbtRunner().invoke(["deps", "-q"])
     assert deps.success, f"dbt deps failed: {deps.exception}"
@@ -96,7 +110,6 @@ def test_scoped_freshness_args_resolve_to_the_source(package_only_project) -> No
         (), scope_to_selection=True, selectors_to_run=nodes.selectors
     )
 
-    # The target is forwarded from the environment, which picks the profile's target.
     target = (
         ["--target", os.environ["DBT_TARGET"]] if "DBT_TARGET" in os.environ else []
     )
@@ -107,7 +120,7 @@ def test_scoped_freshness_args_resolve_to_the_source(package_only_project) -> No
 
 
 @pytest.mark.skipif(
-    is_dbt_v2(), reason="dbt 2.x's ls ignores --output, so there's no path output"
+    is_dbt_v2(), reason="dbt 2.x's dbtRunner ignores --output for ls results"
 )
 def test_json_paths_are_identical_to_the_previous_path_output(
     package_only_project,
