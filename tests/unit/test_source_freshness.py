@@ -70,6 +70,15 @@ class TestGetArgsForSourceFreshness:
             "{schema: x}",
         ]
 
+    def test_forwards_threads(self):
+        assert get_args_for_source_freshness(("dbt", "build", "--threads=8")) == [
+            "source",
+            "freshness",
+            "-q",
+            "--threads",
+            "8",
+        ]
+
     def test_forwards_empty_flag_value_unchanged(self):
         """Freshness must see what the user's run sees, even an empty value."""
         assert get_args_for_source_freshness(("dbt", "build", "--profiles-dir=")) == [
