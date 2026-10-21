@@ -7,62 +7,27 @@ globbing the real filesystem from the project root, where those files don't
 exist. See tutorial/package-only-repro/README.md.
 """
 
-import importlib.util
 from pathlib import Path
 
 import pytest
 
+from src.orchestra_dbt.compatibility import is_dbt_v2
 from src.orchestra_dbt.ls import get_args_for_ls, get_nodes_to_run
 from src.orchestra_dbt.source_freshness import get_args_for_source_freshness
+from tests.integration import parse_only_output
 
 _REPRO_PROJECT = Path(__file__).resolve().parents[2] / "tutorial" / "package-only-repro"
 
 _MODEL_PATH = "models/staging/stg_orders.sql"
 _MODEL_FQN = "analytics_pkg.staging.stg_orders"
-_SOURCE = "raw.raw_orders"
-
-# Nothing here connects -- dbt only has to *register* an adapter to render the
-# profile and parse. Any installed adapter will do, so take whichever this
-# environment has (CI's test job has none and skips; tutorial-dbt has postgres).
-_ADAPTER_OUTPUTS = {
-    "postgres": """
-      type: postgres
-      host: localhost
-      port: 5432
-      user: postgres
-      password: postgres
-      dbname: postgres
-""",
-    "snowflake": """
-      type: snowflake
-      account: fake_account
-      user: fake_user
-      password: fake_password
-      role: fake_role
-      database: fake_db
-      warehouse: fake_wh
-""",
-    "databricks": """
-      type: databricks
-      host: fake.cloud.databricks.com
-      http_path: /sql/1.0/warehouses/fake
-      token: fake_token
-      catalog: fake_catalog
-""",
-}
+# dbt 2.x's ls ignores `--output name` and prints a selector instead.
+_SOURCE = "source:analytics_pkg.raw.raw_orders" if is_dbt_v2() else "raw.raw_orders"
 
 
 @pytest.fixture
 def package_only_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Install the vendored package and point dbt at a profile it can render."""
-    output = next(
-        (
-            block
-            for name, block in _ADAPTER_OUTPUTS.items()
-            if importlib.util.find_spec(f"dbt.adapters.{name}")
-        ),
-        None,
-    )
+    output = parse_only_output()
     if output is None:
         pytest.skip("needs any one dbt adapter installed (to register, not connect)")
 
@@ -147,6 +112,9 @@ def test_scoped_freshness_args_resolve_to_the_source(package_only_project) -> No
     assert _sources_selected_by(package_only_project, criteria) == [_SOURCE]
 
 
+@pytest.mark.skipif(
+    is_dbt_v2(), reason="dbt 2.x's ls ignores --output, so there's no path output"
+)
 def test_json_paths_are_identical_to_the_previous_path_output(
     package_only_project,
 ) -> None:

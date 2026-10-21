@@ -17,35 +17,45 @@ def _postgres_ci_configured() -> bool:
     )
 
 
-requires_postgres = pytest.mark.skipif(
-    not _postgres_ci_configured(),
-    reason="Set PGHOST and PGDATABASE and CI=true to run (CI provides these).",
+# The duckdb target needs no service, so it also covers dbt 2.x, which rejects postgres.
+requires_warehouse = pytest.mark.skipif(
+    not (_postgres_ci_configured() or os.environ.get("DBT_TARGET") == "duckdb"),
+    reason="Set PGHOST, PGDATABASE and CI=true, or DBT_TARGET=duckdb, to run.",
 )
 
 
 def _csr_env(tmp_path: Path, schema: str) -> dict[str, str]:
     env = os.environ.copy()
-    env.setdefault("PGPORT", "5432")
-    env.setdefault("PGUSER", "postgres")
-    env.setdefault("PGPASSWORD", "postgres")
     # ORCHESTRA_API_KEY selects the Orchestra HTTP backend regardless of any file
     # setting, and CI's environment carries one; drop it so state lands in the temp file.
     env.pop("ORCHESTRA_API_KEY", None)
     env["ORCHESTRA_STATE_FILE"] = str(tmp_path / "dbt_state.json")
     (tmp_path / "dbt_state.json").write_text('{"state": {}}', encoding="utf-8")
-    (tmp_path / "profiles.yml").write_text(
-        f"""
-concurrent_selector_repro:
-  target: dev
-  outputs:
-    dev:
+    # dbt reads DBT_TARGET too, so the output is named after it.
+    target = env.get("DBT_TARGET", "dev")
+    if target == "duckdb":
+        output = f"""
+      type: duckdb
+      path: {tmp_path / "csr.duckdb"}
+"""
+    else:
+        env.setdefault("PGPORT", "5432")
+        env.setdefault("PGUSER", "postgres")
+        env.setdefault("PGPASSWORD", "postgres")
+        output = f"""
       type: postgres
       host: {env["PGHOST"]}
       port: {env["PGPORT"]}
       user: {env["PGUSER"]}
       password: {env["PGPASSWORD"]}
       dbname: {env["PGDATABASE"]}
-      schema: {schema}
+"""
+    (tmp_path / "profiles.yml").write_text(
+        f"""
+concurrent_selector_repro:
+  target: {target}
+  outputs:
+    {target}:{output}      schema: {schema}
       threads: 1
 """,
         encoding="utf-8",
@@ -70,7 +80,7 @@ def _run(
     return result
 
 
-@requires_postgres
+@requires_warehouse
 def test_scoping_only_checks_the_source_a_direct_model_selector_actually_uses(
     tmp_path: Path,
 ) -> None:
@@ -93,7 +103,7 @@ def test_scoping_only_checks_the_source_a_direct_model_selector_actually_uses(
     assert "Collected 1 source(s) information." in scoped.stdout
 
 
-@requires_postgres
+@requires_warehouse
 def test_scoping_with_a_descendant_expanding_selector_still_finds_one_source(
     tmp_path: Path,
 ) -> None:
@@ -111,7 +121,7 @@ def test_scoping_with_a_descendant_expanding_selector_still_finds_one_source(
     assert "Collected 1 source(s) information." in scoped.stdout
 
 
-@requires_postgres
+@requires_warehouse
 def test_scoping_with_a_union_selector_picks_up_both_sources(
     tmp_path: Path,
 ) -> None:

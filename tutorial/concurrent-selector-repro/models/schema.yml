@@ -24,6 +24,9 @@ sources:
     tables:
       - name: raw_page_views
         identifier: raw_page_views
+        # dbt 2.x can't compute metadata freshness on every adapter (duckdb).
+        config:
+          loaded_at_field: viewed_at
 
 models:
   # A: fed directly by the source. Selector X targets this node alone.

@@ -10,6 +10,7 @@ import pytest
 
 from src.orchestra_dbt.ls import get_nodes_to_run
 from src.orchestra_dbt.source_freshness import get_args_for_source_freshness
+from tests.integration import parse_only_output
 
 _REPRO_PROJECT = (
     Path(__file__).resolve().parents[2] / "tutorial" / "concurrent-selector-repro"
@@ -19,23 +20,18 @@ _REPRO_PROJECT = (
 def test_bare_model_name_selector_resolves_and_scopes_to_its_source(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    pytest.importorskip("dbt.adapters.postgres")
+    output = parse_only_output()
+    if output is None:
+        pytest.skip("needs any one dbt adapter installed (to register, not connect)")
 
     # selector_x in this project's selectors.yml: {method: fqn, value: model_a}.
     # No live connection needed -- dbt ls only has to render the profile.
     (tmp_path / "profiles.yml").write_text(
-        """
+        f"""
 concurrent_selector_repro:
   target: dev
   outputs:
-    dev:
-      type: postgres
-      host: localhost
-      port: 5432
-      user: postgres
-      password: postgres
-      dbname: postgres
-      schema: csr_selector_test
+    dev:{output}      schema: csr_selector_test
       threads: 1
 """
     )

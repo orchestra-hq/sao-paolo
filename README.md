@@ -15,7 +15,7 @@ dbt-orchestra ~ São Paolo
 
 ## Introduction
 
-`dbt-orchestra` wraps dbt Core commands, using previous run state to reduce unnecessary work. It is designed to be added to an existing dbt Core project, not used as a standalone dbt repository.
+`dbt-orchestra` wraps dbt commands, on dbt-core 1.x or dbt v2, using previous run state to reduce unnecessary work. It is designed to be added to an existing dbt project, not used as a standalone dbt repository.
 
 There are a few core reasons to use this project:
 
@@ -30,9 +30,8 @@ There are a few core reasons to use this project:
 ## Compatibility and prerequisites
 
 - **Python:** 3.11, 3.12, and 3.13 only (see `requires-python` in `pyproject.toml`).
-- **dbt-core:** 1.10.x to 1.12.x when using stateful orchestration.
-- **dbt v2:** 2.x is supported for stateful orchestration, with some differences (see [dbt v2](#dbt-v2)).
-- **A dbt Core project:** an existing dbt Core project where you already run `dbt build` / `dbt run` / `dbt test`.
+- **dbt:** either dbt-core 1.10.x to 1.12.x, or dbt v2 (`dbt-oss` 2.x). Stateful orchestration works on both; v2 has a few differences (see [dbt v2](#dbt-v2)).
+- **A dbt project:** an existing dbt project where you already run `dbt build` / `dbt run` / `dbt test`.
 
 ## Installing
 
@@ -84,7 +83,7 @@ State-aware orchestration works on dbt v2 as it does on 1.x, with these differen
 
 After this run, your `.orchestra/dbt_state.json` state file will contain freshness information, and subsequent runs will compare this information to your project's model freshness configuration for optimisation.
 
-If you want a small demo dbt Core project to try this with, use [`tutorial/README.md`](tutorial/README.md).
+If you want a small demo dbt project to try this with, use [`tutorial/README.md`](tutorial/README.md).
 
 ## State backends
 
@@ -106,7 +105,7 @@ Add `.orchestra/` (or your chosen path) to `.gitignore` if the file should not b
 
 ### Orchestra Cloud (managed)
 
-Managing your dbt Core state in Orchestra requires an Orchestra API key. When `ORCHESTRA_API_KEY` is set, `dbt-orchestra` selects this backend over any file-based one (see [backend priority](#resolving-multiple-backend-state-configurations)). Put non-secret defaults in `pyproject.toml` and only export the API key:
+Managing your dbt state in Orchestra requires an Orchestra API key. When `ORCHESTRA_API_KEY` is set, `dbt-orchestra` selects this backend over any file-based one (see [backend priority](#resolving-multiple-backend-state-configurations)). Put non-secret defaults in `pyproject.toml` and only export the API key:
 
 ```toml
 [tool.orchestra_dbt]
@@ -118,11 +117,11 @@ export ORCHESTRA_API_KEY=<API_KEY>
 orc dbt run
 ```
 
-If you want to run state-aware dbt Core code without managing state files and the `dbt-orchestra` CLI tool, try running your dbt Core in Orchestra. Orchestra users can enable state-aware orchestration using a simple toggle.
+If you want to run state-aware dbt without managing state files and the `dbt-orchestra` CLI tool, try running your dbt in Orchestra. Orchestra users can enable state-aware orchestration using a simple toggle.
 
 ### S3 backend
 
-To store your dbt Core state in S3, install the optional dependency (`pip install 'dbt-orchestra[s3]'` or `uv sync --extra s3`). Credentials and region follow the usual [AWS SDK resolution](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html) (environment variables, shared config, IAM role, etc.). If the object does not exist yet, load starts with an empty state and save creates the object. The state file parameter expects a `s3://bucket/key` URI.
+To store your dbt state in S3, install the optional dependency (`pip install 'dbt-orchestra[s3]'` or `uv sync --extra s3`). Credentials and region follow the usual [AWS SDK resolution](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html) (environment variables, shared config, IAM role, etc.). If the object does not exist yet, load starts with an empty state and save creates the object. The state file parameter expects a `s3://bucket/key` URI.
 
 ```toml
 [tool.orchestra_dbt]
@@ -137,7 +136,7 @@ orc dbt run
 
 ### GCS backend
 
-To store your dbt Core state in Google Cloud Storage, install the optional dependency (`pip install 'dbt-orchestra[gcs]'` or `uv sync --extra gcs`). Credentials follow [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/application-default-credentials) — run `gcloud auth application-default login` for local development, or set `GOOGLE_APPLICATION_CREDENTIALS` to a service account key file, or rely on the attached service account when running on GCP. The bucket must already exist; if the object does not exist yet, load starts with an empty state and save creates the object. The state file parameter expects a `gs://bucket/key` URI.
+To store your dbt state in Google Cloud Storage, install the optional dependency (`pip install 'dbt-orchestra[gcs]'` or `uv sync --extra gcs`). Credentials follow [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/application-default-credentials) — run `gcloud auth application-default login` for local development, or set `GOOGLE_APPLICATION_CREDENTIALS` to a service account key file, or rely on the attached service account when running on GCP. The bucket must already exist; if the object does not exist yet, load starts with an empty state and save creates the object. The state file parameter expects a `gs://bucket/key` URI.
 
 ```toml
 [tool.orchestra_dbt]
@@ -152,7 +151,7 @@ orc dbt run
 
 ### ABS backend
 
-To store your dbt Core state in Azure Blob Storage, install the optional dependency (`pip install 'dbt-orchestra[azure]'` or `uv sync --extra azure`). Credentials follow [DefaultAzureCredential](https://learn.microsoft.com/en-us/azure/developer/python/sdk/authentication/credential-chains#defaultazurecredential-overview) — run `az login` for local development, or configure a service principal via `AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET` / `AZURE_TENANT_ID`, or rely on the attached managed identity when running on Azure. Alternatively, set `AZURE_STORAGE_CONNECTION_STRING` for simpler setups. The container must already exist; if the blob does not exist yet, load starts with an empty state and save creates the blob. The state file parameter expects an `abfs://` or `abfss://` URI of the form `abfss://container@account.dfs.core.windows.net/path`. Both schemes always connect via TLS.
+To store your dbt state in Azure Blob Storage, install the optional dependency (`pip install 'dbt-orchestra[azure]'` or `uv sync --extra azure`). Credentials follow [DefaultAzureCredential](https://learn.microsoft.com/en-us/azure/developer/python/sdk/authentication/credential-chains#defaultazurecredential-overview) — run `az login` for local development, or configure a service principal via `AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET` / `AZURE_TENANT_ID`, or rely on the attached managed identity when running on Azure. Alternatively, set `AZURE_STORAGE_CONNECTION_STRING` for simpler setups. The container must already exist; if the blob does not exist yet, load starts with an empty state and save creates the blob. The state file parameter expects an `abfs://` or `abfss://` URI of the form `abfss://container@account.dfs.core.windows.net/path`. Both schemes always connect via TLS.
 
 ```toml
 [tool.orchestra_dbt]
@@ -234,7 +233,7 @@ The generated selector is named `orchestra_reused_<uuid>`. On a local run (`loca
 
 ## Configuration reference
 
-When stateful orchestration is enabled, the CLI loads and saves [dbt Core state](https://docs.getdbt.com/). Enable it with `use_stateful = true` under `[tool.orchestra_dbt]`, or set `ORCHESTRA_USE_STATEFUL=true`. That state is the same JSON shape regardless of the backend used.
+When stateful orchestration is enabled, the CLI loads and saves [dbt state](https://docs.getdbt.com/). Enable it with `use_stateful = true` under `[tool.orchestra_dbt]`, or set `ORCHESTRA_USE_STATEFUL=true`. That state is the same JSON shape regardless of the backend used.
 
 **Do not put secrets in `pyproject.toml`.** Use environment variables (or your platform's secret store) for `ORCHESTRA_API_KEY`.
 
@@ -278,7 +277,7 @@ For boolean settings, if the environment variable is **set**, the merged value i
 
 ### Warehouse adapters and implicit source freshness
 
-Stateful reuse uses `dbt source freshness` results. When a source defines **`loaded_at_field`** or **`loaded_at_query`**, dbt's normal freshness logic runs on every adapter Orchestra supports through dbt Core.
+Stateful reuse uses `dbt source freshness` results. When a source defines **`loaded_at_field`** or **`loaded_at_query`**, dbt's normal freshness logic runs on every adapter Orchestra supports.
 
 When **both** are omitted, Orchestra can still run **adapter-specific** SQL to infer `max_loaded_at` (see `src/orchestra_dbt/source_freshness/`). Only the adapters below register that path today; the mapping is keyed by `FreshnessRunner.adapter.type()`.
 

@@ -165,6 +165,12 @@ class TestGetArgsForSourceFreshness:
 
 
 class TestGetSourceFreshness:
+    @pytest.fixture(autouse=True)
+    def _on_dbt_1_x(self):
+        """These mock 1.x's freshness internals, whichever dbt is installed."""
+        with patch("src.orchestra_dbt.source_freshness.is_dbt_v2", return_value=False):
+            yield
+
     def _patched_dbt_modules(self, mock_runner_factory):
         return {
             # Else the real module imports dbt_common.exceptions.events, which the mock
