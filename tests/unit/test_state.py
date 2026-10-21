@@ -837,6 +837,16 @@ class TestLoadStateFile:
 
         assert load_state(_SETTINGS) == StateApiModel(state={})
 
+    def test_load_state_file_is_directory(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+        monkeypatch.setenv("ORCHESTRA_STATE_FILE", str(tmp_path))
+
+        with pytest.raises(StateLoadError, match="State path is not a file"):
+            load_state(_SETTINGS)
+
     def test_load_state_file_empty_state(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path
     ):

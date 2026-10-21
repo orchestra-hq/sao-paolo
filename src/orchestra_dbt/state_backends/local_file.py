@@ -18,6 +18,8 @@ class LocalFileStateBackend:
     def load(self) -> StateApiModel:
         path = self._path
         if not path.is_file():
+            if path.exists():
+                raise StateLoadError(f"State path is not a file: {path}")
             log_info(f"No state file at {path}; starting with empty state.")
             return StateApiModel(state={})
 
