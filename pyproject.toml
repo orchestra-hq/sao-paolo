@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "dbt-orchestra"
 version = "1.4.0"
-description = "Orchestra wrapper for dbt Core (including state aware orchestration)."
+description = "Orchestra wrapper for dbt (dbt-core 1.x and dbt v2), including state aware orchestration."
 authors = [{ name = "Orchestra Technologies" }]
 license = "Apache-2.0"
 license-files = ["LICENSE"]
@@ -13,7 +13,7 @@ readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.11,<3.14"
 dependencies = ["click", "httpx", "packaging", "pydantic", "pytz", "pyyaml"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",

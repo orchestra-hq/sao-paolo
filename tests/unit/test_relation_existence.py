@@ -389,6 +389,11 @@ class TestCollectReuseCandidates:
 
 
 class TestApplyRelationExistenceGate:
+    @pytest.fixture(autouse=True)
+    def _on_dbt_1_x(self, monkeypatch):
+        """These drive the 1.x adapter path, whichever dbt is installed."""
+        monkeypatch.setattr(relation_existence, "is_dbt_v2", lambda: False)
+
     @staticmethod
     def _stub_adapter(
         monkeypatch, *, adapter_type="postgres", missing=None, raises=None
@@ -596,6 +601,11 @@ class TestAcquireAdapter:
 
 
 class TestEndToEndFromStateThroughTheGate:
+    @pytest.fixture(autouse=True)
+    def _on_dbt_1_x(self, monkeypatch):
+        """These drive the 1.x adapter path, whichever dbt is installed."""
+        monkeypatch.setattr(relation_existence, "is_dbt_v2", lambda: False)
+
     def test_aliased_model_already_in_state_is_rebuilt_when_its_relation_is_dropped(
         self, monkeypatch, dag_paths
     ) -> None:

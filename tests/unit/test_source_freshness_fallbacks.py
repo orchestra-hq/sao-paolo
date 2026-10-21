@@ -84,7 +84,7 @@ def test_should_exclude_source(
 
 
 def test_build_source_freshness_result_from_loaded_at_no_freshness_config() -> None:
-    pytest.importorskip("dbt.artifacts")
+    pytest.importorskip("dbt.artifacts.schemas.results", reason="dbt 1.x only")
     from dbt.artifacts.schemas.results import FreshnessStatus
 
     node = SimpleNamespace(freshness=None, unique_id="source.x.y")
