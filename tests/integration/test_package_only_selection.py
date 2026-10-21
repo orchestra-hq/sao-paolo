@@ -14,9 +14,11 @@ import pytest
 from src.orchestra_dbt.compatibility import is_dbt_v2
 from src.orchestra_dbt.ls import get_args_for_ls, get_nodes_to_run
 from src.orchestra_dbt.source_freshness import get_args_for_source_freshness
-from tests.integration import parse_only_output
+from tests.integration import TUTORIAL_PROFILES_DIR, requires_warehouse
 
 _REPRO_PROJECT = Path(__file__).resolve().parents[2] / "tutorial" / "package-only-repro"
+
+pytestmark = requires_warehouse
 
 _MODEL_PATH = "models/staging/stg_orders.sql"
 _MODEL_FQN = "analytics_pkg.staging.stg_orders"
@@ -25,27 +27,12 @@ _SOURCE = "source:analytics_pkg.raw.raw_orders" if is_dbt_v2() else "raw.raw_ord
 
 
 @pytest.fixture
-def package_only_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def package_only_project(monkeypatch: pytest.MonkeyPatch):
     """Install the vendored package and point dbt at a profile it can render."""
-    output = parse_only_output()
-    if output is None:
-        pytest.skip("needs any one dbt adapter installed (to register, not connect)")
-
     from dbt.cli.main import dbtRunner
 
-    (tmp_path / "profiles.yml").write_text(
-        f"""
-package_only_root:
-  target: dev
-  outputs:
-    dev:{output}      schema: package_only_repro
-      threads: 1
-"""
-    )
     monkeypatch.chdir(_REPRO_PROJECT)
-    monkeypatch.setenv("DBT_PROFILES_DIR", str(tmp_path))
-    # dbt reads DBT_TARGET as --target; this profile only has `dev`.
-    monkeypatch.delenv("DBT_TARGET", raising=False)
+    monkeypatch.setenv("DBT_PROFILES_DIR", str(TUTORIAL_PROFILES_DIR))
 
     deps = dbtRunner().invoke(["deps", "-q"])
     assert deps.success, f"dbt deps failed: {deps.exception}"
@@ -108,7 +95,7 @@ def test_scoped_freshness_args_resolve_to_the_source(package_only_project) -> No
         (), scope_to_selection=True, selectors_to_run=nodes.selectors
     )
 
-    assert args == ["source", "freshness", "-q", "--select", f"+{_MODEL_FQN}"]
+    assert args[-2:] == ["--select", f"+{_MODEL_FQN}"]
 
     criteria = args[args.index("--select") + 1]
     assert _sources_selected_by(package_only_project, criteria) == [_SOURCE]

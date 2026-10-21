@@ -2,25 +2,10 @@ import os
 import subprocess
 from pathlib import Path
 
-import pytest
+from tests.integration import TUTORIAL_PROFILES_DIR, requires_warehouse
 
 _REPRO_PROJECT = (
     Path(__file__).resolve().parents[2] / "tutorial" / "concurrent-selector-repro"
-)
-
-
-def _postgres_ci_configured() -> bool:
-    return bool(
-        os.environ.get("PGHOST")
-        and os.environ.get("PGDATABASE")
-        and os.environ.get("CI") == "true"
-    )
-
-
-# The duckdb target needs no service, so it also covers dbt 2.x, which rejects postgres.
-requires_warehouse = pytest.mark.skipif(
-    not (_postgres_ci_configured() or os.environ.get("DBT_TARGET") == "duckdb"),
-    reason="Set PGHOST, PGDATABASE and CI=true, or DBT_TARGET=duckdb, to run.",
 )
 
 
@@ -31,36 +16,12 @@ def _csr_env(tmp_path: Path, schema: str) -> dict[str, str]:
     env.pop("ORCHESTRA_API_KEY", None)
     env["ORCHESTRA_STATE_FILE"] = str(tmp_path / "dbt_state.json")
     (tmp_path / "dbt_state.json").write_text('{"state": {}}', encoding="utf-8")
-    # dbt reads DBT_TARGET too, so the output is named after it.
-    target = env.get("DBT_TARGET", "dev")
-    if target == "duckdb":
-        output = f"""
-      type: duckdb
-      path: {tmp_path / "csr.duckdb"}
-"""
-    else:
-        env.setdefault("PGPORT", "5432")
-        env.setdefault("PGUSER", "postgres")
-        env.setdefault("PGPASSWORD", "postgres")
-        output = f"""
-      type: postgres
-      host: {env["PGHOST"]}
-      port: {env["PGPORT"]}
-      user: {env["PGUSER"]}
-      password: {env["PGPASSWORD"]}
-      dbname: {env["PGDATABASE"]}
-"""
-    (tmp_path / "profiles.yml").write_text(
-        f"""
-concurrent_selector_repro:
-  target: {target}
-  outputs:
-    {target}:{output}      schema: {schema}
-      threads: 1
-""",
-        encoding="utf-8",
-    )
-    env["DBT_PROFILES_DIR"] = str(tmp_path)
+    env.setdefault("PGPORT", "5432")
+    env.setdefault("PGUSER", "postgres")
+    env.setdefault("PGPASSWORD", "postgres")
+    env["DBT_SCHEMA"] = schema
+    env["DUCKDB_PATH"] = str(tmp_path / "csr.duckdb")
+    env["DBT_PROFILES_DIR"] = str(TUTORIAL_PROFILES_DIR)
     return env
 
 

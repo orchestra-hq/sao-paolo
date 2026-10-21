@@ -2,7 +2,7 @@ name: package_only_root
 version: "1.0.0"
 config-version: 2
 
-profile: package_only_root
+profile: tutorial
 
 # Deliberately NO models of its own -- every node this project builds is owned
 # by the installed `analytics_pkg` package. See README.md.
