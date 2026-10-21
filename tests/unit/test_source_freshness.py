@@ -79,6 +79,17 @@ class TestGetArgsForSourceFreshness:
             "8",
         ]
 
+    @pytest.mark.parametrize("v2", [True, False])
+    def test_forwards_packages_install_path_only_on_v2(self, v2):
+        with patch("src.orchestra_dbt.source_freshness.is_dbt_v2", return_value=v2):
+            args = get_args_for_source_freshness(
+                ("dbt", "build", "--packages-install-path", "pkgs")
+            )
+
+        assert args == ["source", "freshness", "-q"] + (
+            ["--packages-install-path", "pkgs"] if v2 else []
+        )
+
     def test_forwards_empty_flag_value_unchanged(self):
         """Freshness must see what the user's run sees, even an empty value."""
         assert get_args_for_source_freshness(("dbt", "build", "--profiles-dir=")) == [

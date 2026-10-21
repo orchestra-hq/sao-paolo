@@ -146,6 +146,7 @@ def _load_catalog_v2(user_args: tuple[str, ...]) -> Any:
         "--profile",
         "--vars",
         "--threads",
+        "--packages-install-path",
     ):
         if (value := find_flag_value(list(user_args), flag)) is not None:
             profile_flags += [flag, value]
