@@ -5,6 +5,31 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0](https://github.com/orchestra-hq/sao-paolo/compare/1.4.0...1.5.0) (2026-10-21)
+
+
+### Added
+
+* **dbt v2 support:** state-aware orchestration now runs on dbt v2 (`dbt-oss>=2,<3`) as well as dbt-core 1.10–1.12, tested on BigQuery, Snowflake and Databricks. On v2, `orc`:
+  * runs dbt's own source freshness ([#98](https://github.com/orchestra-hq/sao-paolo/issues/98)) ([dbf1f17](https://github.com/orchestra-hq/sao-paolo/commit/dbf1f178867424ddafcfecc6863a029b713baab5))
+  * resolves `ls` names to paths through the manifest ([#93](https://github.com/orchestra-hq/sao-paolo/issues/93)) ([28c33e2](https://github.com/orchestra-hq/sao-paolo/commit/28c33e29e8cea54b812906f62e943da71503b8ef))
+  * checks relations still exist using dbt's catalog ([#101](https://github.com/orchestra-hq/sao-paolo/issues/101)) ([ed3b249](https://github.com/orchestra-hq/sao-paolo/commit/ed3b249ee523a60361a0275ca12508b00cde43de))
+  * keeps model checksums the same as on v1, so upgrading doesn't rebuild every model ([#110](https://github.com/orchestra-hq/sao-paolo/issues/110)) ([2f757c4](https://github.com/orchestra-hq/sao-paolo/commit/2f757c43a890cc7fb95cbf1047ab98c1f531578e))
+  * always rebuilds models on view sources that have no `loaded_at_*` ([#118](https://github.com/orchestra-hq/sao-paolo/issues/118)) ([1a985c7](https://github.com/orchestra-hq/sao-paolo/commit/1a985c7cefbd9cff94c7d32266024568a5d668bd), [40fa8ed](https://github.com/orchestra-hq/sao-paolo/commit/40fa8eda68c4ff31a7407e59b2418e381018a24f))
+* forward --threads and --packages-install-path to in-process dbt commands ([#130](https://github.com/orchestra-hq/sao-paolo/issues/130)) ([83003ee](https://github.com/orchestra-hq/sao-paolo/commit/83003ee60a41d1a0bddd44c661dd0660984adb20))
+* Add repo assets and update README ([#122](https://github.com/orchestra-hq/sao-paolo/issues/122)) ([189ced2](https://github.com/orchestra-hq/sao-paolo/commit/189ced2f18e1fd075f6ee9bb58d10a31cdca995e))
+
+
+### Fixed
+
+* don't read a stale sources.json after a failed freshness run ([#99](https://github.com/orchestra-hq/sao-paolo/issues/99)) ([f4b75ce](https://github.com/orchestra-hq/sao-paolo/commit/f4b75cedafd51160df362d6bbd9a7054cbcd826c))
+* find package files under a custom packages-install-path ([#105](https://github.com/orchestra-hq/sao-paolo/issues/105)) ([95255df](https://github.com/orchestra-hq/sao-paolo/commit/95255dfdee84b9a4f6dac229520c5c4a99975645))
+* honour --project-dir and --target-path ([#103](https://github.com/orchestra-hq/sao-paolo/issues/103)) ([f3359a1](https://github.com/orchestra-hq/sao-paolo/commit/f3359a181bae204854c2a9f36bc5c32e4231b486))
+* keep local-run state and other accounts' entries ([#111](https://github.com/orchestra-hq/sao-paolo/issues/111)) ([3219df9](https://github.com/orchestra-hq/sao-paolo/commit/3219df9796112b5cf5e8f05cfee2d0ad198ec83d))
+* read orc settings from the dbt project's pyproject.toml ([#109](https://github.com/orchestra-hq/sao-paolo/issues/109)) ([285dbd5](https://github.com/orchestra-hq/sao-paolo/commit/285dbd56e8cbddb6cae6cf5279a6a93fdf06d024))
+* tag reused seeds in a properties file dbt reads ([#104](https://github.com/orchestra-hq/sao-paolo/issues/104)) ([b9e768a](https://github.com/orchestra-hq/sao-paolo/commit/b9e768ab77a0497396a800b7d6218c40eb190d9f))
+* restore README banner and demo gif ([#123](https://github.com/orchestra-hq/sao-paolo/issues/123)) ([a7757e1](https://github.com/orchestra-hq/sao-paolo/commit/a7757e1f358de340af4c6a664a7ee6dcd405632a))
+
 ## [1.4.0](https://github.com/orchestra-hq/sao-paolo/compare/1.3.1...1.4.0) (2026-10-07)
 
 
