@@ -7,6 +7,7 @@ globbing the real filesystem from the project root, where those files don't
 exist. See tutorial/package-only-repro/README.md.
 """
 
+import os
 from pathlib import Path
 
 import pytest
@@ -95,7 +96,11 @@ def test_scoped_freshness_args_resolve_to_the_source(package_only_project) -> No
         (), scope_to_selection=True, selectors_to_run=nodes.selectors
     )
 
-    assert args[-2:] == ["--select", f"+{_MODEL_FQN}"]
+    # The target is forwarded from the environment, which picks the profile's target.
+    target = (
+        ["--target", os.environ["DBT_TARGET"]] if "DBT_TARGET" in os.environ else []
+    )
+    assert args == ["source", "freshness", "-q", *target, "--select", f"+{_MODEL_FQN}"]
 
     criteria = args[args.index("--select") + 1]
     assert _sources_selected_by(package_only_project, criteria) == [_SOURCE]

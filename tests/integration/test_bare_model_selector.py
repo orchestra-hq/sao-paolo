@@ -4,6 +4,7 @@ named `--selector` whose own definition is just a bare model name, with no
 ancestor/descendant operators at all -- the simplest selector dbt allows.
 """
 
+import os
 from pathlib import Path
 
 import pytest
@@ -32,4 +33,12 @@ def test_bare_model_name_selector_resolves_and_scopes_to_its_source(
     assert nodes.selectors == ["concurrent_selector_repro.model_a"]
     assert get_args_for_source_freshness(
         (), scope_to_selection=True, selectors_to_run=nodes.selectors
-    )[-2:] == ["--select", "+concurrent_selector_repro.model_a"]
+    ) == [
+        "source",
+        "freshness",
+        "-q",
+        # Forwarded from the environment, which picks the tutorial profile's target.
+        *(["--target", os.environ["DBT_TARGET"]] if "DBT_TARGET" in os.environ else []),
+        "--select",
+        "+concurrent_selector_repro.model_a",
+    ]
