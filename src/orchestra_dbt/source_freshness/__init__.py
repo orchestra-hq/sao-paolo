@@ -45,8 +45,7 @@ def get_args_for_source_freshness(
         "--profile",
         "--vars",
         "--threads",
-        # dbt 1.x's freshness rejects this; it reads dbt_project.yml instead.
-        *(("--packages-install-path",) if is_dbt_v2() else ()),
+        "--packages-install-path",
     ):
         if (value := find_flag_value(list(user_args), flag)) is not None:
             args.extend([flag, value])
