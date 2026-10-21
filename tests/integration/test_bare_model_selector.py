@@ -37,6 +37,8 @@ concurrent_selector_repro:
     )
     monkeypatch.chdir(_REPRO_PROJECT)
     monkeypatch.setenv("DBT_PROFILES_DIR", str(tmp_path))
+    # dbt reads DBT_TARGET as --target; this profile only has `dev`.
+    monkeypatch.delenv("DBT_TARGET", raising=False)
 
     nodes = get_nodes_to_run(("--selector", "selector_x"), _REPRO_PROJECT / "target")
 

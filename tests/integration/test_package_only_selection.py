@@ -44,6 +44,8 @@ package_only_root:
     )
     monkeypatch.chdir(_REPRO_PROJECT)
     monkeypatch.setenv("DBT_PROFILES_DIR", str(tmp_path))
+    # dbt reads DBT_TARGET as --target; this profile only has `dev`.
+    monkeypatch.delenv("DBT_TARGET", raising=False)
 
     deps = dbtRunner().invoke(["deps", "-q"])
     assert deps.success, f"dbt deps failed: {deps.exception}"
