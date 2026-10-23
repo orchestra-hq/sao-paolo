@@ -69,7 +69,18 @@ class TestGetArgsForLsStripsUnacceptedFlags:
         """dbt 2.x's build/run/test take these; its ls does not, and rejects them
         with "unexpected argument"."""
         assert get_args_for_ls(
-            ("--select", "x", "--static-analysis", "off", "--sampled", "a", "b")
+            (
+                "--select",
+                "x",
+                "--static-analysis",
+                "off",
+                "--generate-info-schema",
+                "--info-schema-dir",
+                "/tmp/schema",
+                "--sampled",
+                "a",
+                "b",
+            )
         ) == [
             "ls",
             *_RESOURCE_TYPES,

@@ -28,6 +28,8 @@ DBT_LS_ARGS_NOT_ACCEPTED = {
     "--threads",
     # dbt 2.x only; its build/run/test args carry these, its list args do not.
     "--force-node-selection",
+    "--generate-info-schema",
+    "--info-schema-dir",
     "--run-cache-mode",
     "--sampled",
     "--static-analysis",
