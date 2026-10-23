@@ -65,6 +65,30 @@ class TestGetArgsForLsStripsUnacceptedFlags:
             *_OUTPUT,
         ]
 
+    def test_strips_dbt_v2_build_only_flags_with_their_values(self):
+        """dbt 2.x's build/run/test take these; its ls does not, and rejects them
+        with "unexpected argument"."""
+        assert get_args_for_ls(
+            (
+                "--select",
+                "x",
+                "--static-analysis",
+                "off",
+                "--generate-info-schema",
+                "--info-schema-dir",
+                "/tmp/schema",
+                "--sampled",
+                "a",
+                "b",
+            )
+        ) == [
+            "ls",
+            *_RESOURCE_TYPES,
+            "--select",
+            "x",
+            *_OUTPUT,
+        ]
+
     def test_keeps_flags_dbt_ls_accepts(self):
         assert get_args_for_ls(("--defer", "--state", "prod", "--target", "ci")) == [
             "ls",
