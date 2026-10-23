@@ -7,7 +7,9 @@ from .constants import RESOURCE_TYPES_TO_LS
 from .logger import log_error, log_info, log_warn
 from .utils import load_json
 
-# Build/run/test flags dbt ls rejects ("No such option"); checked in test_ls.py.
+# Build/run/test flags dbt ls rejects ("No such option" on 1.x, "unexpected
+# argument" on 2.x); the 1.x ones are checked in test_ls.py against the installed
+# click command tree, the 2.x-only ones are listed by hand below.
 DBT_LS_ARGS_NOT_ACCEPTED = {
     "--empty",
     "--no-empty",
@@ -24,6 +26,12 @@ DBT_LS_ARGS_NOT_ACCEPTED = {
     "--sqlparse",
     "--store-failures",
     "--threads",
+    # dbt 2.x only; its build/run/test args carry these, its list args do not.
+    "--force-node-selection",
+    "--run-cache-mode",
+    "--sampled",
+    "--static-analysis",
+    "--with-sample",
 }
 
 
