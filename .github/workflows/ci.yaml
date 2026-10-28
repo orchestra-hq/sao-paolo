@@ -123,11 +123,11 @@ jobs:
         uses: astral-sh/setup-uv@v8.1.0
         with:
           version: "latest"
-      - name: Set up Python 3.13
-        run: uv python install 3.13
+      - name: Set up Python 3.14
+        run: uv python install 3.14
       - name: Install dependencies
         run: |
-          uv venv
+          uv venv --python 3.14
           uv pip install . "dbt-oss>=2,<3" pytest
           uv run --no-sync dbt --version
       - name: Run tutorial dbt build (cold and warm state)
