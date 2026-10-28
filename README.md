@@ -29,7 +29,7 @@ There are a few core reasons to use this project:
 
 ## Compatibility and prerequisites
 
-- **Python:** 3.11, 3.12, and 3.13 only (see `requires-python` in `pyproject.toml`).
+- **Python:** 3.11, 3.12, 3.13, and 3.14 only (see `requires-python` in `pyproject.toml`).
 - **dbt:** either dbt-core 1.10.x to 1.12.x, or dbt v2 (`dbt-oss` 2.x). Stateful orchestration works on both; v2 has a few differences (see [dbt v2](#dbt-v2)).
 - **A dbt project:** an existing dbt project where you already run `dbt build` / `dbt run` / `dbt test`.
 
