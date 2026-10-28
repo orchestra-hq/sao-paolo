@@ -5,6 +5,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0](https://github.com/orchestra-hq/sao-paolo/compare/1.5.0...1.6.0) (2026-10-28)
+
+
+### Added
+
+* support Python 3.14 ([#135](https://github.com/orchestra-hq/sao-paolo/issues/135)) ([248c0bf](https://github.com/orchestra-hq/sao-paolo/commit/248c0bf2cc98f245b65bf010c8e790757129a241))
+
+
+### Fixed
+
+* strip dbt 2.x build-only flags before dbt ls ([#134](https://github.com/orchestra-hq/sao-paolo/issues/134)) ([e765311](https://github.com/orchestra-hq/sao-paolo/commit/e765311e606567675b74393b6e1aba1003030626))
+
 ## [1.5.0](https://github.com/orchestra-hq/sao-paolo/compare/1.4.0...1.5.0) (2026-10-21)
 
 
