@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * strip dbt 2.x build-only flags before dbt ls ([#134](https://github.com/orchestra-hq/sao-paolo/issues/134)) ([e765311](https://github.com/orchestra-hq/sao-paolo/commit/e765311e606567675b74393b6e1aba1003030626))
 
+
+### CI
+
+* run the dbt v2 tutorial job on Python 3.14 ([#138](https://github.com/orchestra-hq/sao-paolo/issues/138)) ([8bdd15f](https://github.com/orchestra-hq/sao-paolo/commit/8bdd15f30f775cd08ebe437f79de806982f8d1b7))
+
 ## [1.5.0](https://github.com/orchestra-hq/sao-paolo/compare/1.4.0...1.5.0) (2026-10-21)
 
 
