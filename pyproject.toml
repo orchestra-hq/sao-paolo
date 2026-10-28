@@ -10,7 +10,7 @@ authors = [{ name = "Orchestra Technologies" }]
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 readme = { file = "README.md", content-type = "text/markdown" }
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.11,<3.15"
 dependencies = ["click", "httpx", "packaging", "pydantic", "pytz", "pyyaml"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -20,6 +20,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Build Tools",
 ]
 
