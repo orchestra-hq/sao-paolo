@@ -4,6 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
+from .build_after import parse_lag_tolerance_seconds
 from .project_discovery import find_orchestra_dbt_config
 
 
@@ -20,6 +21,9 @@ class OrchestraDbtSettings(BaseModel):
     require_explicit_source_freshness: bool = False
     verify_relations_exist: bool = False
     scope_source_freshness_to_selection: bool = False
+    # dbt State's lag_tolerance for models with no explicit or inherited window
+    # (dbt uses "45m"). Unset keeps the original behaviour: no window.
+    default_lag_tolerance: str | None = None
     # Where the settings were read from; a relative state_file resolves against it.
     pyproject_dir: Path | None = None
 
@@ -29,6 +33,17 @@ class OrchestraDbtSettings(BaseModel):
         if isinstance(v, str):
             return v.lower()
         return v
+
+    @field_validator("default_lag_tolerance", mode="before")
+    @classmethod
+    def _validate_default_lag_tolerance(cls, v: object) -> object:
+        if v is None:
+            return None
+        value = str(v).strip()
+        if not value:
+            return None
+        parse_lag_tolerance_seconds(value)  # raises ValueError if invalid
+        return value
 
 
 def _env_bool(name: str) -> bool | None:
@@ -93,6 +108,12 @@ def _merge_env_overrides(settings: OrchestraDbtSettings) -> OrchestraDbtSettings
     if scope_to_selection is not None:
         settings = settings.model_copy(
             update={"scope_source_freshness_to_selection": scope_to_selection}
+        )
+
+    default_lag_tolerance = _env_str("ORCHESTRA_DEFAULT_LAG_TOLERANCE")
+    if default_lag_tolerance is not None:
+        settings = settings.model_copy(
+            update={"default_lag_tolerance": default_lag_tolerance}
         )
 
     return OrchestraDbtSettings.model_validate(settings.model_dump())

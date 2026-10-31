@@ -251,6 +251,7 @@ Each `[tool.orchestra_dbt]` key can be set in TOML, or omitted and supplied only
 | `require_explicit_source_freshness` | `ORCHESTRA_REQUIRE_EXPLICIT_SOURCE_FRESHNESS` |
 | `verify_relations_exist` | `ORCHESTRA_VERIFY_RELATIONS_EXIST` |
 | `scope_source_freshness_to_selection` | `ORCHESTRA_SCOPE_SOURCE_FRESHNESS_TO_SELECTION` |
+| `default_lag_tolerance` | `ORCHESTRA_DEFAULT_LAG_TOLERANCE` |
 
 For boolean settings, if the environment variable is **set**, the merged value is `true` only when the value is exactly the string `true` (case-insensitive); otherwise it is `false`. If the variable is **unset**, `pyproject.toml` (or the default) applies.
 
@@ -266,6 +267,35 @@ For boolean settings, if the environment variable is **set**, the merged value i
 | `require_explicit_source_freshness` | bool | `false` | When `true`, sources without an explicit `loaded_at_field` or `loaded_at_query` are excluded from state-aware orchestration: no implicit/fallback freshness is inferred for them, and models depending on them always run. Use this when implicit freshness is unreliable (for example, sources defined on top of views, where warehouse metadata reflects the view rather than the underlying data). |
 | `verify_relations_exist` | bool | `false` | Opt in to confirming a node's table/view is actually in the warehouse before skipping it (see [Verifying relations still exist](#verifying-relations-still-exist)). Off by default, so existing behaviour is unchanged until you enable it. |
 | `scope_source_freshness_to_selection` | bool | `false` | When `true`, `dbt source freshness` only checks sources upstream of the selection already resolved for node reuse (via `dbt ls`), passed as `--select +<fqn>` per selected node so dbt's own selection engine resolves the ancestor sources -- no `--resource-type` filter needed, since `source freshness` only ever touches sources anyway. Selection is by fqn rather than path because dbt resolves `path:` by globbing the filesystem from the project root, which never matches a node owned by an installed package. When `false` (default), freshness is checked for every source in the project regardless of selection, matching prior behaviour. |
+| `default_lag_tolerance` | string (optional) | — | A `lag_tolerance` (for example `45m`, which is dbt State's default) applied to models that have no rebuild window of their own and inherit none (see [Rebuild windows](#rebuild-windows-lag_tolerance-and-build_after)). When unset, those models rebuild as soon as upstream data changes, matching prior behaviour. |
+
+### Rebuild windows (`lag_tolerance` and `build_after`)
+
+A model can set a minimum time between rebuilds. A reused model is rebuilt only when **both** of these are true:
+
+- its last build is older than the window
+- upstream data has changed since that build
+
+Use dbt State's `state` block, or the older `freshness.build_after`:
+
+```yaml
+models:
+  - name: fct_orders
+    config:
+      state:
+        lag_tolerance: "{{ '4h' if target.name == 'prod' else '7d' }}"  # s, m, h, d or w
+        require_fresh_data_from: all  # any (default) or all direct parents
+      # Older equivalent, still supported:
+      # freshness:
+      #   build_after: {count: 4, period: hour, updates_on: all}
+```
+
+- **Precedence:** `state.lag_tolerance` wins over `build_after.count`/`period`, and `state.require_fresh_data_from` wins over `build_after.updates_on`. Each key falls back separately, as in dbt State.
+- **`0s`** rebuilds as soon as upstream data changes.
+- **Code changes (`lag_tolerance` only):** when a parent model's code changes, its direct children rebuild even inside their window. Children further down then follow their own window. `build_after` models keep their original behaviour.
+- **Inheritance:** a model with no window inherits the smallest window of its children, provided every child has one.
+- **Default:** dbt State uses `45m` for models with nothing configured. Here that default is opt-in, through `default_lag_tolerance`.
+- **Difference from dbt:** dbt checks whether a parent's *compiled* SQL changed. sao-paolo uses the model file's checksum, so a change that lives only in a macro or var doesn't count as a code change.
 
 ### Resolving multiple backend state configurations
 

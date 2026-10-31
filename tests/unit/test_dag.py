@@ -6,7 +6,11 @@ import pytest
 
 import src.orchestra_dbt.dag as dag_module
 from src.orchestra_dbt.config import OrchestraDbtSettings
-from src.orchestra_dbt.dag import calculate_freshness_on_node, construct_dag
+from src.orchestra_dbt.dag import (
+    calculate_freshness_on_node,
+    construct_dag,
+    is_code_change,
+)
 from src.orchestra_dbt.models import (
     Edge,
     Freshness,
@@ -176,6 +180,22 @@ class TestCalculateFreshnessOnNode:
         )
 
 
+class TestIsCodeChange:
+    @pytest.mark.parametrize(
+        "freshness, reason, expected",
+        [
+            (Freshness.DIRTY, "Checksum changed since last run.", True),
+            (Freshness.DIRTY, "Model not previously seen in state.", True),
+            (Freshness.DIRTY, "Seed not previously seen in state.", True),
+            (Freshness.DIRTY, "Snapshot is always dirty.", False),
+            (Freshness.DIRTY, "State orchestration for this node is disabled.", False),
+            (Freshness.CLEAN, "Model in same state as last run.", False),
+        ],
+    )
+    def test_is_code_change(self, freshness: Freshness, reason: str, expected: bool):
+        assert is_code_change(freshness, reason) is expected
+
+
 class TestConstructDag:
     def test_construct_dag_with_sources(
         self, monkeypatch: pytest.MonkeyPatch, sample_manifest: dict, dag_paths
@@ -246,6 +266,7 @@ class TestConstructDag:
                     dbt_path="models/model_b.sql",
                     file_path="dbt_packages/test_project_2/models/model_b.sql",
                     reason="Model not previously seen in state.",
+                    code_changed=True,
                     sources={},
                     freshness_config=FreshnessConfig(),
                 ),
@@ -257,6 +278,7 @@ class TestConstructDag:
                     dbt_path="models/model_c.sql",
                     file_path="models/model_c.sql",
                     reason="Checksum changed since last run.",
+                    code_changed=True,
                     sources={},
                     freshness_config=FreshnessConfig(),
                 ),

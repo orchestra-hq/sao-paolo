@@ -41,6 +41,24 @@ def build_dependency_graphs(
     return children, parents, in_degree
 
 
+def _format_seconds(seconds: int) -> str:
+    for unit, size in (("d", 86400), ("h", 3600), ("m", 60)):
+        if seconds and seconds % size == 0:
+            return f"{seconds // size}{unit}"
+    return f"{seconds}s"
+
+
+def upstream_code_changed(upstream_node: Node) -> bool:
+    """True when the upstream model is rebuilding because its own code changed."""
+    if upstream_node.node_type != NodeType.MATERIALISATION:
+        return False
+    materialisation_node = cast(MaterialisationNode, upstream_node)
+    return (
+        materialisation_node.freshness == Freshness.DIRTY
+        and materialisation_node.code_changed
+    )
+
+
 def should_mark_dirty_from_single_upstream(
     upstream_id: str, upstream_node: Node, current_node: MaterialisationNode
 ) -> tuple[bool, str | None]:
@@ -75,19 +93,21 @@ def should_mark_dirty_from_single_upstream(
             if upstream_freshness == Freshness.CLEAN:
                 reason = "Upstream node(s) being reused."
 
-    # An SLA (build_after) only holds a node back inside its freshness window; it is
-    # not required for the catch-up comparison below.
-    if current_node.freshness_config.minutes_sla:
-        minutes_since_last_updated: int = int(
-            (
-                datetime.now(tz=current_node.last_updated.tzinfo)
-                - current_node.last_updated
-            ).total_seconds()
-            / 60
-        )
+    # An SLA (lag_tolerance / build_after) only holds a node back inside its window;
+    # it is not required for the catch-up comparison below.
+    sla_seconds = current_node.freshness_config.sla_seconds
+    if sla_seconds is not None:
+        seconds_since_last_updated = (
+            datetime.now(tz=current_node.last_updated.tzinfo)
+            - current_node.last_updated
+        ).total_seconds()
 
-        if minutes_since_last_updated < current_node.freshness_config.minutes_sla:
-            reason = f"Model still within freshness config of {current_node.freshness_config.minutes_sla} minutes. Last updated {minutes_since_last_updated} minutes ago."
+        if seconds_since_last_updated < sla_seconds:
+            minutes_since_last_updated = int(seconds_since_last_updated / 60)
+            if current_node.freshness_config.source == "lag_tolerance":
+                reason = f"Model still within lag_tolerance of {_format_seconds(sla_seconds)}. Last updated {minutes_since_last_updated} minutes ago."
+            else:
+                reason = f"Model still within freshness config of {sla_seconds // 60} minutes. Last updated {minutes_since_last_updated} minutes ago."
             if current_node.freshness_config.inherited_from:
                 reason += f" Config inherited from {current_node.freshness_config.inherited_from}."
             return (False, reason)
@@ -114,6 +134,13 @@ def _should_mark_dirty(
     node: MaterialisationNode,
     dag: ParsedDag,
 ) -> tuple[bool, str | None]:
+    # dbt State: a direct parent's code change forces a rebuild even inside the
+    # lag_tolerance window. build_after keeps its original behaviour.
+    if node.freshness_config.source == "lag_tolerance":
+        for upstream_id in upstream_ids:
+            if upstream_code_changed(dag.nodes[upstream_id]):
+                return True, None
+
     should_be_dirty = False
     reason = None
     for upstream_id in upstream_ids:

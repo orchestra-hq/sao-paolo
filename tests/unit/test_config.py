@@ -45,6 +45,7 @@ def _clear_orchestra_settings_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "ORCHESTRA_REQUIRE_EXPLICIT_SOURCE_FRESHNESS",
         "ORCHESTRA_VERIFY_RELATIONS_EXIST",
         "ORCHESTRA_SCOPE_SOURCE_FRESHNESS_TO_SELECTION",
+        "ORCHESTRA_DEFAULT_LAG_TOLERANCE",
     ):
         monkeypatch.delenv(key, raising=False)
 
@@ -140,6 +141,7 @@ def test_load_orchestra_dbt_settings_defaults(
     assert settings.require_explicit_source_freshness is False
     assert settings.verify_relations_exist is False
     assert settings.scope_source_freshness_to_selection is False
+    assert settings.default_lag_tolerance is None
 
 
 def test_load_orchestra_dbt_settings_from_pyproject(
@@ -311,3 +313,32 @@ def test_env_state_file_resolves_from_cwd_not_project_dir(
     monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
     monkeypatch.setenv("ORCHESTRA_STATE_FILE", "env_state.json")
     assert _backend(Path("proj")).local_path == (tmp_path / "env_state.json").resolve()
+
+
+def test_default_lag_tolerance_from_pyproject_and_env_override(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        """[tool.orchestra_dbt]
+default_lag_tolerance = "45m"
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+    _clear_orchestra_settings_env(monkeypatch)
+    assert load_orchestra_dbt_settings(tmp_path).default_lag_tolerance == "45m"
+
+    monkeypatch.setenv("ORCHESTRA_DEFAULT_LAG_TOLERANCE", " 2h ")
+    assert load_orchestra_dbt_settings(tmp_path).default_lag_tolerance == "2h"
+
+
+def test_default_lag_tolerance_invalid_raises(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
+    _clear_orchestra_settings_env(monkeypatch)
+    monkeypatch.setenv("ORCHESTRA_DEFAULT_LAG_TOLERANCE", "soon")
+    with pytest.raises(ValueError, match="lag_tolerance"):
+        load_orchestra_dbt_settings(tmp_path)

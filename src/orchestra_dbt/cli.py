@@ -6,7 +6,11 @@ from typing import cast
 
 import click
 
-from .build_after import propagate_freshness_config
+from .build_after import (
+    apply_default_lag_tolerance,
+    parse_lag_tolerance_seconds,
+    propagate_freshness_config,
+)
 from .compatibility import dbt_core_import_error_message
 from .config import (
     OrchestraDbtSettings,
@@ -233,6 +237,10 @@ def main(args: tuple[str, ...]) -> None:
 
     # Propagate freshness config to upstream nodes
     propagate_freshness_config(parsed_dag)
+    if settings.default_lag_tolerance:
+        apply_default_lag_tolerance(
+            parsed_dag, parse_lag_tolerance_seconds(settings.default_lag_tolerance)
+        )
 
     if is_full_refresh_requested(list(dbt_args)):
         log_info("Full refresh detected. Stateful orchestration disabled.")

@@ -20,6 +20,8 @@ from .state_types import StateBackendKind
 from .utils import load_json
 
 _IGNORED_PREFIXES = ("function.",)
+_NOT_IN_STATE_SUFFIX = "not previously seen in state."
+_CHECKSUM_CHANGED = "Checksum changed since last run."
 
 
 def calculate_freshness_on_node(
@@ -52,11 +54,18 @@ def calculate_freshness_on_node(
     if asset_external_id not in state.state:
         return (
             Freshness.DIRTY,
-            f"{resource_type.capitalize()} not previously seen in state.",
+            f"{resource_type.capitalize()} {_NOT_IN_STATE_SUFFIX}",
         )
     if checksum != state.state[asset_external_id].checksum:
-        return Freshness.DIRTY, "Checksum changed since last run."
+        return Freshness.DIRTY, _CHECKSUM_CHANGED
     return Freshness.CLEAN, f"{resource_type.capitalize()} in same state as last run."
+
+
+def is_code_change(freshness: Freshness, reason: str) -> bool:
+    """Whether calculate_freshness_on_node marked the node dirty for a code change."""
+    return freshness == Freshness.DIRTY and (
+        reason == _CHECKSUM_CHANGED or reason.endswith(_NOT_IN_STATE_SUFFIX)
+    )
 
 
 def construct_dag(
@@ -139,9 +148,10 @@ def construct_dag(
                     asset_external_id=asset_external_id,
                     checksum=checksum,
                     freshness_config=parse_freshness_config(
-                        config_on_node=node.get("config", {}).get("freshness")
+                        config=node.get("config", {}), node_id=node_id
                     ),
                     freshness=freshness,
+                    code_changed=is_code_change(freshness, reason),
                     dbt_path=dbt_path,
                     reason=reason,
                     sources=(

@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import re
 from datetime import datetime
@@ -100,7 +101,11 @@ def patch_sql_files(
                 patch_file(
                     file_path=file,
                     reason=node.reason,
-                    freshness=node.freshness_config.minutes_sla,
+                    freshness=(
+                        None
+                        if node.freshness_config.sla_seconds is None
+                        else math.ceil(node.freshness_config.sla_seconds / 60)
+                    ),
                     last_updated=node.last_updated,
                 )
             except Exception as e:

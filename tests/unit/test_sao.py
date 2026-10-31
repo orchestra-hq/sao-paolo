@@ -1,5 +1,5 @@
 from datetime import UTC, datetime, timedelta
-from typing import Literal
+from typing import Literal, cast
 
 import pytest
 
@@ -187,7 +187,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                         "source.test": datetime.now(UTC) - timedelta(minutes=10),
                     },
                     freshness_config=FreshnessConfig(
-                        minutes_sla=15, inherited_from="model.c"
+                        sla_seconds=900, inherited_from="model.c"
                     ),
                     reason="Node not seen before",
                 ),
@@ -210,7 +210,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     sources={
                         "source.test": datetime.now(UTC) - timedelta(minutes=20),
                     },
-                    freshness_config=FreshnessConfig(minutes_sla=15),
+                    freshness_config=FreshnessConfig(sla_seconds=900),
                     reason="Node not seen before",
                 ),
                 (True, None),
@@ -237,7 +237,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     file_path="models/model_b.sql",
                     last_updated=datetime.now(UTC) - timedelta(minutes=20),
                     sources={},
-                    freshness_config=FreshnessConfig(minutes_sla=15),
+                    freshness_config=FreshnessConfig(sla_seconds=900),
                     reason="Node not seen before",
                 ),
                 (False, "Upstream node(s) being reused."),
@@ -291,7 +291,7 @@ class TestShouldMarkDirtyFromSingleUpstream:
                     file_path="models/model_b.sql",
                     last_updated=datetime.now(UTC) - timedelta(minutes=20),
                     sources={},
-                    freshness_config=FreshnessConfig(minutes_sla=15),
+                    freshness_config=FreshnessConfig(sla_seconds=900),
                     reason="Node not seen before",
                 ),
                 (True, None),
@@ -403,7 +403,7 @@ class TestCalculateModelsToRun:
                     checksum="1",
                     dbt_path="models/model_a.sql",
                     file_path="models/model_a.sql",
-                    freshness_config=FreshnessConfig(minutes_sla=60),
+                    freshness_config=FreshnessConfig(sla_seconds=3600),
                     last_updated=datetime.now(UTC) - timedelta(minutes=20),
                     reason="Node not seen before",
                     sources={},
@@ -459,7 +459,7 @@ class TestCalculateModelsToRun:
                     dbt_path="models/model_c.sql",
                     file_path="models/model_c.sql",
                     freshness_config=FreshnessConfig(
-                        minutes_sla=30, updates_on=updates_on
+                        sla_seconds=1800, updates_on=updates_on
                     ),
                     last_updated=now - timedelta(minutes=45),
                     reason="Node not seen before",
@@ -674,7 +674,7 @@ class TestCalculateModelsToRun:
                     dbt_path="models/model_stg_customers.sql",
                     file_path="models/model_stg_customers.sql",
                     last_updated=now - timedelta(minutes=4),
-                    freshness_config=FreshnessConfig(minutes_sla=7),
+                    freshness_config=FreshnessConfig(sla_seconds=420),
                     sources={
                         "source.src_customers": now - timedelta(minutes=6),
                     },
@@ -709,7 +709,7 @@ class TestCalculateModelsToRun:
                     file_path="models/model_cust_orders.sql",
                     checksum="5",
                     last_updated=now - timedelta(minutes=2),
-                    freshness_config=FreshnessConfig(minutes_sla=7, updates_on="all"),
+                    freshness_config=FreshnessConfig(sla_seconds=420, updates_on="all"),
                     reason="Node not seen before",
                     sources={},
                 ),
@@ -747,3 +747,195 @@ class TestCalculateModelsToRun:
             isinstance(dag.nodes["model.dim_customers"], MaterialisationNode)
             and dag.nodes["model.dim_customers"].freshness == Freshness.CLEAN
         )
+
+
+def _model(
+    node_id: str,
+    freshness: Freshness,
+    last_updated: datetime,
+    freshness_config: FreshnessConfig | None = None,
+    code_changed: bool = False,
+) -> MaterialisationNode:
+    return MaterialisationNode(
+        asset_external_id=node_id,
+        freshness=freshness,
+        checksum="1",
+        dbt_path=f"models/{node_id}.sql",
+        file_path=f"models/{node_id}.sql",
+        last_updated=last_updated,
+        reason="Model in same state as last run.",
+        sources={},
+        freshness_config=freshness_config or FreshnessConfig(),
+        code_changed=code_changed,
+    )
+
+
+def _freshness(dag: ParsedDag, node_id: str) -> Freshness:
+    return cast(MaterialisationNode, dag.nodes[node_id]).freshness
+
+
+def _reason(dag: ParsedDag, node_id: str) -> str:
+    return cast(MaterialisationNode, dag.nodes[node_id]).reason
+
+
+class TestLagTolerance:
+    def _source_dag(self, config: FreshnessConfig, age: timedelta) -> ParsedDag:
+        now = datetime.now(UTC)
+        return ParsedDag(
+            nodes={
+                "source.s": SourceNode(last_updated=now),
+                "model.a": _model("model.a", Freshness.CLEAN, now - age, config),
+            },
+            edges=[Edge(from_="source.s", to_="model.a")],
+        )
+
+    def test_held_back_within_window_with_lag_tolerance_reason(self):
+        dag = self._source_dag(
+            FreshnessConfig(sla_seconds=4 * 3600, source="lag_tolerance"),
+            timedelta(minutes=30),
+        )
+        calculate_nodes_to_run(dag=dag)
+        assert _freshness(dag, "model.a") == Freshness.CLEAN
+        assert _reason(dag, "model.a").startswith(
+            "Model still within lag_tolerance of 4h. Last updated 30 minutes ago."
+        )
+
+    def test_seconds_granularity(self):
+        config = FreshnessConfig(sla_seconds=90, source="lag_tolerance")
+        held = self._source_dag(config, timedelta(seconds=60))
+        calculate_nodes_to_run(dag=held)
+        assert _freshness(held, "model.a") == Freshness.CLEAN
+
+        due = self._source_dag(config, timedelta(seconds=120))
+        calculate_nodes_to_run(dag=due)
+        assert _freshness(due, "model.a") == Freshness.DIRTY
+
+    def test_zero_lag_tolerance_rebuilds_on_new_data(self):
+        dag = self._source_dag(
+            FreshnessConfig(sla_seconds=0, source="lag_tolerance"),
+            timedelta(seconds=1),
+        )
+        calculate_nodes_to_run(dag=dag)
+        assert _freshness(dag, "model.a") == Freshness.DIRTY
+
+    def test_build_after_reason_unchanged(self):
+        dag = self._source_dag(
+            FreshnessConfig(sla_seconds=3600, source="build_after"),
+            timedelta(minutes=20),
+        )
+        calculate_nodes_to_run(dag=dag)
+        assert _freshness(dag, "model.a") == Freshness.CLEAN
+        assert _reason(dag, "model.a") == (
+            "Model still within freshness config of 60 minutes. "
+            "Last updated 20 minutes ago."
+        )
+
+
+class TestCodeChangeBypass:
+    def _dag(self, source: Literal["lag_tolerance", "build_after"]) -> ParsedDag:
+        """parent (code changed) -> child -> grandchild, all inside a 1h window."""
+        now = datetime.now(UTC)
+        recent = now - timedelta(minutes=5)
+        return ParsedDag(
+            nodes={
+                "model.parent": _model(
+                    "model.parent", Freshness.DIRTY, recent, code_changed=True
+                ),
+                "model.child": _model(
+                    "model.child",
+                    Freshness.CLEAN,
+                    recent,
+                    FreshnessConfig(sla_seconds=3600, source=source),
+                ),
+                "model.grandchild": _model(
+                    "model.grandchild",
+                    Freshness.CLEAN,
+                    recent,
+                    FreshnessConfig(sla_seconds=3600, source=source),
+                ),
+            },
+            edges=[
+                Edge(from_="model.parent", to_="model.child"),
+                Edge(from_="model.child", to_="model.grandchild"),
+            ],
+        )
+
+    def test_lag_tolerance_child_rebuilds_but_grandchild_waits(self):
+        dag = self._dag("lag_tolerance")
+        calculate_nodes_to_run(dag=dag)
+        assert _freshness(dag, "model.child") == Freshness.DIRTY
+        assert _freshness(dag, "model.grandchild") == Freshness.CLEAN
+        assert "lag_tolerance" in _reason(dag, "model.grandchild")
+
+    def test_build_after_keeps_original_behaviour(self):
+        dag = self._dag("build_after")
+        calculate_nodes_to_run(dag=dag)
+        assert _freshness(dag, "model.child") == Freshness.CLEAN
+        assert _freshness(dag, "model.grandchild") == Freshness.CLEAN
+
+    def test_data_only_change_does_not_bypass(self):
+        dag = self._dag("lag_tolerance")
+        cast(MaterialisationNode, dag.nodes["model.parent"]).code_changed = False
+        calculate_nodes_to_run(dag=dag)
+        assert _freshness(dag, "model.child") == Freshness.CLEAN
+
+    def test_bypass_overrides_require_fresh_data_from_all(self):
+        now = datetime.now(UTC)
+        recent = now - timedelta(minutes=5)
+        dag = ParsedDag(
+            nodes={
+                "model.changed": _model(
+                    "model.changed", Freshness.DIRTY, recent, code_changed=True
+                ),
+                "model.unchanged": _model(
+                    "model.unchanged", Freshness.CLEAN, now - timedelta(days=1)
+                ),
+                "model.child": _model(
+                    "model.child",
+                    Freshness.CLEAN,
+                    recent,
+                    FreshnessConfig(
+                        sla_seconds=3600, source="lag_tolerance", updates_on="all"
+                    ),
+                ),
+            },
+            edges=[
+                Edge(from_="model.changed", to_="model.child"),
+                Edge(from_="model.unchanged", to_="model.child"),
+            ],
+        )
+        calculate_nodes_to_run(dag=dag)
+        assert _freshness(dag, "model.child") == Freshness.DIRTY
+
+
+class TestRequireFreshDataFromAll:
+    def test_waits_for_all_parents_outside_window(self):
+        now = datetime.now(UTC)
+        dag = ParsedDag(
+            nodes={
+                "source.fresh": SourceNode(last_updated=now),
+                "source.stale": SourceNode(last_updated=now - timedelta(days=2)),
+                "model.a": MaterialisationNode(
+                    asset_external_id="model.a",
+                    freshness=Freshness.CLEAN,
+                    checksum="1",
+                    dbt_path="models/a.sql",
+                    file_path="models/a.sql",
+                    last_updated=now - timedelta(days=1),
+                    reason="",
+                    sources={
+                        "source.fresh": now - timedelta(days=1),
+                        "source.stale": now - timedelta(days=2),
+                    },
+                    freshness_config=FreshnessConfig(
+                        sla_seconds=0, source="lag_tolerance", updates_on="all"
+                    ),
+                ),
+            },
+            edges=[
+                Edge(from_="source.fresh", to_="model.a"),
+                Edge(from_="source.stale", to_="model.a"),
+            ],
+        )
+        calculate_nodes_to_run(dag=dag)
+        assert _freshness(dag, "model.a") == Freshness.CLEAN

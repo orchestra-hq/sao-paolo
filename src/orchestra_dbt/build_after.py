@@ -1,7 +1,34 @@
+import re
 from collections import defaultdict, deque
-from typing import cast
+from typing import Literal, cast
 
 from .models import FreshnessConfig, MaterialisationNode, Node, NodeType, ParsedDag
+
+_LAG_TOLERANCE_UNIT_SECONDS = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
+_LAG_TOLERANCE_PATTERN = re.compile(r"^(\d+)\s*([smhdw])$")
+
+
+def parse_lag_tolerance_seconds(value: str | int | dict) -> int:
+    """Parse a dbt State `lag_tolerance` (e.g. `0s`, `30m`, `4h`, `1d`) into seconds.
+
+    A bare integer is read as seconds. The `{count, period}` object form that dbt's
+    JSON schema also allows is read like `build_after`.
+    """
+    if isinstance(value, dict):
+        try:
+            return parse_build_after_duration_minutes(value) * 60
+        except (KeyError, TypeError) as e:
+            raise ValueError(f"Invalid lag_tolerance: {value!r}") from e
+    if isinstance(value, int) and not isinstance(value, bool):
+        if value < 0:
+            raise ValueError(f"Invalid lag_tolerance: {value!r}")
+        return value
+    match = _LAG_TOLERANCE_PATTERN.match(str(value).strip().lower())
+    if not match:
+        raise ValueError(
+            f"Invalid lag_tolerance: {value!r}. Expected <number><s|m|h|d|w>, e.g. '45m'."
+        )
+    return int(match.group(1)) * _LAG_TOLERANCE_UNIT_SECONDS[match.group(2)]
 
 
 def parse_build_after_duration_minutes(build_after: dict[str, str | int]) -> int:
@@ -23,21 +50,61 @@ def parse_build_after_duration_minutes(build_after: dict[str, str | int]) -> int
     return count * mins_multiplier
 
 
-def parse_freshness_config(config_on_node: dict | None) -> FreshnessConfig:
+def _parse_updates_on(value: object) -> Literal["any", "all"]:
+    return "all" if str(value).lower() == "all" else "any"
+
+
+def parse_freshness_config(
+    config: dict | None, node_id: str | None = None
+) -> FreshnessConfig:
+    """Build a node's rebuild window from its dbt `config`.
+
+    dbt State's `state.lag_tolerance` / `state.require_fresh_data_from` take
+    precedence; each falls back independently to the deprecated
+    `freshness.build_after` count/period and `updates_on`.
+    """
     freshness_config = FreshnessConfig()
-    if config_on_node and "build_after" in config_on_node:
-        build_after_config = config_on_node["build_after"]
-        if "updates_on" in build_after_config:
-            updates_on = str(build_after_config["updates_on"]).lower()
-            match updates_on:
-                case "any" | "all":
-                    freshness_config.updates_on = updates_on
-                case _:
-                    freshness_config.updates_on = "any"
-        freshness_config.minutes_sla = parse_build_after_duration_minutes(
-            build_after_config
+    if not config:
+        return freshness_config
+
+    state_config = config.get("state") or {}
+    build_after_config = (config.get("freshness") or {}).get("build_after") or {}
+
+    lag_tolerance = state_config.get("lag_tolerance")
+    if lag_tolerance is not None:
+        try:
+            freshness_config.sla_seconds = parse_lag_tolerance_seconds(lag_tolerance)
+        except ValueError as e:
+            raise ValueError(f"{node_id or 'node'}: {e}") from e
+        freshness_config.source = "lag_tolerance"
+    elif build_after_config:
+        freshness_config.sla_seconds = (
+            parse_build_after_duration_minutes(build_after_config) * 60
+        )
+        freshness_config.source = "build_after"
+
+    if state_config.get("require_fresh_data_from") is not None:
+        freshness_config.updates_on = _parse_updates_on(
+            state_config["require_fresh_data_from"]
+        )
+    elif isinstance(lag_tolerance, dict) and "updates_on" in lag_tolerance:
+        freshness_config.updates_on = _parse_updates_on(lag_tolerance["updates_on"])
+    elif "updates_on" in build_after_config:
+        freshness_config.updates_on = _parse_updates_on(
+            build_after_config["updates_on"]
         )
     return freshness_config
+
+
+def apply_default_lag_tolerance(parsed_dag: ParsedDag, sla_seconds: int) -> None:
+    """Give every model without an explicit or inherited window dbt State's default."""
+    for node in parsed_dag.nodes.values():
+        if node.node_type != NodeType.MATERIALISATION:
+            continue
+        freshness_config = cast(MaterialisationNode, node).freshness_config
+        if freshness_config.sla_seconds is None:
+            freshness_config.sla_seconds = sla_seconds
+            freshness_config.source = "lag_tolerance"
 
 
 def _build_reverse_dependency_graphs(
@@ -85,36 +152,29 @@ def _propagate_config_to_node(
     materialisation_node: MaterialisationNode = cast(MaterialisationNode, node)
 
     # If the node already has a config, don't change it
-    if materialisation_node.freshness_config.minutes_sla is not None:
+    if materialisation_node.freshness_config.sla_seconds is not None:
         return
 
     child_ids = children.get(node_id, [])
     if not child_ids:
         return
 
-    # Collect minutes_sla from children; if any child has no config, do not propagate
-    child_minutes: list[int] = []
+    # Collect sla_seconds from children; if any child has no config, do not propagate
+    child_configs: list[tuple[str, FreshnessConfig]] = []
     for child_id in child_ids:
         child_node = dag.nodes.get(child_id)
         if child_node is None or child_node.node_type != NodeType.MATERIALISATION:
             return  # undefined or non-materialisation child: parent stays null
-        child_materialisation: MaterialisationNode = cast(
-            MaterialisationNode, child_node
-        )
-        if child_materialisation.freshness_config.minutes_sla is None:
+        child_config = cast(MaterialisationNode, child_node).freshness_config
+        if child_config.sla_seconds is None:
             return  # child has no config: parent stays null
-        child_minutes.append(child_materialisation.freshness_config.minutes_sla)
+        child_configs.append((child_id, child_config))
 
-    # All children have a defined config: inherit the minimum
-    min_sla = min(child_minutes)
-    materialisation_node.freshness_config.minutes_sla = min_sla
-    for cid in child_ids:
-        if (
-            cast(MaterialisationNode, dag.nodes[cid]).freshness_config.minutes_sla
-            == min_sla
-        ):
-            materialisation_node.freshness_config.inherited_from = cid
-            break
+    # All children have a defined config: inherit the minimum (first child wins ties)
+    min_child_id, min_config = min(child_configs, key=lambda c: c[1].sla_seconds or 0)
+    materialisation_node.freshness_config.sla_seconds = min_config.sla_seconds
+    materialisation_node.freshness_config.source = min_config.source
+    materialisation_node.freshness_config.inherited_from = min_child_id
 
 
 def _enqueue_parents(
@@ -135,7 +195,7 @@ def propagate_freshness_config(parsed_dag: ParsedDag) -> None:
     Propagate freshness config backwards through the DAG.
 
     Starts at nodes with no children (end of DAG) and works backwards,
-    propagating the minimum minutes_sla from children to parents.
+    propagating the minimum sla_seconds from children to parents.
     Only updates nodes that don't already have a config.
     """
     children, parents, out_degree = _build_reverse_dependency_graphs(parsed_dag)

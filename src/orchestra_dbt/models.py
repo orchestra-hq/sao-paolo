@@ -29,10 +29,17 @@ class SourceFreshness(BaseModel):
     sources: dict[str, datetime]
 
 
+FreshnessConfigSource = Literal["lag_tolerance", "build_after"]
+
+
 class FreshnessConfig(BaseModel):
     inherited_from: str | None = None
-    minutes_sla: int | None = None
+    # Minimum time between rebuilds (dbt `state.lag_tolerance` or
+    # `freshness.build_after`), in seconds. None means no window.
+    sla_seconds: int | None = None
     updates_on: Literal["any", "all"] = "any"
+    # Which dbt config the window came from; drives dbt State-only behaviour.
+    source: FreshnessConfigSource | None = None
 
 
 class Node(BaseModel):
@@ -54,6 +61,8 @@ class MaterialisationNode(Node):
     freshness_config: FreshnessConfig
     freshness: Freshness
     reason: str
+    # Dirty because the node's own code changed (or it is new to state).
+    code_changed: bool = False
     sources: dict[str, datetime]
     # Fully-rendered warehouse relation; unset for ephemeral models.
     relation_name: str | None = None
