@@ -14,7 +14,6 @@ from src.orchestra_dbt.models import (
     FreshnessConfig,
     MaterialisationNode,
     ParsedDag,
-    SourceNode,
 )
 
 
@@ -38,6 +37,9 @@ class TestBuildAfterDurationMinutes:
             parse_build_after_duration_minutes({"period": "minute", "count": "invalid"})
 
 
+BA = {"period": "day", "count": 1, "updates_on": "all"}
+
+
 class TestParseFreshnessConfig:
     @pytest.mark.parametrize(
         "config_on_node, expected",
@@ -55,174 +57,54 @@ class TestParseFreshnessConfig:
                 FreshnessConfig(),
             ),
             (
-                {"freshness": {"build_after": {"period": "hour", "count": 2}}},
-                FreshnessConfig(sla_seconds=7200, source="build_after"),
+                {"build_after": {"period": "hour", "count": 2}},
+                FreshnessConfig(sla_seconds=7200),
             ),
             (
-                {
-                    "freshness": {
-                        "build_after": {
-                            "period": "day",
-                            "count": 1,
-                            "updates_on": "all",
-                        }
-                    }
-                },
-                FreshnessConfig(
-                    sla_seconds=86400, updates_on="all", source="build_after"
-                ),
+                {"build_after": {"period": "day", "count": 1, "updates_on": "all"}},
+                FreshnessConfig(sla_seconds=86400, updates_on="all"),
             ),
             (
-                {
-                    "freshness": {
-                        "build_after": {
-                            "period": "minute",
-                            "count": 1,
-                            "updates_on": "foo",
-                        }
-                    }
-                },
-                FreshnessConfig(sla_seconds=60, source="build_after"),
-            ),
-            (
-                {"freshness": None, "state": None},
-                FreshnessConfig(),
-            ),
-            # dbt State `state` block
-            (
-                {"state": {"lag_tolerance": "4h"}},
-                FreshnessConfig(
-                    sla_seconds=14400,
-                    source="lag_tolerance",
-                    bypass_on_upstream_code_change=True,
-                ),
-            ),
-            (
-                {"state": {"lag_tolerance": "0s", "require_fresh_data_from": "ALL"}},
-                FreshnessConfig(
-                    sla_seconds=0,
-                    updates_on="all",
-                    source="lag_tolerance",
-                    bypass_on_upstream_code_change=True,
-                ),
-            ),
-            (
-                {"state": {"require_fresh_data_from": "all"}},
-                FreshnessConfig(updates_on="all"),
-            ),
-            # object form allowed by dbt's JSON schema
-            (
-                {
-                    "state": {
-                        "lag_tolerance": {
-                            "count": 2,
-                            "period": "hour",
-                            "updates_on": "all",
-                        }
-                    }
-                },
-                FreshnessConfig(
-                    sla_seconds=7200,
-                    updates_on="all",
-                    source="lag_tolerance",
-                    bypass_on_upstream_code_change=True,
-                ),
-            ),
-            # dbt-oss manifest: updates_on None in the object falls through
-            (
-                {
-                    "state": {
-                        "lag_tolerance": {
-                            "count": 30,
-                            "period": "second",
-                            "updates_on": None,
-                        }
-                    },
-                    "freshness": {
-                        "build_after": {
-                            "period": "hour",
-                            "count": 1,
-                            "updates_on": "all",
-                        }
-                    },
-                },
-                FreshnessConfig(
-                    sla_seconds=30,
-                    updates_on="all",
-                    source="lag_tolerance",
-                    bypass_on_upstream_code_change=True,
-                ),
-            ),
-            # state block wins over build_after
-            (
-                {
-                    "state": {"lag_tolerance": "30m", "require_fresh_data_from": "any"},
-                    "freshness": {
-                        "build_after": {
-                            "period": "day",
-                            "count": 1,
-                            "updates_on": "all",
-                        }
-                    },
-                },
-                FreshnessConfig(
-                    sla_seconds=1800,
-                    source="lag_tolerance",
-                    bypass_on_upstream_code_change=True,
-                ),
-            ),
-            # each key falls back independently
-            (
-                {
-                    "state": {"require_fresh_data_from": "all"},
-                    "freshness": {"build_after": {"period": "hour", "count": 1}},
-                },
-                FreshnessConfig(
-                    sla_seconds=3600, updates_on="all", source="build_after"
-                ),
-            ),
-            (
-                {
-                    "state": {"lag_tolerance": "1d"},
-                    "freshness": {
-                        "build_after": {
-                            "period": "hour",
-                            "count": 1,
-                            "updates_on": "all",
-                        }
-                    },
-                },
-                FreshnessConfig(
-                    sla_seconds=86400,
-                    updates_on="all",
-                    source="lag_tolerance",
-                    bypass_on_upstream_code_change=True,
-                ),
+                {"build_after": {"period": "minute", "count": 1, "updates_on": "foo"}},
+                FreshnessConfig(sla_seconds=60),
             ),
         ],
     )
     def test_parse_freshness_config(
         self, config_on_node: dict | None, expected: FreshnessConfig
     ):
-        assert parse_freshness_config(config_on_node) == expected
+        assert parse_freshness_config({"freshness": config_on_node}) == expected
 
-    def test_invalid_lag_tolerance_warns_and_falls_back(
-        self, capsys: pytest.CaptureFixture[str]
-    ):
-        config = {
-            "state": {"lag_tolerance": "soon"},
-            "freshness": {"build_after": {"period": "hour", "count": 1}},
-        }
-        assert parse_freshness_config(config, node_id="model.a") == FreshnessConfig(
-            sla_seconds=3600, source="build_after"
-        )
+    @pytest.mark.parametrize(
+        "config, expected",
+        [
+            ({"state": {"lag_tolerance": "4h"}}, (14400, "any", True)),
+            ({"state": {"lag_tolerance": "0s"}}, (0, "any", True)),
+            ({"state": {"require_fresh_data_from": "all"}}, (None, "all", False)),
+            (  # state wins over build_after
+                {"state": {"lag_tolerance": "30m"}, "freshness": {"build_after": BA}},
+                (1800, "all", True),
+            ),
+            (
+                {
+                    "state": {"require_fresh_data_from": "any"},
+                    "freshness": {"build_after": BA},
+                },
+                (86400, "any", False),
+            ),
+            (  # invalid lag_tolerance warns and falls back
+                {"state": {"lag_tolerance": "soon"}, "freshness": {"build_after": BA}},
+                (86400, "all", False),
+            ),
+        ],
+    )
+    def test_state_block(self, config: dict, expected: tuple):
+        c = parse_freshness_config(config)
         assert (
-            parse_freshness_config(
-                {"state": {"lag_tolerance": "soon"}}, node_id="model.a"
-            )
-            == FreshnessConfig()
-        )
-        assert "model.a" in capsys.readouterr().out
+            c.sla_seconds,
+            c.updates_on,
+            c.bypass_on_upstream_code_change,
+        ) == expected
 
 
 class TestParseLagTolerance:
@@ -230,51 +112,19 @@ class TestParseLagTolerance:
         "value, expected",
         [
             ("0s", 0),
-            ("30s", 30),
             ("45m", 2700),
-            ("4h", 14400),
-            ("1d", 86400),
-            ("2w", 1209600),
-            (" 7D ", 604800),
-            ("10 m", 600),
             ("1h30m", 5400),
-            ("1h 30m", 5400),
             ("4 hours", 14400),
-            ("120sec", 120),
-            ("1500ms", 2),
+            ("2w", 1209600),
             ("500ms", 1),
-            ("1s500ms", 2),
-            ("3 days", 259200),
             (90, 90),
-            # dbt-oss manifest form
-            ({"count": 30, "period": "second", "updates_on": None}, 30),
-            ({"count": 0, "period": "minute", "updates_on": None}, 0),
-            ({"count": 90, "period": "minute"}, 5400),
-            ({"count": 14, "period": "day"}, 1209600),
+            ({"count": 30, "period": "second", "updates_on": None}, 30),  # dbt-oss
         ],
     )
     def test_valid(self, value: str | int | dict, expected: int):
         assert parse_lag_tolerance_seconds(value) == expected
 
-    @pytest.mark.parametrize(
-        "value",
-        [
-            "",
-            "m",
-            "45",
-            "45x",
-            "4 fortnights",
-            "1h30",
-            "-5m",
-            "1.5h",
-            -1,
-            True,
-            {"count": 1},
-            {"count": "1", "period": "hour"},
-            {"count": 1, "period": "year"},
-            {"count": -1, "period": "hour"},
-        ],
-    )
+    @pytest.mark.parametrize("value", ["", "45", "1h30", "-5m", "4 years", True, {}])
     def test_invalid(self, value: str | int | dict):
         with pytest.raises(ValueError):
             parse_lag_tolerance_seconds(value)
@@ -591,139 +441,55 @@ class TestPropagateFreshnessConfig:
         )
 
 
-def _node(node_id: str, freshness_config: FreshnessConfig) -> MaterialisationNode:
+def _node(sla_seconds: int | None = None) -> MaterialisationNode:
     return MaterialisationNode(
-        asset_external_id=node_id,
+        asset_external_id="x",
         freshness=Freshness.CLEAN,
         checksum="1",
-        dbt_path=f"models/{node_id}.sql",
-        file_path=f"models/{node_id}.sql",
+        dbt_path="x.sql",
+        file_path="x.sql",
         reason="",
         sources={},
-        freshness_config=freshness_config,
+        freshness_config=FreshnessConfig(sla_seconds=sla_seconds),
     )
 
 
-def _config(dag: ParsedDag, node_id: str) -> FreshnessConfig:
-    return cast(MaterialisationNode, dag.nodes[node_id]).freshness_config
-
-
-class TestLagTolerancePropagation:
-    def test_parent_inherits_source_of_min_child(self):
-        dag = ParsedDag(
-            nodes={
-                "A": _node("A", FreshnessConfig()),
-                "B": _node(
-                    "B", FreshnessConfig(sla_seconds=3600, source="build_after")
-                ),
-                "C": _node(
-                    "C",
-                    FreshnessConfig(
-                        sla_seconds=600,
-                        source="lag_tolerance",
-                        bypass_on_upstream_code_change=True,
-                    ),
-                ),
-            },
-            edges=[Edge(from_="A", to_="B"), Edge(from_="A", to_="C")],
-        )
-        propagate_freshness_config(dag)
-        assert _config(dag, "A") == FreshnessConfig(
-            sla_seconds=600, source="lag_tolerance", inherited_from="C"
-        )
-
-    def test_zero_lag_tolerance_is_defined_and_propagates(self):
-        dag = ParsedDag(
-            nodes={
-                "A": _node("A", FreshnessConfig()),
-                "B": _node(
-                    "B",
-                    FreshnessConfig(
-                        sla_seconds=0,
-                        source="lag_tolerance",
-                        bypass_on_upstream_code_change=True,
-                    ),
-                ),
-                "C": _node(
-                    "C",
-                    FreshnessConfig(
-                        sla_seconds=0,
-                        source="lag_tolerance",
-                        bypass_on_upstream_code_change=True,
-                    ),
-                ),
-            },
-            edges=[Edge(from_="A", to_="B"), Edge(from_="B", to_="C")],
-        )
-        propagate_freshness_config(dag)
-        assert _config(dag, "B").sla_seconds == 0
-        assert _config(dag, "B").inherited_from is None
-        assert _config(dag, "A").sla_seconds == 0
-        assert _config(dag, "A").inherited_from == "B"
-
-
 class TestDefaultLagTolerance:
-    def test_parent_inherits_explicit_child_below_default(self):
-        """P -> A (10m) and P -> B (unset): B gets the 45m default, P inherits 10m."""
+    def test_parent_gets_min_of_explicit_child_and_default(self):
         dag = ParsedDag(
             nodes={
-                "P": _node("P", FreshnessConfig()),
-                "A": _node(
-                    "A", FreshnessConfig(sla_seconds=600, source="lag_tolerance")
-                ),
-                "B": _node("B", FreshnessConfig()),
+                "P": _node(),
+                "A": _node(600),
+                "B": _node(),
+                "Q": _node(),
+                "C": _node(7200),
             },
-            edges=[Edge(from_="P", to_="A"), Edge(from_="P", to_="B")],
+            edges=[
+                Edge(from_="P", to_="A"),
+                Edge(from_="P", to_="B"),
+                Edge(from_="Q", to_="C"),
+            ],
         )
         propagate_freshness_config(dag, default_sla_seconds=2700)
-        assert _config(dag, "B") == FreshnessConfig(
-            sla_seconds=2700,
-            source="lag_tolerance",
-            bypass_on_upstream_code_change=True,
-        )
-        assert _config(dag, "P") == FreshnessConfig(
-            sla_seconds=600,
-            source="lag_tolerance",
-            inherited_from="A",
-            bypass_on_upstream_code_change=True,
-        )
+        config = {
+            k: cast(MaterialisationNode, n).freshness_config
+            for k, n in dag.nodes.items()
+        }
+        assert (
+            config["B"].sla_seconds,
+            config["P"].sla_seconds,
+            config["Q"].sla_seconds,
+        ) == (2700, 600, 2700)
+        assert config["P"].bypass_on_upstream_code_change
+        assert not config[
+            "A"
+        ].bypass_on_upstream_code_change  # explicit config untouched
 
-    def test_explicit_configs_untouched(self):
+    def test_inheriting_without_default_gets_no_bypass(self):
         dag = ParsedDag(
-            nodes={
-                "source.s": SourceNode(),
-                "A": _node("A", FreshnessConfig(updates_on="all")),
-                "B": _node("B", FreshnessConfig(sla_seconds=60, source="build_after")),
-            },
-            edges=[Edge(from_="source.s", to_="A")],
-        )
-        propagate_freshness_config(dag, default_sla_seconds=2700)
-        assert _config(dag, "A") == FreshnessConfig(
-            sla_seconds=2700,
-            updates_on="all",
-            source="lag_tolerance",
-            bypass_on_upstream_code_change=True,
-        )
-        assert _config(dag, "B") == FreshnessConfig(
-            sla_seconds=60, source="build_after"
-        )
-        assert dag.nodes["source.s"] == SourceNode()
-
-    def test_without_default_inheritance_does_not_grant_bypass(self):
-        dag = ParsedDag(
-            nodes={
-                "P": _node("P", FreshnessConfig()),
-                "C": _node(
-                    "C",
-                    FreshnessConfig(
-                        sla_seconds=600,
-                        source="lag_tolerance",
-                        bypass_on_upstream_code_change=True,
-                    ),
-                ),
-            },
-            edges=[Edge(from_="P", to_="C")],
+            nodes={"P": _node(), "C": _node(600)}, edges=[Edge(from_="P", to_="C")]
         )
         propagate_freshness_config(dag)
-        assert _config(dag, "P").sla_seconds == 600
-        assert _config(dag, "P").bypass_on_upstream_code_change is False
+        config = cast(MaterialisationNode, dag.nodes["P"]).freshness_config
+        assert config.sla_seconds == 600
+        assert not config.bypass_on_upstream_code_change

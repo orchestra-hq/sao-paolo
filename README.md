@@ -267,37 +267,25 @@ For boolean settings, if the environment variable is **set**, the merged value i
 | `require_explicit_source_freshness` | bool | `false` | When `true`, sources without an explicit `loaded_at_field` or `loaded_at_query` are excluded from state-aware orchestration: no implicit/fallback freshness is inferred for them, and models depending on them always run. Use this when implicit freshness is unreliable (for example, sources defined on top of views, where warehouse metadata reflects the view rather than the underlying data). |
 | `verify_relations_exist` | bool | `false` | Opt in to confirming a node's table/view is actually in the warehouse before skipping it (see [Verifying relations still exist](#verifying-relations-still-exist)). Off by default, so existing behaviour is unchanged until you enable it. |
 | `scope_source_freshness_to_selection` | bool | `false` | When `true`, `dbt source freshness` only checks sources upstream of the selection already resolved for node reuse (via `dbt ls`), passed as `--select +<fqn>` per selected node so dbt's own selection engine resolves the ancestor sources -- no `--resource-type` filter needed, since `source freshness` only ever touches sources anyway. Selection is by fqn rather than path because dbt resolves `path:` by globbing the filesystem from the project root, which never matches a node owned by an installed package. When `false` (default), freshness is checked for every source in the project regardless of selection, matching prior behaviour. |
-| `default_lag_tolerance` | string or integer seconds (optional) | — | A `lag_tolerance` (for example `45m`, which is dbt State's default, or `2700`) for models without a window of their own. Such a model still inherits a smaller window from its children, and otherwise gets this default (see [Rebuild windows](#rebuild-windows-lag_tolerance-and-build_after)). When unset, those models rebuild as soon as upstream data changes, matching prior behaviour. |
+| `default_lag_tolerance` | string or int seconds (optional) | — | Window for models without their own, for example `45m` (see [Rebuild windows](#rebuild-windows-lag_tolerance-and-build_after)). Unset means no window, as before. |
 
 ### Rebuild windows (`lag_tolerance` and `build_after`)
 
-A model can set a minimum time between rebuilds. A reused model is rebuilt only when **both** of these are true:
-
-- its last build is older than the window
-- upstream data has changed since that build
-
-Use dbt State's `state` block, or the older `freshness.build_after`:
+A model can set a minimum time between rebuilds. It is reused until its last build is older than the window **and** upstream data has changed:
 
 ```yaml
-models:
-  - name: fct_orders
-    config:
-      state:
-        lag_tolerance: "{{ '4h' if target.name == 'prod' else '7d' }}"  # e.g. 30s, 45m, 1h30m, 4 hours, 2w
-        require_fresh_data_from: all  # any (default) or all direct parents
-      # Older equivalent, still supported:
-      # freshness:
-      #   build_after: {count: 4, period: hour, updates_on: all}
+config:
+  state:  # dbt State
+    lag_tolerance: 4h  # e.g. 30s, 45m, 1h30m, 2w
+    require_fresh_data_from: all  # any (default) or all
+  freshness:  # older equivalent, still supported
+    build_after: {count: 4, period: hour, updates_on: all}
 ```
 
-- **Precedence:** `state.lag_tolerance` wins over `build_after.count`/`period`, and `state.require_fresh_data_from` wins over `build_after.updates_on`. Each key falls back separately, as in dbt State.
-- **`0s`** rebuilds as soon as upstream data changes. Millisecond values round up to whole seconds.
-- **Invalid values:** an unreadable `lag_tolerance` logs a warning and is ignored for that model, which falls back to `build_after` or to no window. It doesn't stop the run.
-- **dbt-core and dbt-oss (v2)** behave the same. dbt-core passes the duration string through to the manifest, while dbt-oss writes it as `{count, period}`. Both forms are read.
-- **Code changes (`lag_tolerance` only):** when a parent model's code changes and the parent is part of this run, its direct children rebuild even inside their window. Children further down then follow their own window. This applies to models with their own `lag_tolerance`, and to models without their own config when `default_lag_tolerance` is set. It doesn't apply to a window a model merely inherits, or to `build_after` models, which keep their original behaviour. A parent that is only new to state doesn't count, because its children must change to reference it anyway.
-- **Inheritance:** a model with no window inherits the smallest window of its children, provided every child has one.
-- **Default:** dbt State uses `45m` for models with nothing configured. Here that default is opt-in, through `default_lag_tolerance`.
-- **Difference from dbt:** dbt checks whether a parent's *compiled* SQL changed. sao-paolo uses the model file's checksum, so a change that lives only in a macro or var doesn't count as a code change.
+- `state` keys take precedence, and each one falls back to `build_after` separately. An invalid `lag_tolerance` is logged and ignored.
+- A model without a window inherits the smallest window of its children, as long as every child has one. Otherwise it uses `default_lag_tolerance` if that's set (dbt State uses `45m`).
+- With `lag_tolerance` (or the default), a model also rebuilds inside its window when a direct parent's code changed and that parent is part of this run. `build_after` and inherited windows don't do this.
+- dbt checks compiled SQL for parent code changes. sao-paolo uses the model file's checksum, so a change only in a macro or var doesn't count.
 
 ### Resolving multiple backend state configurations
 

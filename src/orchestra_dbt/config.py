@@ -21,9 +21,7 @@ class OrchestraDbtSettings(BaseModel):
     require_explicit_source_freshness: bool = False
     verify_relations_exist: bool = False
     scope_source_freshness_to_selection: bool = False
-    # dbt State's lag_tolerance for models with no explicit or inherited window
-    # (dbt uses "45m"), given as a duration or integer seconds and stored as
-    # seconds. Unset keeps the original behaviour: no window.
+    # Seconds; opt-in dbt State default lag_tolerance (dbt uses 45m).
     default_lag_tolerance: int | None = None
     # Where the settings were read from; a relative state_file resolves against it.
     pyproject_dir: Path | None = None
@@ -37,17 +35,12 @@ class OrchestraDbtSettings(BaseModel):
 
     @field_validator("default_lag_tolerance", mode="before")
     @classmethod
-    def _validate_default_lag_tolerance(cls, v: object) -> int | None:
-        if v is None:
+    def _parse_default_lag_tolerance(cls, v: object) -> int | None:
+        if v is None or str(v).strip() == "":
             return None
-        if isinstance(v, int) and not isinstance(v, bool):
-            return parse_lag_tolerance_seconds(v)
-        value = str(v).strip()
-        if not value:
-            return None
-        if value.isdigit():
-            return int(value)
-        return parse_lag_tolerance_seconds(value)
+        if isinstance(v, str) and v.strip().isdigit():
+            return int(v)
+        return parse_lag_tolerance_seconds(v if isinstance(v, int) else str(v))
 
 
 def _env_bool(name: str) -> bool | None:
@@ -116,7 +109,6 @@ def _merge_env_overrides(settings: OrchestraDbtSettings) -> OrchestraDbtSettings
 
     default_lag_tolerance = _env_str("ORCHESTRA_DEFAULT_LAG_TOLERANCE")
     if default_lag_tolerance is not None:
-        # Validate now: the field stores parsed seconds, not the raw string.
         settings = OrchestraDbtSettings.model_validate(
             {**settings.model_dump(), "default_lag_tolerance": default_lag_tolerance}
         )

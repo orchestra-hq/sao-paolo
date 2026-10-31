@@ -253,7 +253,7 @@ def main(args: tuple[str, ...]) -> None:
         apply_relation_existence_gate(parsed_dag, paths_to_run, list(dbt_args))
 
     # Edit the DAG inline.
-    calculate_nodes_to_run(parsed_dag, selected_paths=paths_to_run)
+    calculate_nodes_to_run(parsed_dag, paths_to_run)
 
     nodes_to_reuse: dict[str, MaterialisationNode] = {}
     node_count = 0

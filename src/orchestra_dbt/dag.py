@@ -31,47 +31,32 @@ def calculate_freshness_on_node(
     from_external_package: bool,
     depends_on_nodes: list[str] | None,
     seed_state_orchestration: bool = False,
-) -> tuple[Freshness, str, bool]:
-    """Returns (freshness, reason, code_changed).
-
-    code_changed is True only when the node's checksum differs from the one in
-    state. A node new to state doesn't count: its children must change to ref it.
-    """
+) -> tuple[Freshness, str]:
     if resource_type == "snapshot":
         # Note: currently, we always run snapshots. Need to configure how to propagate
         # the ability not to run snapshots via tags/meta.
-        return Freshness.DIRTY, "Snapshot is always dirty.", False
+        return Freshness.DIRTY, "Snapshot is always dirty."
 
     if not track_state:
-        return Freshness.DIRTY, "State orchestration for this node is disabled.", False
+        return Freshness.DIRTY, "State orchestration for this node is disabled."
 
     if from_external_package and not depends_on_nodes:
         return (
             Freshness.DIRTY,
             "Model from external package without parent dependencies - skipping state orchestration.",
-            False,
         )
 
     if resource_type == "seed" and not seed_state_orchestration:
-        return (
-            Freshness.DIRTY,
-            "State orchestration for seeds currently disabled.",
-            False,
-        )
+        return Freshness.DIRTY, "State orchestration for seeds currently disabled."
 
     if asset_external_id not in state.state:
         return (
             Freshness.DIRTY,
             f"{resource_type.capitalize()} not previously seen in state.",
-            False,
         )
     if checksum != state.state[asset_external_id].checksum:
-        return Freshness.DIRTY, "Checksum changed since last run.", True
-    return (
-        Freshness.CLEAN,
-        f"{resource_type.capitalize()} in same state as last run.",
-        False,
-    )
+        return Freshness.DIRTY, "Checksum changed since last run."
+    return Freshness.CLEAN, f"{resource_type.capitalize()} in same state as last run."
 
 
 def construct_dag(
@@ -139,7 +124,7 @@ def construct_dag(
                     track_state = False
                     checksum = str(node["checksum"]["checksum"])
 
-                freshness, reason, code_changed = calculate_freshness_on_node(
+                freshness, reason = calculate_freshness_on_node(
                     asset_external_id,
                     checksum,
                     state,
@@ -154,10 +139,11 @@ def construct_dag(
                     asset_external_id=asset_external_id,
                     checksum=checksum,
                     freshness_config=parse_freshness_config(
-                        config=node.get("config", {}), node_id=node_id
+                        node.get("config", {}), node_id
                     ),
                     freshness=freshness,
-                    code_changed=code_changed,
+                    code_changed=asset_external_id in state.state
+                    and checksum != state.state[asset_external_id].checksum,
                     dbt_path=dbt_path,
                     reason=reason,
                     sources=(

@@ -37,7 +37,7 @@ class TestCalculateFreshnessOnNode:
             from_external_package=False,
             depends_on_nodes=[],
             seed_state_orchestration=False,
-        ) == (Freshness.DIRTY, "Snapshot is always dirty.", False)
+        ) == (Freshness.DIRTY, "Snapshot is always dirty.")
 
     def test_calculate_freshness_on_node_not_tracking_state(self):
         assert calculate_freshness_on_node(
@@ -49,7 +49,7 @@ class TestCalculateFreshnessOnNode:
             from_external_package=False,
             depends_on_nodes=[],
             seed_state_orchestration=False,
-        ) == (Freshness.DIRTY, "State orchestration for this node is disabled.", False)
+        ) == (Freshness.DIRTY, "State orchestration for this node is disabled.")
 
     def test_calculate_freshness_on_node_seed_disabled(self):
         assert calculate_freshness_on_node(
@@ -64,7 +64,6 @@ class TestCalculateFreshnessOnNode:
         ) == (
             Freshness.DIRTY,
             "State orchestration for seeds currently disabled.",
-            False,
         )
 
     def test_calculate_freshness_on_node_seed_enabled_not_in_state(self):
@@ -77,7 +76,7 @@ class TestCalculateFreshnessOnNode:
             from_external_package=False,
             depends_on_nodes=[],
             seed_state_orchestration=True,
-        ) == (Freshness.DIRTY, "Seed not previously seen in state.", False)
+        ) == (Freshness.DIRTY, "Seed not previously seen in state.")
 
     def test_calculate_freshness_on_node_seed_enabled_clean(self):
         assert calculate_freshness_on_node(
@@ -97,7 +96,7 @@ class TestCalculateFreshnessOnNode:
             from_external_package=False,
             depends_on_nodes=[],
             seed_state_orchestration=True,
-        ) == (Freshness.CLEAN, "Seed in same state as last run.", False)
+        ) == (Freshness.CLEAN, "Seed in same state as last run.")
 
     def test_calculate_freshness_on_node_not_in_state(self):
         assert calculate_freshness_on_node(
@@ -109,7 +108,7 @@ class TestCalculateFreshnessOnNode:
             from_external_package=False,
             depends_on_nodes=[],
             seed_state_orchestration=False,
-        ) == (Freshness.DIRTY, "Model not previously seen in state.", False)
+        ) == (Freshness.DIRTY, "Model not previously seen in state.")
 
     def test_calculate_freshness_on_node_checksum_changed(self):
         assert calculate_freshness_on_node(
@@ -129,7 +128,7 @@ class TestCalculateFreshnessOnNode:
             from_external_package=False,
             depends_on_nodes=[],
             seed_state_orchestration=False,
-        ) == (Freshness.DIRTY, "Checksum changed since last run.", True)
+        ) == (Freshness.DIRTY, "Checksum changed since last run.")
 
     def test_calculate_freshness_on_node_checksum_matches(self):
         assert calculate_freshness_on_node(
@@ -149,7 +148,7 @@ class TestCalculateFreshnessOnNode:
             from_external_package=False,
             depends_on_nodes=[],
             seed_state_orchestration=False,
-        ) == (Freshness.CLEAN, "Model in same state as last run.", False)
+        ) == (Freshness.CLEAN, "Model in same state as last run.")
 
     def test_calculate_freshness_on_model_from_external_package_without_dependencies(
         self,
@@ -174,7 +173,6 @@ class TestCalculateFreshnessOnNode:
         ) == (
             Freshness.DIRTY,
             "Model from external package without parent dependencies - skipping state orchestration.",
-            False,
         )
 
 

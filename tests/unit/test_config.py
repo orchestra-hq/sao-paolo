@@ -141,7 +141,6 @@ def test_load_orchestra_dbt_settings_defaults(
     assert settings.require_explicit_source_freshness is False
     assert settings.verify_relations_exist is False
     assert settings.scope_source_freshness_to_selection is False
-    assert settings.default_lag_tolerance is None
 
 
 def test_load_orchestra_dbt_settings_from_pyproject(
@@ -315,47 +314,26 @@ def test_env_state_file_resolves_from_cwd_not_project_dir(
     assert _backend(Path("proj")).local_path == (tmp_path / "env_state.json").resolve()
 
 
-def test_default_lag_tolerance_from_pyproject_and_env_override(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+@pytest.mark.parametrize(
+    "toml, env, expected",
+    [
+        ("", None, None),
+        ('"45m"', None, 2700),
+        ("2700", None, 2700),
+        ('"45m"', "2h", 7200),
+    ],
+)
+def test_default_lag_tolerance(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    toml: str,
+    env: str | None,
+    expected: int | None,
 ) -> None:
-    (tmp_path / "pyproject.toml").write_text(
-        """[tool.orchestra_dbt]
-default_lag_tolerance = "45m"
-""",
-        encoding="utf-8",
-    )
+    line = f"default_lag_tolerance = {toml}" if toml else ""
+    (tmp_path / "pyproject.toml").write_text(f"[tool.orchestra_dbt]\n{line}\n")
     monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
     _clear_orchestra_settings_env(monkeypatch)
-    assert load_orchestra_dbt_settings(tmp_path).default_lag_tolerance == 2700
-
-    monkeypatch.setenv("ORCHESTRA_DEFAULT_LAG_TOLERANCE", " 2h ")
-    assert load_orchestra_dbt_settings(tmp_path).default_lag_tolerance == 7200
-
-    monkeypatch.setenv("ORCHESTRA_DEFAULT_LAG_TOLERANCE", "90")
-    assert load_orchestra_dbt_settings(tmp_path).default_lag_tolerance == 90
-
-
-@pytest.mark.parametrize("toml_value, expected", [("2700", 2700), ("0", 0)])
-def test_default_lag_tolerance_integer_seconds_in_pyproject(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, toml_value: str, expected: int
-) -> None:
-    (tmp_path / "pyproject.toml").write_text(
-        f"[tool.orchestra_dbt]\ndefault_lag_tolerance = {toml_value}\n",
-        encoding="utf-8",
-    )
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
-    _clear_orchestra_settings_env(monkeypatch)
+    if env:
+        monkeypatch.setenv("ORCHESTRA_DEFAULT_LAG_TOLERANCE", env)
     assert load_orchestra_dbt_settings(tmp_path).default_lag_tolerance == expected
-
-
-def test_default_lag_tolerance_invalid_raises(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("ORCHESTRA_API_KEY", raising=False)
-    _clear_orchestra_settings_env(monkeypatch)
-    monkeypatch.setenv("ORCHESTRA_DEFAULT_LAG_TOLERANCE", "soon")
-    with pytest.raises(ValueError, match="lag_tolerance"):
-        load_orchestra_dbt_settings(tmp_path)

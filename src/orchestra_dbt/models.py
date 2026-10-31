@@ -29,19 +29,11 @@ class SourceFreshness(BaseModel):
     sources: dict[str, datetime]
 
 
-FreshnessConfigSource = Literal["lag_tolerance", "build_after"]
-
-
 class FreshnessConfig(BaseModel):
     inherited_from: str | None = None
-    # Minimum time between rebuilds (dbt `state.lag_tolerance` or
-    # `freshness.build_after`), in seconds. None means no window.
     sla_seconds: int | None = None
     updates_on: Literal["any", "all"] = "any"
-    # Which dbt config the window came from; used for log wording.
-    source: FreshnessConfigSource | None = None
-    # dbt State: a direct parent's code change forces a rebuild inside the window.
-    # Set for the node's own lag_tolerance or the opt-in default, never inherited.
+    # dbt State: rebuild inside the window when a direct parent's code changed.
     bypass_on_upstream_code_change: bool = False
 
 
@@ -64,7 +56,6 @@ class MaterialisationNode(Node):
     freshness_config: FreshnessConfig
     freshness: Freshness
     reason: str
-    # Dirty because the node's checksum differs from the one in state.
     code_changed: bool = False
     sources: dict[str, datetime]
     # Fully-rendered warehouse relation; unset for ephemeral models.
