@@ -275,15 +275,15 @@ A model can set a minimum time between rebuilds. It is reused until its last bui
 
 ```yaml
 config:
-  state:  # dbt State
-    lag_tolerance: 4h  # e.g. 30s, 45m, 1h30m, 2w
+  state:
+    lag_tolerance: 4h  # e.g. 30s, 45m, 1h30m, 2w (case-sensitive: M is months)
     require_fresh_data_from: all  # any (default) or all
   freshness:  # older equivalent, still supported
     build_after: {count: 4, period: hour, updates_on: all}
 ```
 
 - `state` keys take precedence, and each one falls back to `build_after` separately. An invalid `lag_tolerance` is logged and ignored.
-- A model without a window inherits the smallest window of its children, as long as every child has one. Otherwise it uses `default_lag_tolerance` if that's set (dbt State uses `45m`).
+- A model without a window inherits the smallest window of its children, as long as every child has one. Otherwise it uses `default_lag_tolerance` if that's set (for example `45m`).
 - With `lag_tolerance` (or the default), a model also rebuilds inside its window when a direct parent's code changed and that parent is part of this run. `build_after` and inherited windows don't do this.
 - dbt checks compiled SQL for parent code changes. sao-paolo uses the model file's checksum, so a change only in a macro or var doesn't count.
 

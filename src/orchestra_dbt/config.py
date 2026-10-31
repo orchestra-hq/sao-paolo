@@ -21,7 +21,7 @@ class OrchestraDbtSettings(BaseModel):
     require_explicit_source_freshness: bool = False
     verify_relations_exist: bool = False
     scope_source_freshness_to_selection: bool = False
-    # Seconds; opt-in dbt State default lag_tolerance (dbt uses 45m).
+    # Seconds; opt-in lag_tolerance for models without their own window.
     default_lag_tolerance: int | None = None
     # Where the settings were read from; a relative state_file resolves against it.
     pyproject_dir: Path | None = None

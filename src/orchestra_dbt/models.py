@@ -33,7 +33,7 @@ class FreshnessConfig(BaseModel):
     inherited_from: str | None = None
     sla_seconds: int | None = None
     updates_on: Literal["any", "all"] = "any"
-    # dbt State: rebuild inside the window when a direct parent's code changed.
+    # Rebuild inside the window when a direct parent's code changed.
     bypass_on_upstream_code_change: bool = False
 
 

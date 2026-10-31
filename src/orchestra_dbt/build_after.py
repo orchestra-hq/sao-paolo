@@ -26,7 +26,7 @@ def parse_build_after_duration_minutes(build_after: dict[str, str | int]) -> int
 
 
 def parse_freshness_config(config: dict, node_id: str = "") -> FreshnessConfig:
-    """dbt State's `state` block wins; each key falls back to `build_after`."""
+    """The `state` block wins; each key falls back to `build_after`."""
     freshness_config = FreshnessConfig()
     state = config.get("state") or {}
     build_after = (config.get("freshness") or {}).get("build_after") or {}
@@ -100,7 +100,7 @@ def _propagate_config_to_node(
     if materialisation_node.freshness_config.sla_seconds is not None:
         return
 
-    # Without its own config, a node is on dbt State behaviour only via the default.
+    # Without its own config, a node only gets the code-change bypass via the default.
     materialisation_node.freshness_config.sla_seconds = default_sla_seconds
     materialisation_node.freshness_config.bypass_on_upstream_code_change = (
         default_sla_seconds is not None

@@ -116,7 +116,10 @@ class TestParseLagTolerance:
             ("1h30m", 5400),
             ("4 hours", 14400),
             ("2w", 1209600),
-            ("500ms", 1),
+            ("3wk", 1814400),
+            ("1M", 2630016),  # months
+            ("1y", 31557600),
+            ("3000ms", 3),
             (90, 90),
             ({"count": 30, "period": "second", "updates_on": None}, 30),  # dbt-oss
         ],
@@ -124,7 +127,21 @@ class TestParseLagTolerance:
     def test_valid(self, value: str | int | dict, expected: int):
         assert parse_lag_tolerance_seconds(value) == expected
 
-    @pytest.mark.parametrize("value", ["", "45", "1h30", "-5m", "4 years", True, {}])
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "",
+            "45",
+            "1h30",
+            "-5m",
+            "500ms",
+            "3H",
+            "1millisecond",
+            "4 fortnights",
+            True,
+            {},
+        ],
+    )
     def test_invalid(self, value: str | int | dict):
         with pytest.raises(ValueError):
             parse_lag_tolerance_seconds(value)

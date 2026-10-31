@@ -3,6 +3,7 @@ from typing import Literal, cast
 
 import pytest
 
+from src.orchestra_dbt.build_after import parse_freshness_config
 from src.orchestra_dbt.models import (
     Edge,
     Freshness,
@@ -390,6 +391,44 @@ class TestCalculateModelsToRun:
             isinstance(dag.nodes["model.a"], MaterialisationNode)
             and dag.nodes["model.a"].freshness == Freshness.CLEAN
         )
+
+    @pytest.mark.parametrize(
+        "age, expected",
+        [
+            (timedelta(minutes=59, seconds=59), Freshness.CLEAN),
+            (timedelta(minutes=60), Freshness.DIRTY),
+        ],
+    )
+    def test_build_after_window_boundary_unchanged(
+        self, age: timedelta, expected: Freshness
+    ):
+        """build_after count: 60, period: minute behaves as it did in minutes."""
+        now = datetime.now(UTC)
+        dag = ParsedDag(
+            nodes={
+                "source.test": SourceNode(last_updated=now),
+                "model.a": MaterialisationNode(
+                    asset_external_id="model.a",
+                    freshness=Freshness.CLEAN,
+                    checksum="1",
+                    dbt_path="models/model_a.sql",
+                    file_path="models/model_a.sql",
+                    freshness_config=parse_freshness_config(
+                        {
+                            "freshness": {
+                                "build_after": {"count": 60, "period": "minute"}
+                            }
+                        }
+                    ),
+                    last_updated=now - age,
+                    reason="",
+                    sources={},
+                ),
+            },
+            edges=[Edge(from_="source.test", to_="model.a")],
+        )
+        calculate_nodes_to_run(dag=dag)
+        assert cast(MaterialisationNode, dag.nodes["model.a"]).freshness == expected
 
     def test_calculate_nodes_to_run_respects_build_after(self):
         dag = ParsedDag(
