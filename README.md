@@ -283,7 +283,7 @@ models:
   - name: fct_orders
     config:
       state:
-        lag_tolerance: "{{ '4h' if target.name == 'prod' else '7d' }}"  # s, m, h, d or w
+        lag_tolerance: "{{ '4h' if target.name == 'prod' else '7d' }}"  # e.g. 30s, 45m, 1h30m, 4 hours, 2w
         require_fresh_data_from: all  # any (default) or all direct parents
       # Older equivalent, still supported:
       # freshness:
@@ -292,6 +292,7 @@ models:
 
 - **Precedence:** `state.lag_tolerance` wins over `build_after.count`/`period`, and `state.require_fresh_data_from` wins over `build_after.updates_on`. Each key falls back separately, as in dbt State.
 - **`0s`** rebuilds as soon as upstream data changes.
+- **dbt-core and dbt-oss (v2)** behave the same. dbt-core passes the duration string through to the manifest, while dbt-oss writes it as `{count, period}`. Both forms are read.
 - **Code changes (`lag_tolerance` only):** when a parent model's code changes, its direct children rebuild even inside their window. Children further down then follow their own window. `build_after` models keep their original behaviour.
 - **Inheritance:** a model with no window inherits the smallest window of its children, provided every child has one.
 - **Default:** dbt State uses `45m` for models with nothing configured. Here that default is opt-in, through `default_lag_tolerance`.

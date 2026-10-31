@@ -4,31 +4,64 @@ from typing import Literal, cast
 
 from .models import FreshnessConfig, MaterialisationNode, Node, NodeType, ParsedDag
 
-_LAG_TOLERANCE_UNIT_SECONDS = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
-_LAG_TOLERANCE_PATTERN = re.compile(r"^(\d+)\s*([smhdw])$")
+_UNIT_SECONDS: dict[str, float] = {
+    **dict.fromkeys(("ms", "msec", "millis", "millisecond", "milliseconds"), 0.001),
+    **dict.fromkeys(("s", "sec", "secs", "second", "seconds"), 1),
+    **dict.fromkeys(("m", "min", "mins", "minute", "minutes"), 60),
+    **dict.fromkeys(("h", "hr", "hrs", "hour", "hours"), 3600),
+    **dict.fromkeys(("d", "day", "days"), 86400),
+    **dict.fromkeys(("w", "week", "weeks"), 604800),
+}
+# dbt-oss (v2) writes lag_tolerance to the manifest as {count, period}.
+_PERIOD_SECONDS = {
+    "second": 1,
+    "minute": 60,
+    "hour": 3600,
+    "day": 86400,
+    "week": 604800,
+}
+_DURATION_PART = re.compile(r"(\d+)\s*([a-z]+)")
+_DURATION = re.compile(r"^(?:\d+\s*[a-z]+\s*)+$")
+
+
+def _parse_lag_tolerance_object(value: dict) -> int:
+    count, period = value.get("count"), value.get("period")
+    if (
+        not isinstance(count, int)
+        or isinstance(count, bool)
+        or count < 0
+        or period not in _PERIOD_SECONDS
+    ):
+        raise ValueError(f"Invalid lag_tolerance: {value!r}")
+    return count * _PERIOD_SECONDS[str(period)]
 
 
 def parse_lag_tolerance_seconds(value: str | int | dict) -> int:
-    """Parse a dbt State `lag_tolerance` (e.g. `0s`, `30m`, `4h`, `1d`) into seconds.
+    """Parse a dbt State `lag_tolerance` into seconds.
 
-    A bare integer is read as seconds. The `{count, period}` object form that dbt's
-    JSON schema also allows is read like `build_after`.
+    Accepts the duration strings dbt takes (`0s`, `45m`, `1h30m`, `4 hours`,
+    `120sec`, `2w`), the `{count, period}` object dbt-oss writes to the manifest,
+    and a bare integer as seconds.
     """
     if isinstance(value, dict):
-        try:
-            return parse_build_after_duration_minutes(value) * 60
-        except (KeyError, TypeError) as e:
-            raise ValueError(f"Invalid lag_tolerance: {value!r}") from e
+        return _parse_lag_tolerance_object(value)
     if isinstance(value, int) and not isinstance(value, bool):
         if value < 0:
             raise ValueError(f"Invalid lag_tolerance: {value!r}")
         return value
-    match = _LAG_TOLERANCE_PATTERN.match(str(value).strip().lower())
-    if not match:
+    text = str(value).strip().lower()
+    if not _DURATION.match(text):
         raise ValueError(
-            f"Invalid lag_tolerance: {value!r}. Expected <number><s|m|h|d|w>, e.g. '45m'."
+            f"Invalid lag_tolerance: {value!r}. Expected a duration such as '45m' or '1h30m'."
         )
-    return int(match.group(1)) * _LAG_TOLERANCE_UNIT_SECONDS[match.group(2)]
+    total = 0.0
+    for count, unit in _DURATION_PART.findall(text):
+        if unit not in _UNIT_SECONDS:
+            raise ValueError(
+                f"Invalid lag_tolerance: {value!r}. Unknown unit {unit!r}."
+            )
+        total += int(count) * _UNIT_SECONDS[unit]
+    return int(total)
 
 
 def parse_build_after_duration_minutes(build_after: dict[str, str | int]) -> int:
@@ -87,9 +120,11 @@ def parse_freshness_config(
         freshness_config.updates_on = _parse_updates_on(
             state_config["require_fresh_data_from"]
         )
-    elif isinstance(lag_tolerance, dict) and "updates_on" in lag_tolerance:
+    elif (
+        isinstance(lag_tolerance, dict) and lag_tolerance.get("updates_on") is not None
+    ):
         freshness_config.updates_on = _parse_updates_on(lag_tolerance["updates_on"])
-    elif "updates_on" in build_after_config:
+    elif build_after_config.get("updates_on") is not None:
         freshness_config.updates_on = _parse_updates_on(
             build_after_config["updates_on"]
         )

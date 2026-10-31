@@ -119,6 +119,28 @@ class TestParseFreshnessConfig:
                     sla_seconds=7200, updates_on="all", source="lag_tolerance"
                 ),
             ),
+            # dbt-oss manifest: updates_on None in the object falls through
+            (
+                {
+                    "state": {
+                        "lag_tolerance": {
+                            "count": 30,
+                            "period": "second",
+                            "updates_on": None,
+                        }
+                    },
+                    "freshness": {
+                        "build_after": {
+                            "period": "hour",
+                            "count": 1,
+                            "updates_on": "all",
+                        }
+                    },
+                },
+                FreshnessConfig(
+                    sla_seconds=30, updates_on="all", source="lag_tolerance"
+                ),
+            ),
             # state block wins over build_after
             (
                 {
@@ -184,10 +206,21 @@ class TestParseLagTolerance:
             ("2w", 1209600),
             (" 7D ", 604800),
             ("10 m", 600),
+            ("1h30m", 5400),
+            ("1h 30m", 5400),
+            ("4 hours", 14400),
+            ("120sec", 120),
+            ("1500ms", 1),
+            ("3 days", 259200),
             (90, 90),
+            # dbt-oss manifest form
+            ({"count": 30, "period": "second", "updates_on": None}, 30),
+            ({"count": 0, "period": "minute", "updates_on": None}, 0),
+            ({"count": 90, "period": "minute"}, 5400),
+            ({"count": 14, "period": "day"}, 1209600),
         ],
     )
-    def test_valid(self, value: str | int, expected: int):
+    def test_valid(self, value: str | int | dict, expected: int):
         assert parse_lag_tolerance_seconds(value) == expected
 
     @pytest.mark.parametrize(
@@ -197,14 +230,16 @@ class TestParseLagTolerance:
             "m",
             "45",
             "45x",
+            "4 fortnights",
+            "1h30",
             "-5m",
             "1.5h",
-            "4 hours",
             -1,
             True,
             {"count": 1},
             {"count": "1", "period": "hour"},
-            {"count": 1, "period": "week"},
+            {"count": 1, "period": "year"},
+            {"count": -1, "period": "hour"},
         ],
     )
     def test_invalid(self, value: str | int | dict):
