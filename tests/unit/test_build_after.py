@@ -3,7 +3,6 @@ from typing import cast
 import pytest
 
 from src.orchestra_dbt.build_after import (
-    apply_default_lag_tolerance,
     parse_build_after_duration_minutes,
     parse_freshness_config,
     parse_lag_tolerance_seconds,
@@ -92,12 +91,19 @@ class TestParseFreshnessConfig:
             # dbt State `state` block
             (
                 {"state": {"lag_tolerance": "4h"}},
-                FreshnessConfig(sla_seconds=14400, source="lag_tolerance"),
+                FreshnessConfig(
+                    sla_seconds=14400,
+                    source="lag_tolerance",
+                    bypass_on_upstream_code_change=True,
+                ),
             ),
             (
                 {"state": {"lag_tolerance": "0s", "require_fresh_data_from": "ALL"}},
                 FreshnessConfig(
-                    sla_seconds=0, updates_on="all", source="lag_tolerance"
+                    sla_seconds=0,
+                    updates_on="all",
+                    source="lag_tolerance",
+                    bypass_on_upstream_code_change=True,
                 ),
             ),
             (
@@ -116,7 +122,10 @@ class TestParseFreshnessConfig:
                     }
                 },
                 FreshnessConfig(
-                    sla_seconds=7200, updates_on="all", source="lag_tolerance"
+                    sla_seconds=7200,
+                    updates_on="all",
+                    source="lag_tolerance",
+                    bypass_on_upstream_code_change=True,
                 ),
             ),
             # dbt-oss manifest: updates_on None in the object falls through
@@ -138,7 +147,10 @@ class TestParseFreshnessConfig:
                     },
                 },
                 FreshnessConfig(
-                    sla_seconds=30, updates_on="all", source="lag_tolerance"
+                    sla_seconds=30,
+                    updates_on="all",
+                    source="lag_tolerance",
+                    bypass_on_upstream_code_change=True,
                 ),
             ),
             # state block wins over build_after
@@ -153,7 +165,11 @@ class TestParseFreshnessConfig:
                         }
                     },
                 },
-                FreshnessConfig(sla_seconds=1800, source="lag_tolerance"),
+                FreshnessConfig(
+                    sla_seconds=1800,
+                    source="lag_tolerance",
+                    bypass_on_upstream_code_change=True,
+                ),
             ),
             # each key falls back independently
             (
@@ -177,7 +193,10 @@ class TestParseFreshnessConfig:
                     },
                 },
                 FreshnessConfig(
-                    sla_seconds=86400, updates_on="all", source="lag_tolerance"
+                    sla_seconds=86400,
+                    updates_on="all",
+                    source="lag_tolerance",
+                    bypass_on_upstream_code_change=True,
                 ),
             ),
         ],
@@ -187,11 +206,23 @@ class TestParseFreshnessConfig:
     ):
         assert parse_freshness_config(config_on_node) == expected
 
-    def test_parse_freshness_config_invalid_lag_tolerance_names_node(self):
-        with pytest.raises(ValueError, match="model.a"):
+    def test_invalid_lag_tolerance_warns_and_falls_back(
+        self, capsys: pytest.CaptureFixture[str]
+    ):
+        config = {
+            "state": {"lag_tolerance": "soon"},
+            "freshness": {"build_after": {"period": "hour", "count": 1}},
+        }
+        assert parse_freshness_config(config, node_id="model.a") == FreshnessConfig(
+            sla_seconds=3600, source="build_after"
+        )
+        assert (
             parse_freshness_config(
                 {"state": {"lag_tolerance": "soon"}}, node_id="model.a"
             )
+            == FreshnessConfig()
+        )
+        assert "model.a" in capsys.readouterr().out
 
 
 class TestParseLagTolerance:
@@ -210,7 +241,9 @@ class TestParseLagTolerance:
             ("1h 30m", 5400),
             ("4 hours", 14400),
             ("120sec", 120),
-            ("1500ms", 1),
+            ("1500ms", 2),
+            ("500ms", 1),
+            ("1s500ms", 2),
             ("3 days", 259200),
             (90, 90),
             # dbt-oss manifest form
@@ -584,7 +617,12 @@ class TestLagTolerancePropagation:
                     "B", FreshnessConfig(sla_seconds=3600, source="build_after")
                 ),
                 "C": _node(
-                    "C", FreshnessConfig(sla_seconds=600, source="lag_tolerance")
+                    "C",
+                    FreshnessConfig(
+                        sla_seconds=600,
+                        source="lag_tolerance",
+                        bypass_on_upstream_code_change=True,
+                    ),
                 ),
             },
             edges=[Edge(from_="A", to_="B"), Edge(from_="A", to_="C")],
@@ -598,8 +636,22 @@ class TestLagTolerancePropagation:
         dag = ParsedDag(
             nodes={
                 "A": _node("A", FreshnessConfig()),
-                "B": _node("B", FreshnessConfig(sla_seconds=0, source="lag_tolerance")),
-                "C": _node("C", FreshnessConfig(sla_seconds=0, source="lag_tolerance")),
+                "B": _node(
+                    "B",
+                    FreshnessConfig(
+                        sla_seconds=0,
+                        source="lag_tolerance",
+                        bypass_on_upstream_code_change=True,
+                    ),
+                ),
+                "C": _node(
+                    "C",
+                    FreshnessConfig(
+                        sla_seconds=0,
+                        source="lag_tolerance",
+                        bypass_on_upstream_code_change=True,
+                    ),
+                ),
             },
             edges=[Edge(from_="A", to_="B"), Edge(from_="B", to_="C")],
         )
@@ -610,28 +662,68 @@ class TestLagTolerancePropagation:
         assert _config(dag, "A").inherited_from == "B"
 
 
-class TestApplyDefaultLagTolerance:
-    def test_only_fills_nodes_without_a_window(self):
+class TestDefaultLagTolerance:
+    def test_parent_inherits_explicit_child_below_default(self):
+        """P -> A (10m) and P -> B (unset): B gets the 45m default, P inherits 10m."""
+        dag = ParsedDag(
+            nodes={
+                "P": _node("P", FreshnessConfig()),
+                "A": _node(
+                    "A", FreshnessConfig(sla_seconds=600, source="lag_tolerance")
+                ),
+                "B": _node("B", FreshnessConfig()),
+            },
+            edges=[Edge(from_="P", to_="A"), Edge(from_="P", to_="B")],
+        )
+        propagate_freshness_config(dag, default_sla_seconds=2700)
+        assert _config(dag, "B") == FreshnessConfig(
+            sla_seconds=2700,
+            source="lag_tolerance",
+            bypass_on_upstream_code_change=True,
+        )
+        assert _config(dag, "P") == FreshnessConfig(
+            sla_seconds=600,
+            source="lag_tolerance",
+            inherited_from="A",
+            bypass_on_upstream_code_change=True,
+        )
+
+    def test_explicit_configs_untouched(self):
         dag = ParsedDag(
             nodes={
                 "source.s": SourceNode(),
                 "A": _node("A", FreshnessConfig(updates_on="all")),
                 "B": _node("B", FreshnessConfig(sla_seconds=60, source="build_after")),
-                "C": _node(
-                    "C",
-                    FreshnessConfig(
-                        sla_seconds=0, source="lag_tolerance", inherited_from="D"
-                    ),
-                ),
             },
-            edges=[],
+            edges=[Edge(from_="source.s", to_="A")],
         )
-        apply_default_lag_tolerance(dag, 2700)
+        propagate_freshness_config(dag, default_sla_seconds=2700)
         assert _config(dag, "A") == FreshnessConfig(
-            sla_seconds=2700, updates_on="all", source="lag_tolerance"
+            sla_seconds=2700,
+            updates_on="all",
+            source="lag_tolerance",
+            bypass_on_upstream_code_change=True,
         )
         assert _config(dag, "B") == FreshnessConfig(
             sla_seconds=60, source="build_after"
         )
-        assert _config(dag, "C").sla_seconds == 0
         assert dag.nodes["source.s"] == SourceNode()
+
+    def test_without_default_inheritance_does_not_grant_bypass(self):
+        dag = ParsedDag(
+            nodes={
+                "P": _node("P", FreshnessConfig()),
+                "C": _node(
+                    "C",
+                    FreshnessConfig(
+                        sla_seconds=600,
+                        source="lag_tolerance",
+                        bypass_on_upstream_code_change=True,
+                    ),
+                ),
+            },
+            edges=[Edge(from_="P", to_="C")],
+        )
+        propagate_freshness_config(dag)
+        assert _config(dag, "P").sla_seconds == 600
+        assert _config(dag, "P").bypass_on_upstream_code_change is False

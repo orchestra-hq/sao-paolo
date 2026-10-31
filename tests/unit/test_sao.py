@@ -845,13 +845,21 @@ class TestCodeChangeBypass:
                     "model.child",
                     Freshness.CLEAN,
                     recent,
-                    FreshnessConfig(sla_seconds=3600, source=source),
+                    FreshnessConfig(
+                        sla_seconds=3600,
+                        source=source,
+                        bypass_on_upstream_code_change=source == "lag_tolerance",
+                    ),
                 ),
                 "model.grandchild": _model(
                     "model.grandchild",
                     Freshness.CLEAN,
                     recent,
-                    FreshnessConfig(sla_seconds=3600, source=source),
+                    FreshnessConfig(
+                        sla_seconds=3600,
+                        source=source,
+                        bypass_on_upstream_code_change=source == "lag_tolerance",
+                    ),
                 ),
             },
             edges=[
@@ -872,6 +880,30 @@ class TestCodeChangeBypass:
         calculate_nodes_to_run(dag=dag)
         assert _freshness(dag, "model.child") == Freshness.CLEAN
         assert _freshness(dag, "model.grandchild") == Freshness.CLEAN
+
+    def test_parent_outside_selection_does_not_bypass(self):
+        dag = self._dag("lag_tolerance")
+        calculate_nodes_to_run(
+            dag=dag,
+            selected_paths=["models/model.child.sql", "models/model.grandchild.sql"],
+        )
+        assert _freshness(dag, "model.child") == Freshness.CLEAN
+
+    def test_parent_inside_selection_bypasses(self):
+        dag = self._dag("lag_tolerance")
+        calculate_nodes_to_run(
+            dag=dag,
+            selected_paths=["models/model.parent.sql", "models/model.child.sql"],
+        )
+        assert _freshness(dag, "model.child") == Freshness.DIRTY
+
+    def test_inherited_window_without_flag_does_not_bypass(self):
+        dag = self._dag("lag_tolerance")
+        cast(
+            MaterialisationNode, dag.nodes["model.child"]
+        ).freshness_config.bypass_on_upstream_code_change = False
+        calculate_nodes_to_run(dag=dag)
+        assert _freshness(dag, "model.child") == Freshness.CLEAN
 
     def test_data_only_change_does_not_bypass(self):
         dag = self._dag("lag_tolerance")
@@ -895,7 +927,10 @@ class TestCodeChangeBypass:
                     Freshness.CLEAN,
                     recent,
                     FreshnessConfig(
-                        sla_seconds=3600, source="lag_tolerance", updates_on="all"
+                        sla_seconds=3600,
+                        source="lag_tolerance",
+                        updates_on="all",
+                        bypass_on_upstream_code_change=True,
                     ),
                 ),
             },

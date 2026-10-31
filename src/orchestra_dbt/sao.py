@@ -48,11 +48,19 @@ def _format_seconds(seconds: int) -> str:
     return f"{seconds}s"
 
 
-def upstream_code_changed(upstream_node: Node) -> bool:
-    """True when the upstream model is rebuilding because its own code changed."""
+def upstream_code_changed(
+    upstream_node: Node, selected_paths: list[str] | None = None
+) -> bool:
+    """True when the upstream model is rebuilt in this run because its code changed.
+
+    A parent outside the run's selection isn't rebuilt, so its children would only
+    re-read its old output; it keeps its changed checksum until it is built.
+    """
     if upstream_node.node_type != NodeType.MATERIALISATION:
         return False
     materialisation_node = cast(MaterialisationNode, upstream_node)
+    if selected_paths and materialisation_node.dbt_path not in selected_paths:
+        return False
     return (
         materialisation_node.freshness == Freshness.DIRTY
         and materialisation_node.code_changed
@@ -133,12 +141,13 @@ def _should_mark_dirty(
     upstream_ids: list[str],
     node: MaterialisationNode,
     dag: ParsedDag,
+    selected_paths: list[str] | None = None,
 ) -> tuple[bool, str | None]:
     # dbt State: a direct parent's code change forces a rebuild even inside the
     # lag_tolerance window. build_after keeps its original behaviour.
-    if node.freshness_config.source == "lag_tolerance":
+    if node.freshness_config.bypass_on_upstream_code_change:
         for upstream_id in upstream_ids:
-            if upstream_code_changed(dag.nodes[upstream_id]):
+            if upstream_code_changed(dag.nodes[upstream_id], selected_paths):
                 return True, None
 
     should_be_dirty = False
@@ -160,7 +169,10 @@ def _should_mark_dirty(
 
 
 def _process_node(
-    current_id: str, parents: dict[str, list[str]], dag: ParsedDag
+    current_id: str,
+    parents: dict[str, list[str]],
+    dag: ParsedDag,
+    selected_paths: list[str] | None = None,
 ) -> None:
     """
     Process a single node to determine if it should be marked dirty based on upstream dependencies.
@@ -172,7 +184,10 @@ def _process_node(
     materialisation_node: MaterialisationNode = cast(MaterialisationNode, node)
     if materialisation_node.freshness == Freshness.CLEAN:
         should_mark_dirty, reason = _should_mark_dirty(
-            upstream_ids=parents[current_id], node=materialisation_node, dag=dag
+            upstream_ids=parents[current_id],
+            node=materialisation_node,
+            dag=dag,
+            selected_paths=selected_paths,
         )
         if should_mark_dirty:
             materialisation_node.freshness = Freshness.DIRTY
@@ -193,7 +208,7 @@ def _enqueue_children(
             queue.append(child)
 
 
-def calculate_nodes_to_run(dag: ParsedDag):
+def calculate_nodes_to_run(dag: ParsedDag, selected_paths: list[str] | None = None):
     children, parents, in_degree = build_dependency_graphs(dag)
 
     # Queue for nodes with no upstream dependencies (in_degree 0)
@@ -203,7 +218,12 @@ def calculate_nodes_to_run(dag: ParsedDag):
         current = queue.popleft()
 
         # Process the node to potentially mark it as dirty
-        _process_node(current_id=current, parents=parents, dag=dag)
+        _process_node(
+            current_id=current,
+            parents=parents,
+            dag=dag,
+            selected_paths=selected_paths,
+        )
 
         # Queue children for processing
         _enqueue_children(

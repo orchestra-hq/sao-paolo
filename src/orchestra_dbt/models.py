@@ -38,8 +38,11 @@ class FreshnessConfig(BaseModel):
     # `freshness.build_after`), in seconds. None means no window.
     sla_seconds: int | None = None
     updates_on: Literal["any", "all"] = "any"
-    # Which dbt config the window came from; drives dbt State-only behaviour.
+    # Which dbt config the window came from; used for log wording.
     source: FreshnessConfigSource | None = None
+    # dbt State: a direct parent's code change forces a rebuild inside the window.
+    # Set for the node's own lag_tolerance or the opt-in default, never inherited.
+    bypass_on_upstream_code_change: bool = False
 
 
 class Node(BaseModel):
@@ -61,7 +64,7 @@ class MaterialisationNode(Node):
     freshness_config: FreshnessConfig
     freshness: Freshness
     reason: str
-    # Dirty because the node's own code changed (or it is new to state).
+    # Dirty because the node's checksum differs from the one in state.
     code_changed: bool = False
     sources: dict[str, datetime]
     # Fully-rendered warehouse relation; unset for ephemeral models.

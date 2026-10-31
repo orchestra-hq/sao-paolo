@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
-from .build_after import parse_lag_tolerance_seconds
+from .durations import parse_lag_tolerance_seconds
 from .project_discovery import find_orchestra_dbt_config
 
 
@@ -22,8 +22,9 @@ class OrchestraDbtSettings(BaseModel):
     verify_relations_exist: bool = False
     scope_source_freshness_to_selection: bool = False
     # dbt State's lag_tolerance for models with no explicit or inherited window
-    # (dbt uses "45m"). Unset keeps the original behaviour: no window.
-    default_lag_tolerance: str | None = None
+    # (dbt uses "45m"), given as a duration or integer seconds and stored as
+    # seconds. Unset keeps the original behaviour: no window.
+    default_lag_tolerance: int | None = None
     # Where the settings were read from; a relative state_file resolves against it.
     pyproject_dir: Path | None = None
 
@@ -36,14 +37,17 @@ class OrchestraDbtSettings(BaseModel):
 
     @field_validator("default_lag_tolerance", mode="before")
     @classmethod
-    def _validate_default_lag_tolerance(cls, v: object) -> object:
+    def _validate_default_lag_tolerance(cls, v: object) -> int | None:
         if v is None:
             return None
+        if isinstance(v, int) and not isinstance(v, bool):
+            return parse_lag_tolerance_seconds(v)
         value = str(v).strip()
         if not value:
             return None
-        parse_lag_tolerance_seconds(value)  # raises ValueError if invalid
-        return value
+        if value.isdigit():
+            return int(value)
+        return parse_lag_tolerance_seconds(value)
 
 
 def _env_bool(name: str) -> bool | None:
@@ -112,8 +116,9 @@ def _merge_env_overrides(settings: OrchestraDbtSettings) -> OrchestraDbtSettings
 
     default_lag_tolerance = _env_str("ORCHESTRA_DEFAULT_LAG_TOLERANCE")
     if default_lag_tolerance is not None:
-        settings = settings.model_copy(
-            update={"default_lag_tolerance": default_lag_tolerance}
+        # Validate now: the field stores parsed seconds, not the raw string.
+        settings = OrchestraDbtSettings.model_validate(
+            {**settings.model_dump(), "default_lag_tolerance": default_lag_tolerance}
         )
 
     return OrchestraDbtSettings.model_validate(settings.model_dump())
