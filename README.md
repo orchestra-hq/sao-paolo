@@ -283,8 +283,8 @@ config:
 ```
 
 - `state` keys take precedence, and each one falls back to `build_after` separately. An invalid `lag_tolerance` is logged and ignored.
-- A model without a window inherits the smallest window of its children, as long as every child has one. Otherwise it uses `default_lag_tolerance` if that's set (for example `45m`).
-- With `lag_tolerance` (or the default), a model also rebuilds inside its window when a direct parent's code changed and that parent is part of this run. `build_after` and inherited windows don't do this.
+- A model without a window inherits the smallest window of its children, as long as every child has one. If `default_lag_tolerance` is set (for example `45m`), the model gets the smaller of that and its children's smallest window.
+- A model with its own `lag_tolerance`, or with no config of its own while `default_lag_tolerance` is set, also rebuilds inside its window when a direct parent's code changed and that parent is part of this run. `build_after` models, and models that only inherit a window with no default set, don't do this.
 - dbt checks compiled SQL for parent code changes. sao-paolo uses the model file's checksum, so a change only in a macro or var doesn't count.
 
 ### Resolving multiple backend state configurations
