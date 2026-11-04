@@ -233,7 +233,7 @@ def main(args: tuple[str, ...]) -> None:
 
     # Propagate freshness config to upstream nodes
     propagate_freshness_config(
-        parsed_dag, default_sla_seconds=settings.default_lag_tolerance
+        parsed_dag, default_sla_seconds=settings.default_lag_tolerance_seconds
     )
 
     if is_full_refresh_requested(list(dbt_args)):

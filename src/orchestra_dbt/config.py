@@ -21,8 +21,8 @@ class OrchestraDbtSettings(BaseModel):
     require_explicit_source_freshness: bool = False
     verify_relations_exist: bool = False
     scope_source_freshness_to_selection: bool = False
-    # Seconds; opt-in lag_tolerance for models without their own window.
-    default_lag_tolerance: int | None = None
+    # Opt-in lag_tolerance (e.g. "45m") for models without their own window.
+    default_lag_tolerance: str | None = None
     # Where the settings were read from; a relative state_file resolves against it.
     pyproject_dir: Path | None = None
 
@@ -33,14 +33,18 @@ class OrchestraDbtSettings(BaseModel):
             return v.lower()
         return v
 
-    @field_validator("default_lag_tolerance", mode="before")
+    @field_validator("default_lag_tolerance")
     @classmethod
-    def _parse_default_lag_tolerance(cls, v: object) -> int | None:
-        if v is None or str(v).strip() == "":
+    def _validate_default_lag_tolerance(cls, v: str | None) -> str | None:
+        if v is not None:
+            parse_lag_tolerance_seconds(v)  # raises ValueError if invalid
+        return v
+
+    @property
+    def default_lag_tolerance_seconds(self) -> int | None:
+        if self.default_lag_tolerance is None:
             return None
-        if isinstance(v, str) and v.strip().isdigit():
-            return int(v)
-        return parse_lag_tolerance_seconds(v if isinstance(v, int) else str(v))
+        return parse_lag_tolerance_seconds(self.default_lag_tolerance)
 
 
 def _env_bool(name: str) -> bool | None:
@@ -109,8 +113,8 @@ def _merge_env_overrides(settings: OrchestraDbtSettings) -> OrchestraDbtSettings
 
     default_lag_tolerance = _env_str("ORCHESTRA_DEFAULT_LAG_TOLERANCE")
     if default_lag_tolerance is not None:
-        settings = OrchestraDbtSettings.model_validate(
-            {**settings.model_dump(), "default_lag_tolerance": default_lag_tolerance}
+        settings = settings.model_copy(
+            update={"default_lag_tolerance": default_lag_tolerance}
         )
 
     return OrchestraDbtSettings.model_validate(settings.model_dump())

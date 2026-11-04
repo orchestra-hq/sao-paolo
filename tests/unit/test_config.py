@@ -319,7 +319,6 @@ def test_env_state_file_resolves_from_cwd_not_project_dir(
     [
         ("", None, None),
         ('"45m"', None, 2700),
-        ("2700", None, 2700),
         ('"45m"', "2h", 7200),
     ],
 )
@@ -336,4 +335,20 @@ def test_default_lag_tolerance(
     _clear_orchestra_settings_env(monkeypatch)
     if env:
         monkeypatch.setenv("ORCHESTRA_DEFAULT_LAG_TOLERANCE", env)
-    assert load_orchestra_dbt_settings(tmp_path).default_lag_tolerance == expected
+    settings = load_orchestra_dbt_settings(tmp_path)
+    assert settings.default_lag_tolerance_seconds == expected
+
+
+@pytest.mark.parametrize(
+    "toml", ['"soon"', "2700"]
+)  # bare numbers need a unit, as in dbt
+def test_default_lag_tolerance_invalid(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, toml: str
+) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        f"[tool.orchestra_dbt]\ndefault_lag_tolerance = {toml}\n"
+    )
+    monkeypatch.chdir(tmp_path)
+    _clear_orchestra_settings_env(monkeypatch)
+    with pytest.raises(ValueError, match="default_lag_tolerance"):
+        load_orchestra_dbt_settings(tmp_path)
