@@ -100,6 +100,8 @@ class TestParseFreshnessConfig:
                 {"freshness": {"build_after": {"count": 1, "period": "week"}}},
                 (None, "any", False),
             ),
+            ({"freshness": {"build_after": "1h"}}, (None, "any", False)),
+            ({"state": "4h", "freshness": "1h"}, (None, "any", False)),
             (  # invalid lag_tolerance warns and falls back
                 {"state": {"lag_tolerance": "soon"}, "freshness": {"build_after": BA}},
                 (86400, "all", False),

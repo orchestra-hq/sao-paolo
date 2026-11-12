@@ -29,7 +29,14 @@ def parse_freshness_config(config: dict, node_id: str = "") -> FreshnessConfig:
     """The `state` block wins; each key falls back to `build_after`."""
     freshness_config = FreshnessConfig()
     state = config.get("state") or {}
-    build_after = (config.get("freshness") or {}).get("build_after") or {}
+    freshness = config.get("freshness") or {}
+    build_after = (
+        freshness.get("build_after") if isinstance(freshness, dict) else {}
+    ) or {}
+    if not isinstance(state, dict) or not isinstance(build_after, dict):
+        log_warn(f"Ignoring malformed state/freshness config on {node_id}.")
+        state = state if isinstance(state, dict) else {}
+        build_after = build_after if isinstance(build_after, dict) else {}
 
     if state.get("lag_tolerance") is not None:
         try:
