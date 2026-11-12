@@ -1,6 +1,8 @@
 from collections import defaultdict, deque
 from typing import cast
 
+from .durations import parse_lag_tolerance_seconds
+from .logger import log_warn
 from .models import FreshnessConfig, MaterialisationNode, Node, NodeType, ParsedDag
 
 
@@ -23,20 +25,38 @@ def parse_build_after_duration_minutes(build_after: dict[str, str | int]) -> int
     return count * mins_multiplier
 
 
-def parse_freshness_config(config_on_node: dict | None) -> FreshnessConfig:
+def parse_freshness_config(config: dict, node_id: str = "") -> FreshnessConfig:
+    """The `state` block wins; each key falls back to `build_after`."""
     freshness_config = FreshnessConfig()
-    if config_on_node and "build_after" in config_on_node:
-        build_after_config = config_on_node["build_after"]
-        if "updates_on" in build_after_config:
-            updates_on = str(build_after_config["updates_on"]).lower()
-            match updates_on:
-                case "any" | "all":
-                    freshness_config.updates_on = updates_on
-                case _:
-                    freshness_config.updates_on = "any"
-        freshness_config.minutes_sla = parse_build_after_duration_minutes(
-            build_after_config
-        )
+    state = config.get("state") or {}
+    freshness = config.get("freshness") or {}
+    build_after = (
+        freshness.get("build_after") if isinstance(freshness, dict) else {}
+    ) or {}
+    if not isinstance(state, dict) or not isinstance(build_after, dict):
+        log_warn(f"Ignoring malformed state/freshness config on {node_id}.")
+        state = state if isinstance(state, dict) else {}
+        build_after = build_after if isinstance(build_after, dict) else {}
+
+    if state.get("lag_tolerance") is not None:
+        try:
+            freshness_config.sla_seconds = parse_lag_tolerance_seconds(
+                state["lag_tolerance"]
+            )
+            freshness_config.bypass_on_upstream_code_change = True
+        except ValueError as e:
+            log_warn(f"Ignoring state.lag_tolerance on {node_id}: {e}")
+    if freshness_config.sla_seconds is None and build_after:
+        try:
+            freshness_config.sla_seconds = (
+                parse_build_after_duration_minutes(build_after) * 60
+            )
+        except (KeyError, TypeError, ValueError) as e:
+            log_warn(f"Ignoring freshness.build_after on {node_id}: {e!r}")
+
+    updates_on = state.get("require_fresh_data_from") or build_after.get("updates_on")
+    if str(updates_on).lower() == "all":
+        freshness_config.updates_on = "all"
     return freshness_config
 
 
@@ -70,13 +90,15 @@ def _build_reverse_dependency_graphs(
 
 
 def _propagate_config_to_node(
-    node_id: str, children: dict[str, list[str]], dag: ParsedDag
+    node_id: str,
+    children: dict[str, list[str]],
+    dag: ParsedDag,
+    default_sla_seconds: int | None = None,
 ) -> None:
     """
     Propagate freshness config from children to the current node.
     A parent only inherits the minimum config of its children if ALL children
-    have a defined config; if any child is undefined or has no config, the
-    parent remains null.
+    have a defined config; otherwise it gets `default_sla_seconds` (may be None).
     """
     node: Node = dag.nodes[node_id]
     if node.node_type != NodeType.MATERIALISATION:
@@ -85,8 +107,14 @@ def _propagate_config_to_node(
     materialisation_node: MaterialisationNode = cast(MaterialisationNode, node)
 
     # If the node already has a config, don't change it
-    if materialisation_node.freshness_config.minutes_sla is not None:
+    if materialisation_node.freshness_config.sla_seconds is not None:
         return
+
+    # Without its own config, a node only gets the code-change bypass via the default.
+    materialisation_node.freshness_config.sla_seconds = default_sla_seconds
+    materialisation_node.freshness_config.bypass_on_upstream_code_change = (
+        default_sla_seconds is not None
+    )
 
     child_ids = children.get(node_id, [])
     if not child_ids:
@@ -101,16 +129,18 @@ def _propagate_config_to_node(
         child_materialisation: MaterialisationNode = cast(
             MaterialisationNode, child_node
         )
-        if child_materialisation.freshness_config.minutes_sla is None:
+        if child_materialisation.freshness_config.sla_seconds is None:
             return  # child has no config: parent stays null
-        child_minutes.append(child_materialisation.freshness_config.minutes_sla)
+        child_minutes.append(child_materialisation.freshness_config.sla_seconds)
 
     # All children have a defined config: inherit the minimum
     min_sla = min(child_minutes)
-    materialisation_node.freshness_config.minutes_sla = min_sla
+    if default_sla_seconds is not None and default_sla_seconds <= min_sla:
+        return  # the default is already the (joint) smallest window
+    materialisation_node.freshness_config.sla_seconds = min_sla
     for cid in child_ids:
         if (
-            cast(MaterialisationNode, dag.nodes[cid]).freshness_config.minutes_sla
+            cast(MaterialisationNode, dag.nodes[cid]).freshness_config.sla_seconds
             == min_sla
         ):
             materialisation_node.freshness_config.inherited_from = cid
@@ -130,12 +160,14 @@ def _enqueue_parents(
             queue.append(parent)
 
 
-def propagate_freshness_config(parsed_dag: ParsedDag) -> None:
+def propagate_freshness_config(
+    parsed_dag: ParsedDag, default_sla_seconds: int | None = None
+) -> None:
     """
     Propagate freshness config backwards through the DAG.
 
     Starts at nodes with no children (end of DAG) and works backwards,
-    propagating the minimum minutes_sla from children to parents.
+    propagating the minimum sla_seconds from children to parents.
     Only updates nodes that don't already have a config.
     """
     children, parents, out_degree = _build_reverse_dependency_graphs(parsed_dag)
@@ -147,7 +179,7 @@ def propagate_freshness_config(parsed_dag: ParsedDag) -> None:
         current = queue.popleft()
 
         # Process the node to potentially propagate config from children
-        _propagate_config_to_node(node_id=current, children=children, dag=parsed_dag)
+        _propagate_config_to_node(current, children, parsed_dag, default_sla_seconds)
 
         # Queue parents for processing (work backwards)
         _enqueue_parents(

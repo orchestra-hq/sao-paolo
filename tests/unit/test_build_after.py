@@ -5,6 +5,7 @@ import pytest
 from src.orchestra_dbt.build_after import (
     parse_build_after_duration_minutes,
     parse_freshness_config,
+    parse_lag_tolerance_seconds,
     propagate_freshness_config,
 )
 from src.orchestra_dbt.models import (
@@ -36,6 +37,9 @@ class TestBuildAfterDurationMinutes:
             parse_build_after_duration_minutes({"period": "minute", "count": "invalid"})
 
 
+BA = {"period": "day", "count": 1, "updates_on": "all"}
+
+
 class TestParseFreshnessConfig:
     @pytest.mark.parametrize(
         "config_on_node, expected",
@@ -54,22 +58,103 @@ class TestParseFreshnessConfig:
             ),
             (
                 {"build_after": {"period": "hour", "count": 2}},
-                FreshnessConfig(minutes_sla=120),
+                FreshnessConfig(sla_seconds=7200),
             ),
             (
                 {"build_after": {"period": "day", "count": 1, "updates_on": "all"}},
-                FreshnessConfig(minutes_sla=1440, updates_on="all"),
+                FreshnessConfig(sla_seconds=86400, updates_on="all"),
             ),
             (
                 {"build_after": {"period": "minute", "count": 1, "updates_on": "foo"}},
-                FreshnessConfig(minutes_sla=1),
+                FreshnessConfig(sla_seconds=60),
             ),
         ],
     )
     def test_parse_freshness_config(
         self, config_on_node: dict | None, expected: FreshnessConfig
     ):
-        assert parse_freshness_config(config_on_node) == expected
+        assert parse_freshness_config({"freshness": config_on_node}) == expected
+
+    @pytest.mark.parametrize(
+        "config, expected",
+        [
+            ({"state": {"lag_tolerance": "4h"}}, (14400, "any", True)),
+            ({"state": {"lag_tolerance": "0s"}}, (0, "any", True)),
+            ({"state": {"require_fresh_data_from": "all"}}, (None, "all", False)),
+            (  # state wins over build_after
+                {"state": {"lag_tolerance": "30m"}, "freshness": {"build_after": BA}},
+                (1800, "all", True),
+            ),
+            (
+                {
+                    "state": {"require_fresh_data_from": "any"},
+                    "freshness": {"build_after": BA},
+                },
+                (86400, "any", False),
+            ),
+            (  # malformed build_after warns instead of aborting the run
+                {"freshness": {"build_after": {"updates_on": "all"}}},
+                (None, "all", False),
+            ),
+            (
+                {"freshness": {"build_after": {"count": 1, "period": "week"}}},
+                (None, "any", False),
+            ),
+            ({"freshness": {"build_after": "1h"}}, (None, "any", False)),
+            ({"state": "4h", "freshness": "1h"}, (None, "any", False)),
+            (  # invalid lag_tolerance warns and falls back
+                {"state": {"lag_tolerance": "soon"}, "freshness": {"build_after": BA}},
+                (86400, "all", False),
+            ),
+        ],
+    )
+    def test_state_block(self, config: dict, expected: tuple):
+        c = parse_freshness_config(config)
+        assert (
+            c.sla_seconds,
+            c.updates_on,
+            c.bypass_on_upstream_code_change,
+        ) == expected
+
+
+class TestParseLagTolerance:
+    @pytest.mark.parametrize(
+        "value, expected",
+        [
+            ("0s", 0),
+            ("45m", 2700),
+            ("1h30m", 5400),
+            ("4 hours", 14400),
+            ("2w", 1209600),
+            ("3wk", 1814400),
+            ("1M", 2630016),  # months
+            ("1y", 31557600),
+            ("3000ms", 3),
+            (90, 90),
+            ({"count": 30, "period": "second", "updates_on": None}, 30),  # dbt-oss
+        ],
+    )
+    def test_valid(self, value: str | int | dict, expected: int):
+        assert parse_lag_tolerance_seconds(value) == expected
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "",
+            "45",
+            "1h30",
+            "-5m",
+            "500ms",
+            "3H",
+            "1millisecond",
+            "4 fortnights",
+            True,
+            {},
+        ],
+    )
+    def test_invalid(self, value: str | int | dict):
+        with pytest.raises(ValueError):
+            parse_lag_tolerance_seconds(value)
 
 
 class TestPropagateFreshnessConfig:
@@ -105,7 +190,7 @@ class TestPropagateFreshnessConfig:
                     file_path="models/c.sql",
                     reason="test",
                     sources={},
-                    freshness_config=FreshnessConfig(minutes_sla=30),  # Has config
+                    freshness_config=FreshnessConfig(sla_seconds=1800),  # Has config
                 ),
             },
             edges=[
@@ -118,16 +203,16 @@ class TestPropagateFreshnessConfig:
 
         # C should remain unchanged (already has config)
         updated_node_c = cast(MaterialisationNode, dag.nodes["C"])
-        assert updated_node_c.freshness_config.minutes_sla == 30
+        assert updated_node_c.freshness_config.sla_seconds == 1800
 
         # B should inherit from C
         updated_node_b = cast(MaterialisationNode, dag.nodes["B"])
-        assert updated_node_b.freshness_config.minutes_sla == 30
+        assert updated_node_b.freshness_config.sla_seconds == 1800
         assert updated_node_b.freshness_config.inherited_from == "C"
 
         # A should inherit from B (which now has C's config)
         updated_node_a = cast(MaterialisationNode, dag.nodes["A"])
-        assert updated_node_a.freshness_config.minutes_sla == 30
+        assert updated_node_a.freshness_config.sla_seconds == 1800
         assert updated_node_a.freshness_config.inherited_from == "B"
 
     def test_branching_dag_propagation(self):
@@ -143,7 +228,7 @@ class TestPropagateFreshnessConfig:
                     reason="test",
                     sources={},
                     freshness_config=FreshnessConfig(
-                        minutes_sla=5
+                        sla_seconds=300
                     ),  # Already has config
                 ),
                 "B": MaterialisationNode(
@@ -174,7 +259,7 @@ class TestPropagateFreshnessConfig:
                     file_path="models/d.sql",
                     reason="test",
                     sources={},
-                    freshness_config=FreshnessConfig(minutes_sla=3),  # Has config
+                    freshness_config=FreshnessConfig(sla_seconds=180),  # Has config
                 ),
             },
             edges=[
@@ -188,22 +273,22 @@ class TestPropagateFreshnessConfig:
 
         # A should remain unchanged (already has config)
         updated_node_a = cast(MaterialisationNode, dag.nodes["A"])
-        assert updated_node_a.freshness_config.minutes_sla == 5
+        assert updated_node_a.freshness_config.sla_seconds == 300
         assert updated_node_a.freshness_config.inherited_from is None
 
         # D should remain unchanged (already has config)
         updated_node_d = cast(MaterialisationNode, dag.nodes["D"])
-        assert updated_node_d.freshness_config.minutes_sla == 3
+        assert updated_node_d.freshness_config.sla_seconds == 180
         assert updated_node_d.freshness_config.inherited_from is None
 
         # C should continue to not have config (no children with config)
         updated_node_c = cast(MaterialisationNode, dag.nodes["C"])
-        assert updated_node_c.freshness_config.minutes_sla is None
+        assert updated_node_c.freshness_config.sla_seconds is None
         assert updated_node_c.freshness_config.inherited_from is None
 
         # B should NOT get a config: one child (C) has no config, so parent stays null
         updated_node_b = cast(MaterialisationNode, dag.nodes["B"])
-        assert updated_node_b.freshness_config.minutes_sla is None
+        assert updated_node_b.freshness_config.sla_seconds is None
         assert updated_node_b.freshness_config.inherited_from is None
 
     def test_multiple_children_minimum_selection(self):
@@ -228,7 +313,7 @@ class TestPropagateFreshnessConfig:
                     file_path="models/b.sql",
                     reason="test",
                     sources={},
-                    freshness_config=FreshnessConfig(minutes_sla=10),
+                    freshness_config=FreshnessConfig(sla_seconds=600),
                 ),
                 "C": MaterialisationNode(
                     asset_external_id="integration_account_id.model.c",
@@ -238,7 +323,7 @@ class TestPropagateFreshnessConfig:
                     file_path="models/c.sql",
                     reason="test",
                     sources={},
-                    freshness_config=FreshnessConfig(minutes_sla=5),
+                    freshness_config=FreshnessConfig(sla_seconds=300),
                 ),
             },
             edges=[
@@ -251,7 +336,7 @@ class TestPropagateFreshnessConfig:
 
         # A should get the minimum of B and C's configs
         updated_node_a = cast(MaterialisationNode, dag.nodes["A"])
-        assert updated_node_a.freshness_config.minutes_sla == 5
+        assert updated_node_a.freshness_config.sla_seconds == 300
         assert updated_node_a.freshness_config.inherited_from == "C"
 
     def test_existing_config_not_overwritten(self):
@@ -266,7 +351,7 @@ class TestPropagateFreshnessConfig:
                     file_path="models/a.sql",
                     reason="test",
                     sources={},
-                    freshness_config=FreshnessConfig(minutes_sla=20),  # Has config
+                    freshness_config=FreshnessConfig(sla_seconds=1200),  # Has config
                 ),
                 "B": MaterialisationNode(
                     asset_external_id="integration_account_id.model.b",
@@ -276,7 +361,7 @@ class TestPropagateFreshnessConfig:
                     file_path="models/b.sql",
                     reason="test",
                     sources={},
-                    freshness_config=FreshnessConfig(minutes_sla=10),  # Has config
+                    freshness_config=FreshnessConfig(sla_seconds=600),  # Has config
                 ),
             },
             edges=[
@@ -288,10 +373,12 @@ class TestPropagateFreshnessConfig:
 
         # Both should remain unchanged
         assert (
-            cast(MaterialisationNode, dag.nodes["A"]).freshness_config.minutes_sla == 20
+            cast(MaterialisationNode, dag.nodes["A"]).freshness_config.sla_seconds
+            == 1200
         )
         assert (
-            cast(MaterialisationNode, dag.nodes["B"]).freshness_config.minutes_sla == 10
+            cast(MaterialisationNode, dag.nodes["B"]).freshness_config.sla_seconds
+            == 600
         )
 
     def test_no_propagation_when_no_children_config(self):
@@ -328,11 +415,11 @@ class TestPropagateFreshnessConfig:
 
         # Neither should have config since neither started with one
         assert (
-            cast(MaterialisationNode, dag.nodes["A"]).freshness_config.minutes_sla
+            cast(MaterialisationNode, dag.nodes["A"]).freshness_config.sla_seconds
             is None
         )
         assert (
-            cast(MaterialisationNode, dag.nodes["B"]).freshness_config.minutes_sla
+            cast(MaterialisationNode, dag.nodes["B"]).freshness_config.sla_seconds
             is None
         )
 
@@ -350,7 +437,7 @@ class TestPropagateFreshnessConfig:
                     sources={},
                     freshness_config=FreshnessConfig(
                         updates_on="all"
-                    ),  # No minutes_sla but has updates_on
+                    ),  # No sla_seconds but has updates_on
                 ),
                 "B": MaterialisationNode(
                     asset_external_id="integration_account_id.model.b",
@@ -360,7 +447,7 @@ class TestPropagateFreshnessConfig:
                     file_path="models/b.sql",
                     reason="test",
                     sources={},
-                    freshness_config=FreshnessConfig(minutes_sla=30),
+                    freshness_config=FreshnessConfig(sla_seconds=1800),
                 ),
             },
             edges=[
@@ -370,11 +457,76 @@ class TestPropagateFreshnessConfig:
 
         propagate_freshness_config(dag)
 
-        # A should get minutes_sla from B but keep updates_on="all"
+        # A should get sla_seconds from B but keep updates_on="all"
         assert (
-            cast(MaterialisationNode, dag.nodes["A"]).freshness_config.minutes_sla == 30
+            cast(MaterialisationNode, dag.nodes["A"]).freshness_config.sla_seconds
+            == 1800
         )
         assert (
             cast(MaterialisationNode, dag.nodes["A"]).freshness_config.updates_on
             == "all"
         )
+
+
+def _node(sla_seconds: int | None = None) -> MaterialisationNode:
+    return MaterialisationNode(
+        asset_external_id="x",
+        freshness=Freshness.CLEAN,
+        checksum="1",
+        dbt_path="x.sql",
+        file_path="x.sql",
+        reason="",
+        sources={},
+        freshness_config=FreshnessConfig(sla_seconds=sla_seconds),
+    )
+
+
+class TestDefaultLagTolerance:
+    def test_parent_gets_min_of_explicit_child_and_default(self):
+        dag = ParsedDag(
+            nodes={
+                "P": _node(),
+                "A": _node(600),
+                "B": _node(),
+                "Q": _node(),
+                "C": _node(7200),
+            },
+            edges=[
+                Edge(from_="P", to_="A"),
+                Edge(from_="P", to_="B"),
+                Edge(from_="Q", to_="C"),
+            ],
+        )
+        propagate_freshness_config(dag, default_sla_seconds=2700)
+        config = {
+            k: cast(MaterialisationNode, n).freshness_config
+            for k, n in dag.nodes.items()
+        }
+        assert (
+            config["B"].sla_seconds,
+            config["P"].sla_seconds,
+            config["Q"].sla_seconds,
+        ) == (2700, 600, 2700)
+        assert config["P"].bypass_on_upstream_code_change
+        assert not config[
+            "A"
+        ].bypass_on_upstream_code_change  # explicit config untouched
+
+    def test_inheriting_without_default_gets_no_bypass(self):
+        dag = ParsedDag(
+            nodes={"P": _node(), "C": _node(600)}, edges=[Edge(from_="P", to_="C")]
+        )
+        propagate_freshness_config(dag)
+        config = cast(MaterialisationNode, dag.nodes["P"]).freshness_config
+        assert config.sla_seconds == 600
+        assert not config.bypass_on_upstream_code_change
+
+
+def test_default_equal_to_children_is_not_credited_to_a_child():
+    dag = ParsedDag(
+        nodes={"P": _node(), "C": _node()}, edges=[Edge(from_="P", to_="C")]
+    )
+    propagate_freshness_config(dag, default_sla_seconds=2700)
+    config = cast(MaterialisationNode, dag.nodes["P"]).freshness_config
+    assert config.sla_seconds == 2700
+    assert config.inherited_from is None

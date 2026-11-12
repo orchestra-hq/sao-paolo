@@ -31,8 +31,10 @@ class SourceFreshness(BaseModel):
 
 class FreshnessConfig(BaseModel):
     inherited_from: str | None = None
-    minutes_sla: int | None = None
+    sla_seconds: int | None = None
     updates_on: Literal["any", "all"] = "any"
+    # Rebuild inside the window when a direct parent's code changed.
+    bypass_on_upstream_code_change: bool = False
 
 
 class Node(BaseModel):
@@ -54,6 +56,9 @@ class MaterialisationNode(Node):
     freshness_config: FreshnessConfig
     freshness: Freshness
     reason: str
+    code_changed: bool = False
+    # dbt fqn joined with "."; package-qualified, unlike dbt_path.
+    fqn: str | None = None
     sources: dict[str, datetime]
     # Fully-rendered warehouse relation; unset for ephemeral models.
     relation_name: str | None = None

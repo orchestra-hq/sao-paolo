@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import re
 from datetime import datetime
@@ -14,7 +15,7 @@ from .utils import load_yaml, save_yaml
 def patch_file(
     file_path: Path,
     reason: str,
-    freshness: int | None,
+    freshness_seconds: int | None,
     last_updated: datetime | None,
 ) -> None:
     """
@@ -25,7 +26,8 @@ def patch_file(
         tags=[{ORCHESTRA_REUSED_NODE}],
         meta={
           'orchestra_reused_reason': '{reason}',
-          'orchestra_freshness': '{freshness}',
+          'orchestra_freshness': '{whole minutes, rounded up}',
+          'orchestra_freshness_seconds': '{freshness_seconds}',
           'orchestra_last_updated': '{last_updated}'
         }
       )
@@ -36,8 +38,9 @@ def patch_file(
     meta_dict: dict[str, str | int] = {
         "orchestra_reused_reason": reason.replace("'", "").replace('"', "")
     }
-    if freshness is not None:
-        meta_dict["orchestra_freshness"] = freshness
+    if freshness_seconds is not None:
+        meta_dict["orchestra_freshness"] = math.ceil(freshness_seconds / 60)
+        meta_dict["orchestra_freshness_seconds"] = freshness_seconds
     if last_updated:
         meta_dict["orchestra_last_updated"] = last_updated.isoformat()
 
@@ -100,7 +103,7 @@ def patch_sql_files(
                 patch_file(
                     file_path=file,
                     reason=node.reason,
-                    freshness=node.freshness_config.minutes_sla,
+                    freshness_seconds=node.freshness_config.sla_seconds,
                     last_updated=node.last_updated,
                 )
             except Exception as e:

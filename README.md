@@ -251,6 +251,7 @@ Each `[tool.orchestra_dbt]` key can be set in TOML, or omitted and supplied only
 | `require_explicit_source_freshness` | `ORCHESTRA_REQUIRE_EXPLICIT_SOURCE_FRESHNESS` |
 | `verify_relations_exist` | `ORCHESTRA_VERIFY_RELATIONS_EXIST` |
 | `scope_source_freshness_to_selection` | `ORCHESTRA_SCOPE_SOURCE_FRESHNESS_TO_SELECTION` |
+| `default_lag_tolerance` | `ORCHESTRA_DEFAULT_LAG_TOLERANCE` |
 
 For boolean settings, if the environment variable is **set**, the merged value is `true` only when the value is exactly the string `true` (case-insensitive); otherwise it is `false`. If the variable is **unset**, `pyproject.toml` (or the default) applies.
 
@@ -266,6 +267,25 @@ For boolean settings, if the environment variable is **set**, the merged value i
 | `require_explicit_source_freshness` | bool | `false` | When `true`, sources without an explicit `loaded_at_field` or `loaded_at_query` are excluded from state-aware orchestration: no implicit/fallback freshness is inferred for them, and models depending on them always run. Use this when implicit freshness is unreliable (for example, sources defined on top of views, where warehouse metadata reflects the view rather than the underlying data). |
 | `verify_relations_exist` | bool | `false` | Opt in to confirming a node's table/view is actually in the warehouse before skipping it (see [Verifying relations still exist](#verifying-relations-still-exist)). Off by default, so existing behaviour is unchanged until you enable it. |
 | `scope_source_freshness_to_selection` | bool | `false` | When `true`, `dbt source freshness` only checks sources upstream of the selection already resolved for node reuse (via `dbt ls`), passed as `--select +<fqn>` per selected node so dbt's own selection engine resolves the ancestor sources -- no `--resource-type` filter needed, since `source freshness` only ever touches sources anyway. Selection is by fqn rather than path because dbt resolves `path:` by globbing the filesystem from the project root, which never matches a node owned by an installed package. When `false` (default), freshness is checked for every source in the project regardless of selection, matching prior behaviour. |
+| `default_lag_tolerance` | string (optional) | — | Window for models without their own, for example `45m` (see [Rebuild windows](#rebuild-windows-lag_tolerance-and-build_after)). Unset means no window, as before. |
+
+### Rebuild windows (`lag_tolerance` and `build_after`)
+
+A model can set a minimum time between rebuilds. It is reused until its last build is older than the window **and** upstream data has changed:
+
+```yaml
+config:
+  state:
+    lag_tolerance: 4h  # e.g. 30s, 45m, 1h30m, 2w (case-sensitive: M is months)
+    require_fresh_data_from: all  # any (default) or all
+  freshness:  # older equivalent, still supported
+    build_after: {count: 4, period: hour, updates_on: all}
+```
+
+- `state` keys take precedence, and each one falls back to `build_after` separately. An invalid `lag_tolerance` is logged and ignored.
+- A model without a window inherits the smallest window of its children, as long as every child has one. If `default_lag_tolerance` is set (for example `45m`), the model gets the smaller of that and its children's smallest window.
+- A model with its own `lag_tolerance`, or with no config of its own while `default_lag_tolerance` is set, also rebuilds inside its window when a direct parent's code changed and that parent is part of this run. `build_after` models, and models that only inherit a window with no default set, don't do this.
+- dbt checks compiled SQL for parent code changes. sao-paolo uses the model file's checksum, so a change only in a macro or var doesn't count.
 
 ### Resolving multiple backend state configurations
 

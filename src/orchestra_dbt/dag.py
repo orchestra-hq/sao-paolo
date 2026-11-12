@@ -139,9 +139,12 @@ def construct_dag(
                     asset_external_id=asset_external_id,
                     checksum=checksum,
                     freshness_config=parse_freshness_config(
-                        config_on_node=node.get("config", {}).get("freshness")
+                        node.get("config", {}), node_id
                     ),
                     freshness=freshness,
+                    code_changed=asset_external_id in state.state
+                    and checksum != state.state[asset_external_id].checksum,
+                    fqn=".".join(node["fqn"]) if node.get("fqn") else None,
                     dbt_path=dbt_path,
                     reason=reason,
                     sources=(

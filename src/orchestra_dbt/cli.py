@@ -232,7 +232,9 @@ def main(args: tuple[str, ...]) -> None:
     )
 
     # Propagate freshness config to upstream nodes
-    propagate_freshness_config(parsed_dag)
+    propagate_freshness_config(
+        parsed_dag, default_sla_seconds=settings.default_lag_tolerance_seconds
+    )
 
     if is_full_refresh_requested(list(dbt_args)):
         log_info("Full refresh detected. Stateful orchestration disabled.")
@@ -251,7 +253,7 @@ def main(args: tuple[str, ...]) -> None:
         apply_relation_existence_gate(parsed_dag, paths_to_run, list(dbt_args))
 
     # Edit the DAG inline.
-    calculate_nodes_to_run(parsed_dag)
+    calculate_nodes_to_run(parsed_dag, nodes_to_run.selectors if nodes_to_run else None)
 
     nodes_to_reuse: dict[str, MaterialisationNode] = {}
     node_count = 0

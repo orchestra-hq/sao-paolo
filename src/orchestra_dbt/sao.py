@@ -75,19 +75,22 @@ def should_mark_dirty_from_single_upstream(
             if upstream_freshness == Freshness.CLEAN:
                 reason = "Upstream node(s) being reused."
 
-    # An SLA (build_after) only holds a node back inside its freshness window; it is
-    # not required for the catch-up comparison below.
-    if current_node.freshness_config.minutes_sla:
-        minutes_since_last_updated: int = int(
-            (
-                datetime.now(tz=current_node.last_updated.tzinfo)
-                - current_node.last_updated
-            ).total_seconds()
-            / 60
-        )
+    # An SLA (lag_tolerance / build_after) only holds a node back inside its window;
+    # it is not required for the catch-up comparison below.
+    sla_seconds = current_node.freshness_config.sla_seconds
+    if sla_seconds is not None:
+        seconds_since_last_updated = (
+            datetime.now(tz=current_node.last_updated.tzinfo)
+            - current_node.last_updated
+        ).total_seconds()
 
-        if minutes_since_last_updated < current_node.freshness_config.minutes_sla:
-            reason = f"Model still within freshness config of {current_node.freshness_config.minutes_sla} minutes. Last updated {minutes_since_last_updated} minutes ago."
+        if seconds_since_last_updated < sla_seconds:
+            window = (
+                f"{sla_seconds // 60} minutes"
+                if sla_seconds % 60 == 0
+                else f"{sla_seconds} seconds"
+            )
+            reason = f"Model still within freshness config of {window}. Last updated {int(seconds_since_last_updated / 60)} minutes ago."
             if current_node.freshness_config.inherited_from:
                 reason += f" Config inherited from {current_node.freshness_config.inherited_from}."
             return (False, reason)
@@ -114,6 +117,13 @@ def _should_mark_dirty(
     node: MaterialisationNode,
     dag: ParsedDag,
 ) -> tuple[bool, str | None]:
+    if node.freshness_config.bypass_on_upstream_code_change and any(
+        cast(MaterialisationNode, dag.nodes[u]).code_changed
+        for u in upstream_ids
+        if dag.nodes[u].node_type == NodeType.MATERIALISATION
+    ):
+        return True, None
+
     should_be_dirty = False
     reason = None
     for upstream_id in upstream_ids:
@@ -166,7 +176,12 @@ def _enqueue_children(
             queue.append(child)
 
 
-def calculate_nodes_to_run(dag: ParsedDag):
+def calculate_nodes_to_run(dag: ParsedDag, selected_fqns: list[str] | None = None):
+    # An unselected parent isn't rebuilt, so its code change mustn't force children.
+    for node in dag.nodes.values():
+        if isinstance(node, MaterialisationNode) and selected_fqns:
+            node.code_changed &= node.fqn in selected_fqns
+
     children, parents, in_degree = build_dependency_graphs(dag)
 
     # Queue for nodes with no upstream dependencies (in_degree 0)

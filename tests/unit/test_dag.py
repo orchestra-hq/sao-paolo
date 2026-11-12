@@ -257,6 +257,7 @@ class TestConstructDag:
                     dbt_path="models/model_c.sql",
                     file_path="models/model_c.sql",
                     reason="Checksum changed since last run.",
+                    code_changed=True,
                     sources={},
                     freshness_config=FreshnessConfig(),
                 ),
