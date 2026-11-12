@@ -22,7 +22,7 @@ class TestPatchFile:
         patch_file(
             file_path=sql_file,
             reason="Test \"reason\" with 'quotes'.",
-            freshness=None,
+            freshness_seconds=None,
             last_updated=None,
         )
 
@@ -46,12 +46,12 @@ WHERE active = true
         patch_file(
             file_path=sql_file,
             reason="Test reason",
-            freshness=34,
+            freshness_seconds=2040,
             last_updated=datetime(2025, 3, 4, 12, 30, tzinfo=UTC),
         )
 
         result = sql_file.read_text(encoding="utf-8")
-        expected_config = f"{{{{ config(tags=[\"{ORCHESTRA_REUSED_NODE}\"], meta={{'orchestra_reused_reason': 'Test reason', 'orchestra_freshness': 34, 'orchestra_last_updated': '2025-03-04T12:30:00+00:00'}}) }}}}\n\n"
+        expected_config = f"{{{{ config(tags=[\"{ORCHESTRA_REUSED_NODE}\"], meta={{'orchestra_reused_reason': 'Test reason', 'orchestra_freshness': 34, 'orchestra_freshness_seconds': 2040, 'orchestra_last_updated': '2025-03-04T12:30:00+00:00'}}) }}}}\n\n"
 
         assert result.startswith(expected_config)
         assert "-- This is a comment" in result
@@ -66,12 +66,36 @@ WHERE active = true
         patch_file(
             file_path=sql_file,
             reason="Test reason",
-            freshness=0,
+            freshness_seconds=0,
             last_updated=None,
         )
 
         result = sql_file.read_text(encoding="utf-8")
         assert "'orchestra_freshness': 0" in result
+
+    @pytest.mark.parametrize(
+        "seconds, minutes",
+        [(None, None), (0, 0), (30, 1), (3600, 60)],
+    )
+    def test_patch_file_freshness_minutes_and_seconds(
+        self, tmp_path, seconds: int | None, minutes: int | None
+    ) -> None:
+        sql_file = tmp_path / "test_model.sql"
+        sql_file.write_text("select 1", encoding="utf-8")
+
+        patch_file(
+            file_path=sql_file,
+            reason="r",
+            freshness_seconds=seconds,
+            last_updated=None,
+        )
+
+        result = sql_file.read_text(encoding="utf-8")
+        if seconds is None:
+            assert "orchestra_freshness" not in result
+        else:
+            assert f"'orchestra_freshness': {minutes}," in result
+            assert f"'orchestra_freshness_seconds': {seconds}}}" in result
 
     @pytest.mark.parametrize(
         "freshness, last_updated",
@@ -91,7 +115,7 @@ WHERE active = true
         patch_file(
             file_path=sql_file,
             reason="Test reason",
-            freshness=freshness,
+            freshness_seconds=freshness,
             last_updated=last_updated,
         )
         revert_patch_file(file_path=sql_file)

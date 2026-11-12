@@ -176,11 +176,11 @@ def _enqueue_children(
             queue.append(child)
 
 
-def calculate_nodes_to_run(dag: ParsedDag, selected_paths: list[str] | None = None):
+def calculate_nodes_to_run(dag: ParsedDag, selected_fqns: list[str] | None = None):
     # An unselected parent isn't rebuilt, so its code change mustn't force children.
     for node in dag.nodes.values():
-        if isinstance(node, MaterialisationNode) and selected_paths:
-            node.code_changed &= node.dbt_path in selected_paths
+        if isinstance(node, MaterialisationNode) and selected_fqns:
+            node.code_changed &= node.fqn in selected_fqns
 
     children, parents, in_degree = build_dependency_graphs(dag)
 

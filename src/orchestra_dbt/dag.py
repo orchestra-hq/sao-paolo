@@ -144,6 +144,7 @@ def construct_dag(
                     freshness=freshness,
                     code_changed=asset_external_id in state.state
                     and checksum != state.state[asset_external_id].checksum,
+                    fqn=".".join(node["fqn"]) if node.get("fqn") else None,
                     dbt_path=dbt_path,
                     reason=reason,
                     sources=(

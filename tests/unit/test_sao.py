@@ -804,6 +804,7 @@ class TestCodeChangeBypass:
                 last_updated=recent,
                 reason="",
                 sources={},
+                fqn=f"proj.{name}",
                 **kwargs,
             )
 
@@ -833,8 +834,10 @@ class TestCodeChangeBypass:
         "bypass, selected, child",
         [
             (True, None, Freshness.DIRTY),
-            (True, ["parent.sql", "child.sql"], Freshness.DIRTY),
-            (True, ["child.sql"], Freshness.CLEAN),  # parent not rebuilt this run
+            (True, ["proj.parent", "proj.child"], Freshness.DIRTY),
+            (True, ["proj.child"], Freshness.CLEAN),  # parent not rebuilt this run
+            # Same file path in another package doesn't count as selecting the parent.
+            (True, ["other_pkg.parent", "proj.child"], Freshness.CLEAN),
             (False, None, Freshness.CLEAN),  # build_after / inherited window
         ],
     )

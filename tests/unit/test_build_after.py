@@ -92,6 +92,14 @@ class TestParseFreshnessConfig:
                 },
                 (86400, "any", False),
             ),
+            (  # malformed build_after warns instead of aborting the run
+                {"freshness": {"build_after": {"updates_on": "all"}}},
+                (None, "all", False),
+            ),
+            (
+                {"freshness": {"build_after": {"count": 1, "period": "week"}}},
+                (None, "any", False),
+            ),
             (  # invalid lag_tolerance warns and falls back
                 {"state": {"lag_tolerance": "soon"}, "freshness": {"build_after": BA}},
                 (86400, "all", False),
@@ -510,3 +518,13 @@ class TestDefaultLagTolerance:
         config = cast(MaterialisationNode, dag.nodes["P"]).freshness_config
         assert config.sla_seconds == 600
         assert not config.bypass_on_upstream_code_change
+
+
+def test_default_equal_to_children_is_not_credited_to_a_child():
+    dag = ParsedDag(
+        nodes={"P": _node(), "C": _node()}, edges=[Edge(from_="P", to_="C")]
+    )
+    propagate_freshness_config(dag, default_sla_seconds=2700)
+    config = cast(MaterialisationNode, dag.nodes["P"]).freshness_config
+    assert config.sla_seconds == 2700
+    assert config.inherited_from is None

@@ -57,6 +57,8 @@ class MaterialisationNode(Node):
     freshness: Freshness
     reason: str
     code_changed: bool = False
+    # dbt fqn joined with "."; package-qualified, unlike dbt_path.
+    fqn: str | None = None
     sources: dict[str, datetime]
     # Fully-rendered warehouse relation; unset for ephemeral models.
     relation_name: str | None = None

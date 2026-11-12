@@ -14,8 +14,7 @@ _UNIT_NS: dict[str, int] = {
     **dict.fromkeys(("months", "month", "M"), 2630016 * _SECOND),
     **dict.fromkeys(("years", "year", "yrs", "yr", "y"), 31557600 * _SECOND),
 }
-_DURATION = re.compile(r"^(\s*\d+\s*[a-zA-Zµ]+)+\s*$")
-_PART = re.compile(r"(\d+)\s*([a-zA-Zµ]+)")
+_PART = re.compile(r"\s*(\d+)\s*([a-zA-Zµ]+)\s*")
 
 
 def parse_lag_tolerance_seconds(value: str | int | dict) -> int:
@@ -26,8 +25,9 @@ def parse_lag_tolerance_seconds(value: str | int | dict) -> int:
     elif isinstance(value, int) and not isinstance(value, bool) and value >= 0:
         return value
     text = str(value).strip()
-    parts = _PART.findall(text) if _DURATION.match(text) else []
-    if not parts or any(unit not in _UNIT_NS for _, unit in parts):
+    parts = _PART.findall(text)
+    # Anything left after removing the parts means the text isn't a duration.
+    if not parts or _PART.sub("", text) or any(u not in _UNIT_NS for _, u in parts):
         raise ValueError(f"Invalid lag_tolerance: {value!r}")
     total_ns = sum(int(n) * _UNIT_NS[unit] for n, unit in parts)
     if total_ns % _SECOND:

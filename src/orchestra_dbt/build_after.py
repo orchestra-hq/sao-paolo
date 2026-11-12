@@ -40,9 +40,12 @@ def parse_freshness_config(config: dict, node_id: str = "") -> FreshnessConfig:
         except ValueError as e:
             log_warn(f"Ignoring state.lag_tolerance on {node_id}: {e}")
     if freshness_config.sla_seconds is None and build_after:
-        freshness_config.sla_seconds = (
-            parse_build_after_duration_minutes(build_after) * 60
-        )
+        try:
+            freshness_config.sla_seconds = (
+                parse_build_after_duration_minutes(build_after) * 60
+            )
+        except (KeyError, TypeError, ValueError) as e:
+            log_warn(f"Ignoring freshness.build_after on {node_id}: {e!r}")
 
     updates_on = state.get("require_fresh_data_from") or build_after.get("updates_on")
     if str(updates_on).lower() == "all":
@@ -125,8 +128,8 @@ def _propagate_config_to_node(
 
     # All children have a defined config: inherit the minimum
     min_sla = min(child_minutes)
-    if default_sla_seconds is not None and default_sla_seconds < min_sla:
-        return  # the default is already the smaller window
+    if default_sla_seconds is not None and default_sla_seconds <= min_sla:
+        return  # the default is already the (joint) smallest window
     materialisation_node.freshness_config.sla_seconds = min_sla
     for cid in child_ids:
         if (

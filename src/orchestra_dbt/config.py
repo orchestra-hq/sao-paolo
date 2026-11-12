@@ -1,8 +1,15 @@
 import os
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    PrivateAttr,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from .durations import parse_lag_tolerance_seconds
 from .project_discovery import find_orchestra_dbt_config
@@ -23,6 +30,7 @@ class OrchestraDbtSettings(BaseModel):
     scope_source_freshness_to_selection: bool = False
     # Opt-in lag_tolerance (e.g. "45m") for models without their own window.
     default_lag_tolerance: str | None = None
+    _default_lag_tolerance_seconds: int | None = PrivateAttr(None)
     # Where the settings were read from; a relative state_file resolves against it.
     pyproject_dir: Path | None = None
 
@@ -33,18 +41,20 @@ class OrchestraDbtSettings(BaseModel):
             return v.lower()
         return v
 
-    @field_validator("default_lag_tolerance")
-    @classmethod
-    def _validate_default_lag_tolerance(cls, v: str | None) -> str | None:
-        if v is not None:
-            parse_lag_tolerance_seconds(v)  # raises ValueError if invalid
-        return v
+    @model_validator(mode="after")
+    def _parse_default_lag_tolerance(self) -> Self:
+        if self.default_lag_tolerance is not None:
+            try:
+                self._default_lag_tolerance_seconds = parse_lag_tolerance_seconds(
+                    self.default_lag_tolerance
+                )
+            except ValueError as e:
+                raise ValueError(f"default_lag_tolerance: {e}") from e
+        return self
 
     @property
     def default_lag_tolerance_seconds(self) -> int | None:
-        if self.default_lag_tolerance is None:
-            return None
-        return parse_lag_tolerance_seconds(self.default_lag_tolerance)
+        return self._default_lag_tolerance_seconds
 
 
 def _env_bool(name: str) -> bool | None:
